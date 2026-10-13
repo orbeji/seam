@@ -1,0 +1,16 @@
+# Normalise line endings to LF in the repository and in every checkout, so the
+# Windows and Linux runners lint, format and test the same bytes.
+* text=auto eol=lf
+
+# Keep binary assets untouched.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.icns binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.pdf binary
+*.zip binary

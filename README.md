@@ -21,15 +21,15 @@ wired up and the language is detected from the system. No Git integration yet.
 
 ## Scripts
 
-| Command | What it does |
-| --- | --- |
-| `npm run dev` | Starts the app with hot reload for all three processes |
-| `npm run build` | Type-checks and builds the production bundles |
-| `npm run start` | Previews the production build |
-| `npm run typecheck` | Runs `tsc --noEmit` for the Node and web projects |
-| `npm run lint` | Runs ESLint |
-| `npm run format` | Formats with Prettier |
-| `npm test` | Runs the Vitest suite once |
+| Command             | What it does                                           |
+| ------------------- | ------------------------------------------------------ |
+| `npm run dev`       | Starts the app with hot reload for all three processes |
+| `npm run build`     | Type-checks and builds the production bundles          |
+| `npm run start`     | Previews the production build                          |
+| `npm run typecheck` | Runs `tsc --noEmit` for the Node and web projects      |
+| `npm run lint`      | Runs ESLint                                            |
+| `npm run format`    | Formats with Prettier                                  |
+| `npm test`          | Runs the Vitest suite once                             |
 
 ## Layout
 

@@ -4,3 +4,6 @@ dist/
 release/
 coverage/
 node_modules/
+
+# Authored reference material and generated design exports are left as written.
+docs/
