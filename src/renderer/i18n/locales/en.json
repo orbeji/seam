@@ -1,0 +1,16 @@
+{
+  "app": {
+    "name": "Seam",
+    "tagline": "A Git client for staging, diffs and conflicts."
+  },
+  "language": {
+    "label": "Language",
+    "names": {
+      "en": "English",
+      "es": "Español"
+    }
+  },
+  "changes": {
+    "empty": "Open a repository to see its staged, unstaged and untracked changes."
+  }
+}

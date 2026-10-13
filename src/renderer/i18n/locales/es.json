@@ -1,0 +1,16 @@
+{
+  "app": {
+    "name": "Seam",
+    "tagline": "Un cliente de Git para preparar cambios, ver diferencias y resolver conflictos."
+  },
+  "language": {
+    "label": "Idioma",
+    "names": {
+      "en": "English",
+      "es": "Español"
+    }
+  },
+  "changes": {
+    "empty": "Abre un repositorio para ver sus cambios preparados, sin preparar y sin seguimiento."
+  }
+}
