@@ -12,7 +12,10 @@ function createWindow(): BrowserWindow {
     backgroundColor: '#1e1f22',
     title: 'Seam',
     webPreferences: {
-      preload: join(__dirname, '../preload/index.js')
+      preload: join(__dirname, '../preload/index.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true
     }
   })
 

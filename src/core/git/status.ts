@@ -3,109 +3,88 @@
 import { GitError } from './errors'
 import type { GitRunOptions, GitRunner } from './runner'
 
-/** The seven ways Git can leave a file unmerged, keyed by their XY code. */
-export type ConflictKind =
-  | 'both-modified'
-  | 'both-added'
-  | 'both-deleted'
-  | 'added-by-us'
-  | 'added-by-them'
-  | 'deleted-by-us'
-  | 'deleted-by-them'
+/**
+ * The seven two-letter codes Git uses for an unmerged file. The first letter is
+ * the HEAD side and the second the other side. Phase 5 turns each into the
+ * actions the conflict dialog offers.
+ */
+export type ConflictCode = 'DD' | 'AU' | 'UD' | 'UA' | 'DU' | 'AA' | 'UU'
 
-export const CONFLICT_KINDS = {
-  UU: 'both-modified',
-  AA: 'both-added',
-  DD: 'both-deleted',
-  AU: 'added-by-us',
-  UA: 'added-by-them',
-  DU: 'deleted-by-us',
-  UD: 'deleted-by-them'
-} as const satisfies Record<string, ConflictKind>
+const CONFLICT_CODES: readonly ConflictCode[] = ['DD', 'AU', 'UD', 'UA', 'DU', 'AA', 'UU']
 
-export interface BranchInfo {
+/**
+ * File modes of an entry. For an ordinary or renamed entry they are the modes
+ * in HEAD, the index and the working tree. For an unmerged entry the three
+ * modes are the merge stages (01 base, 02 ours, 03 theirs), which is how a
+ * conflict tells that one side deleted the file (mode `000000`).
+ */
+export interface Modes {
+  head: string
+  index: string
+  worktree: string
+}
+
+export interface BranchStatus {
   /** Commit the branch points at, or null before the first commit. */
   oid: string | null
   /** Branch name, or null when HEAD is detached. */
   head: string | null
-  upstream: string | null
-  ahead: number
-  behind: number
+  /** Only present with `--branch` and when the branch has an upstream. */
+  upstream?: string
+  /** Commits ahead of the upstream; only present when the upstream is known. */
+  ahead?: number
+  /** Commits behind the upstream; only present when the upstream is known. */
+  behind?: number
 }
 
-/** An ordinary changed entry (record type `1`). */
-export interface ChangedEntry {
-  type: 'changed'
-  /** Raw two-letter XY code, e.g. `.M` or `M.`. */
-  code: string
-  /** Index status letter (X): `.` when the change is not staged. */
-  indexStatus: string
-  /** Worktree status letter (Y): `.` when the change exists only in the index. */
-  worktreeStatus: string
-  submodule: string
-  modeHead: string
-  modeIndex: string
-  modeWorktree: string
-  hashHead: string
-  hashIndex: string
+/** An ordinary changed entry (porcelain record type `1`). */
+export interface OrdinaryEntry {
+  kind: 'ordinary'
+  /** Index status letter (X), `.` when the change is not staged. */
+  x: string
+  /** Worktree status letter (Y), `.` when the change exists only in the index. */
+  y: string
   path: string
+  modes: Modes
 }
 
-/** A renamed or copied entry (record type `2`). */
+/** A renamed entry (porcelain record type `2`). */
 export interface RenamedEntry {
-  type: 'renamed'
-  code: string
-  indexStatus: string
-  worktreeStatus: string
-  submodule: string
-  modeHead: string
-  modeIndex: string
-  modeWorktree: string
-  hashHead: string
-  hashIndex: string
-  operation: 'rename' | 'copy'
-  /** Similarity score between 0 and 100, or null when Git omits it. */
-  score: number | null
+  kind: 'renamed'
+  x: string
+  y: string
   path: string
-  /** The path the file had before the rename or copy. */
+  /** The path the file had before the rename. */
   origPath: string
+  /** Similarity score between 0 and 100. */
+  score: number
 }
 
-/** An unmerged entry (record type `u`). */
+/** An unmerged entry (porcelain record type `u`). */
 export interface UnmergedEntry {
-  type: 'unmerged'
-  /** Raw XY code, one of the seven conflict kinds. */
-  code: string
-  conflict: ConflictKind
-  submodule: string
-  modeStage1: string
-  modeStage2: string
-  modeStage3: string
-  modeWorktree: string
-  hashStage1: string
-  hashStage2: string
-  hashStage3: string
+  kind: 'unmerged'
+  xy: ConflictCode
   path: string
+  modes: Modes
 }
 
 export interface UntrackedEntry {
-  type: 'untracked'
+  kind: 'untracked'
   path: string
 }
 
-export interface IgnoredEntry {
-  type: 'ignored'
-  path: string
-}
+export type StatusEntry = OrdinaryEntry | RenamedEntry | UnmergedEntry | UntrackedEntry
 
-export type StatusEntry =
-  ChangedEntry | RenamedEntry | UnmergedEntry | UntrackedEntry | IgnoredEntry
-
-export interface GitStatus {
-  branch: BranchInfo
+export interface RepoStatus {
+  branch: BranchStatus
   entries: StatusEntry[]
 }
 
+/**
+ * Splits a record into `fieldCount` fields on single spaces, keeping any spaces
+ * that follow in the last field. Git's `-z` form only escapes the fixed fields,
+ * so the path is everything left after them and may contain spaces.
+ */
 function splitFields(record: string, fieldCount: number): string[] {
   const fields: string[] = []
   let start = 0
@@ -117,7 +96,6 @@ function splitFields(record: string, fieldCount: number): string[] {
     fields.push(record.slice(start, space))
     start = space + 1
   }
-  // The last field is the rest of the record, so a path may contain spaces.
   fields.push(record.slice(start))
   return fields
 }
@@ -130,81 +108,62 @@ function at(fields: readonly string[], index: number, record: string): string {
   return value
 }
 
-function letters(code: string): [string, string] {
-  return [code[0] ?? '', code[1] ?? '']
-}
-
-function conflictKind(code: string): ConflictKind {
-  const kind = (CONFLICT_KINDS as Record<string, ConflictKind | undefined>)[code]
-  if (kind === undefined) {
-    throw new GitError(`Unknown unmerged status code: ${code}`)
+function conflictCode(xy: string): ConflictCode {
+  if ((CONFLICT_CODES as readonly string[]).includes(xy)) {
+    return xy as ConflictCode
   }
-  return kind
+  throw new GitError(`Unknown unmerged status code: ${xy}`)
 }
 
-function parseChanged(record: string): ChangedEntry {
+function modesOf(fields: readonly string[], record: string): Modes {
+  return {
+    head: at(fields, 3, record),
+    index: at(fields, 4, record),
+    worktree: at(fields, 5, record)
+  }
+}
+
+function parseOrdinary(record: string): OrdinaryEntry {
   const fields = splitFields(record, 9)
   const code = at(fields, 1, record)
-  const [indexStatus, worktreeStatus] = letters(code)
   return {
-    type: 'changed',
-    code,
-    indexStatus,
-    worktreeStatus,
-    submodule: at(fields, 2, record),
-    modeHead: at(fields, 3, record),
-    modeIndex: at(fields, 4, record),
-    modeWorktree: at(fields, 5, record),
-    hashHead: at(fields, 6, record),
-    hashIndex: at(fields, 7, record),
-    path: at(fields, 8, record)
+    kind: 'ordinary',
+    x: code[0] ?? '',
+    y: code[1] ?? '',
+    path: at(fields, 8, record),
+    modes: modesOf(fields, record)
   }
 }
 
 function parseRenamed(record: string, origPath: string): RenamedEntry {
   const fields = splitFields(record, 10)
   const code = at(fields, 1, record)
-  const [indexStatus, worktreeStatus] = letters(code)
   const scoreField = at(fields, 8, record)
-  const scoreText = scoreField.slice(1)
+  if (scoreField[0] !== 'R' && scoreField[0] !== 'C') {
+    throw new GitError(`Malformed rename record: ${record}`)
+  }
   return {
-    type: 'renamed',
-    code,
-    indexStatus,
-    worktreeStatus,
-    submodule: at(fields, 2, record),
-    modeHead: at(fields, 3, record),
-    modeIndex: at(fields, 4, record),
-    modeWorktree: at(fields, 5, record),
-    hashHead: at(fields, 6, record),
-    hashIndex: at(fields, 7, record),
-    operation: scoreField.startsWith('C') ? 'copy' : 'rename',
-    score: scoreText === '' ? null : Number(scoreText),
+    kind: 'renamed',
+    x: code[0] ?? '',
+    y: code[1] ?? '',
     path: at(fields, 9, record),
-    origPath
+    origPath,
+    score: Number(scoreField.slice(1))
   }
 }
 
 function parseUnmerged(record: string): UnmergedEntry {
   const fields = splitFields(record, 11)
-  const code = at(fields, 1, record)
+  const xy = at(fields, 1, record)
   return {
-    type: 'unmerged',
-    code,
-    conflict: conflictKind(code),
-    submodule: at(fields, 2, record),
-    modeStage1: at(fields, 3, record),
-    modeStage2: at(fields, 4, record),
-    modeStage3: at(fields, 5, record),
-    modeWorktree: at(fields, 6, record),
-    hashStage1: at(fields, 7, record),
-    hashStage2: at(fields, 8, record),
-    hashStage3: at(fields, 9, record),
-    path: at(fields, 10, record)
+    kind: 'unmerged',
+    xy: conflictCode(xy),
+    path: at(fields, 10, record),
+    modes: modesOf(fields, record)
   }
 }
 
-function applyBranchHeader(branch: BranchInfo, record: string): void {
+function applyBranchHeader(branch: BranchStatus, record: string): void {
   const space = record.indexOf(' ', 2)
   if (space === -1) return
   const key = record.slice(2, space)
@@ -234,15 +193,16 @@ function applyBranchHeader(branch: BranchInfo, record: string): void {
 }
 
 /**
- * Parses the NUL-separated `git status --porcelain=v2 -z` stream. The `-z`
- * form leaves paths unquoted, which is why the parser splits on NUL rather than
- * on newlines: only the fixed fields use spaces, the path is everything left.
+ * Parses the NUL-separated `git status --porcelain=v2 --branch -z` stream. The
+ * `-z` form leaves paths unquoted, which is why the parser splits on NUL and
+ * only treats spaces as separators inside the fixed fields. Ignored (`!`)
+ * records never appear because the command does not ask for them.
  */
-export function parseStatus(output: Buffer | string): GitStatus {
+export function parseStatus(output: Buffer | string): RepoStatus {
   const text = typeof output === 'string' ? output : output.toString('utf8')
   const records = text.split('\0')
   const entries: StatusEntry[] = []
-  const branch: BranchInfo = { oid: null, head: null, upstream: null, ahead: 0, behind: 0 }
+  const branch: BranchStatus = { oid: null, head: null }
 
   for (let i = 0; i < records.length; i += 1) {
     const record = records[i]
@@ -253,7 +213,7 @@ export function parseStatus(output: Buffer | string): GitStatus {
         applyBranchHeader(branch, record)
         break
       case '1':
-        entries.push(parseChanged(record))
+        entries.push(parseOrdinary(record))
         break
       case '2': {
         const origPath = records[i + 1]
@@ -268,10 +228,7 @@ export function parseStatus(output: Buffer | string): GitStatus {
         entries.push(parseUnmerged(record))
         break
       case '?':
-        entries.push({ type: 'untracked', path: record.slice(2) })
-        break
-      case '!':
-        entries.push({ type: 'ignored', path: record.slice(2) })
+        entries.push({ kind: 'untracked', path: record.slice(2) })
         break
       default:
         throw new GitError(`Unknown status record: ${record}`)
@@ -282,23 +239,24 @@ export function parseStatus(output: Buffer | string): GitStatus {
 }
 
 /**
- * The exact command from the spec, with `--branch` added: porcelain v2 only
- * emits the branch headers when it is present, and the commit and push screens
- * need the upstream and the ahead/behind counts.
+ * The status command from the spec with `--branch` added, exactly as the phase
+ * 0 chapter specifies: porcelain v2 only emits the branch headers when it is
+ * present, and the commit and push screens need the upstream and the
+ * ahead/behind counts.
  */
 export const STATUS_ARGS = [
   'status',
   '--porcelain=v2',
   '--branch',
-  '--untracked-files=all',
-  '-z'
+  '-z',
+  '--untracked-files=all'
 ] as const
 
 export async function readStatus(
   runner: GitRunner,
-  cwd: string,
+  repo: string,
   options: Omit<GitRunOptions, 'cwd'> = {}
-): Promise<GitStatus> {
-  const result = await runner.runOrThrow(STATUS_ARGS, { ...options, cwd })
+): Promise<RepoStatus> {
+  const result = await runner.runOrThrow(STATUS_ARGS, { ...options, cwd: repo, readOnly: true })
   return parseStatus(result.stdout)
 }

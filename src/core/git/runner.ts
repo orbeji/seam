@@ -15,12 +15,8 @@ const DEFAULT_TIMEOUT_MS = 30_000
 /** Environment every Git call runs with, so output is stable and parsable. */
 const BASE_ENV = {
   LC_ALL: 'C',
-  LANG: 'C',
   // Never wait for a terminal prompt: fail instead of hanging the process.
-  GIT_TERMINAL_PROMPT: '0',
-  // Read-only commands must not take the index lock.
-  GIT_OPTIONAL_LOCKS: '0',
-  GIT_PAGER: 'cat'
+  GIT_TERMINAL_PROMPT: '0'
 }
 
 export interface GitVersion {
@@ -46,19 +42,28 @@ export interface GitRunOptions {
   /** Working directory the command runs in. */
   cwd: string
   /** Bytes or text written to the command's stdin, for example `commit -F -`. */
-  input?: string | Uint8Array
+  stdin?: string | Uint8Array
   /** Kills the command when the caller aborts. */
   signal?: AbortSignal
   /** Overrides the runner's default timeout for this call. */
   timeoutMs?: number
   /** Extra environment variables for this call only. */
   env?: Record<string, string>
+  /**
+   * A query that must not refresh the index. Sets `GIT_OPTIONAL_LOCKS=0` so a
+   * read never takes the index lock and never collides with a write.
+   */
+  readOnly?: boolean
+  /** A command that could otherwise open an editor. Sets `GIT_EDITOR=true`. */
+  noEditor?: boolean
 }
 
 export interface GitRunResult {
+  /** Raw stdout as bytes; text is decoded later because each file has its own encoding. */
   stdout: Buffer
   stderr: string
-  exitCode: number
+  /** Process exit code, or -1 when the process was killed before it exited. */
+  code: number
 }
 
 const VERSION_PATTERN = /^git version (\d+)\.(\d+)(?:\.(\d+))?/
@@ -95,6 +100,10 @@ function abortReason(signal: AbortSignal): Error {
  * Runs the real `git` executable as a child process. Hooks, configuration,
  * credential helpers and attributes therefore behave exactly as in a terminal.
  * Callers use one runner per repository when they need to serialise writes.
+ *
+ * The phase 0 chapter documents this as a `runGit(repo, args, opts)` function;
+ * it is a class here because phase 3 needs a per-repository write queue, so the
+ * repository is the call's `cwd` and each command is one `run`.
  */
 export class GitRunner {
   private readonly gitPath: string
@@ -125,6 +134,8 @@ export class GitRunner {
         env: {
           ...process.env,
           ...BASE_ENV,
+          ...(options.readOnly ? { GIT_OPTIONAL_LOCKS: '0' } : {}),
+          ...(options.noEditor ? { GIT_EDITOR: 'true' } : {}),
           ...this.env,
           ...options.env
         },
@@ -191,15 +202,15 @@ export class GitRunner {
           resolve({
             stdout: Buffer.concat(stdoutChunks),
             stderr: Buffer.concat(stderrChunks).toString('utf8'),
-            exitCode: code ?? -1
+            code: code ?? -1
           })
         })
       })
 
-      if (options.input === undefined) {
+      if (options.stdin === undefined) {
         child.stdin.end()
       } else {
-        child.stdin.end(options.input)
+        child.stdin.end(options.stdin)
       }
     })
   }
@@ -207,10 +218,10 @@ export class GitRunner {
   /** Like {@link run} but rejects with a {@link GitCommandError} on non-zero. */
   async runOrThrow(args: readonly string[], options: GitRunOptions): Promise<GitRunResult> {
     const result = await this.run(args, options)
-    if (result.exitCode !== 0) {
+    if (result.code !== 0) {
       throw new GitCommandError(
         [...this.globalArgs, ...args],
-        result.exitCode,
+        result.code,
         result.stderr,
         result.stdout.toString('utf8')
       )

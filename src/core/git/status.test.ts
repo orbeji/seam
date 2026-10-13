@@ -3,9 +3,9 @@
 import { describe, expect, it } from 'vitest'
 import { GitError } from './errors'
 import {
-  CONFLICT_KINDS,
   parseStatus,
-  type ChangedEntry,
+  type ConflictCode,
+  type OrdinaryEntry,
   type RenamedEntry,
   type UnmergedEntry
 } from './status'
@@ -17,7 +17,7 @@ function stream(...records: string[]): string {
   return records.join(NUL) + NUL
 }
 
-// Captured from real `git status --porcelain=v2 -z --untracked-files=all`
+// Captured from real `git status --porcelain=v2 --branch -z --untracked-files=all`
 // output on a repository with a modification, a staged deletion, a rename, a
 // staged addition and two untracked files (one with a space in its name).
 const MIXED = stream(
@@ -48,51 +48,62 @@ describe('parseStatus: ordinary entries', () => {
   const status = parseStatus(MIXED)
 
   it('reads every record type in order', () => {
-    expect(status.entries.map((entry) => entry.type)).toEqual([
-      'changed',
-      'changed',
+    expect(status.entries.map((entry) => entry.kind)).toEqual([
+      'ordinary',
+      'ordinary',
       'renamed',
-      'changed',
+      'ordinary',
       'untracked',
       'untracked'
     ])
   })
 
-  it('splits the XY code into index and worktree status', () => {
-    const worktreeOnly = status.entries[0] as ChangedEntry
-    expect(worktreeOnly.code).toBe('.M')
-    expect(worktreeOnly.indexStatus).toBe('.')
-    expect(worktreeOnly.worktreeStatus).toBe('M')
+  it('splits the XY code into the index and worktree letters', () => {
+    const worktreeOnly = status.entries[0] as OrdinaryEntry
+    expect(worktreeOnly.x).toBe('.')
+    expect(worktreeOnly.y).toBe('M')
     expect(worktreeOnly.path).toBe('a.txt')
-    expect(worktreeOnly.modeHead).toBe('100644')
-    expect(worktreeOnly.hashHead).toBe('814f4a422927b82f5f8a43f8fab6d3839e3983f2')
+    expect(worktreeOnly.modes).toEqual({
+      head: '100644',
+      index: '100644',
+      worktree: '100644'
+    })
 
-    const stagedDeletion = status.entries[1] as ChangedEntry
-    expect(stagedDeletion.indexStatus).toBe('D')
-    expect(stagedDeletion.worktreeStatus).toBe('.')
-    expect(stagedDeletion.modeWorktree).toBe('000000')
+    const stagedDeletion = status.entries[1] as OrdinaryEntry
+    expect(stagedDeletion.x).toBe('D')
+    expect(stagedDeletion.y).toBe('.')
+    expect(stagedDeletion.modes).toEqual({
+      head: '100644',
+      index: '000000',
+      worktree: '000000'
+    })
   })
 
-  it('keeps the source path of a rename', () => {
+  it('keeps the source path and score of a rename', () => {
     const rename = status.entries[2] as RenamedEntry
-    expect(rename.type).toBe('renamed')
-    expect(rename.operation).toBe('rename')
-    expect(rename.score).toBe(100)
+    expect(rename.kind).toBe('renamed')
+    expect(rename.x).toBe('R')
     expect(rename.path).toBe('c2.txt')
     expect(rename.origPath).toBe('c.txt')
+    expect(rename.score).toBe(100)
   })
 
   it('keeps paths with spaces intact', () => {
-    const untracked = status.entries.filter((entry) => entry.type === 'untracked')
+    const untracked = status.entries.filter((entry) => entry.kind === 'untracked')
     expect(untracked.map((entry) => entry.path)).toEqual(['e with space.txt', 'e.txt'])
+  })
+
+  it('keeps accented path bytes', () => {
+    const parsed = parseStatus(stream('? café.txt', '1 .M N... 100644 100644 100644 a b año.txt'))
+    expect(parsed.entries.map((entry) => entry.path)).toEqual(['café.txt', 'año.txt'])
   })
 
   it('accepts a Buffer, as the runner hands it over', () => {
     expect(parseStatus(Buffer.from(MIXED)).entries).toHaveLength(6)
   })
 
-  it('reports an empty branch when no header is present', () => {
-    expect(status.branch).toEqual({ oid: null, head: null, upstream: null, ahead: 0, behind: 0 })
+  it('reports a branch with no headers as oid/head null and no upstream', () => {
+    expect(status.branch).toEqual({ oid: null, head: null })
   })
 })
 
@@ -109,31 +120,28 @@ describe('parseStatus: headers and unmerged entries', () => {
     })
   })
 
-  it('classifies both-modified and both-added conflicts', () => {
-    const unmerged = status.entries.filter((entry) => entry.type === 'unmerged') as UnmergedEntry[]
-    expect(unmerged.map((entry) => [entry.path, entry.conflict])).toEqual([
-      ['addboth.txt', 'both-added'],
-      ['both.txt', 'both-modified']
+  it('classifies both-added and both-modified conflicts by their code', () => {
+    const unmerged = status.entries.filter(
+      (entry): entry is UnmergedEntry => entry.kind === 'unmerged'
+    )
+    expect(unmerged.map((entry) => [entry.path, entry.xy])).toEqual([
+      ['addboth.txt', 'AA'],
+      ['both.txt', 'UU']
     ])
   })
 
-  it('keeps the three stage hashes of a conflict', () => {
-    const both = status.entries.find((entry) => entry.path === 'both.txt') as UnmergedEntry
-    expect(both.modeStage1).toBe('100644')
-    expect(both.modeStage2).toBe('100644')
-    expect(both.modeStage3).toBe('100644')
-    expect(both.hashStage1).toBe('df967b96a579e45a18b8251732d16804b2e56a55')
-    expect(both.modeWorktree).toBe('100644')
+  it('keeps the three merge-stage modes of a conflict', () => {
+    const added = status.entries.find((entry) => entry.path === 'addboth.txt') as UnmergedEntry
+    expect(added.modes).toEqual({ head: '000000', index: '100644', worktree: '100644' })
   })
 
   it('maps every conflict code the spec lists', () => {
-    const codes = Object.keys(CONFLICT_KINDS)
+    const codes: ConflictCode[] = ['DD', 'AU', 'UD', 'UA', 'DU', 'AA', 'UU']
     for (const code of codes) {
       const record = `u ${code} N... 100644 100644 100644 100644 a b c path.txt`
       const parsed = parseStatus(stream(record)).entries[0] as UnmergedEntry
-      expect(parsed.conflict).toBe(CONFLICT_KINDS[code as keyof typeof CONFLICT_KINDS])
+      expect(parsed.xy).toBe(code)
     }
-    expect(codes.sort()).toEqual(['AA', 'AU', 'DD', 'DU', 'UA', 'UD', 'UU'].sort())
   })
 
   it('recognises the initial and detached header markers', () => {
@@ -153,6 +161,12 @@ describe('parseStatus: malformed input', () => {
 
   it('rejects a rename without a source path', () => {
     expect(() => parseStatus('2 R. N... 100644 100644 100644 h h R100 new.txt')).toThrow(GitError)
+  })
+
+  it('rejects a rename whose score field is not a rename or copy marker', () => {
+    expect(() =>
+      parseStatus(stream('2 R. N... 100644 100644 100644 h h X100 new.txt', 'old.txt'))
+    ).toThrow(GitError)
   })
 
   it('rejects an unknown conflict code', () => {

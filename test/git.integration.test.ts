@@ -3,10 +3,10 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   GitRunner,
-  MINIMUM_GIT_VERSION,
   isAtLeast,
+  MINIMUM_GIT_VERSION,
   readStatus,
-  type ChangedEntry,
+  type OrdinaryEntry,
   type RenamedEntry,
   type UnmergedEntry
 } from '../src/core/git'
@@ -66,19 +66,21 @@ describe('readStatus against real repositories', () => {
     const status = await readStatus(runner, repo.path)
     const byPath = new Map(status.entries.map((entry) => [entry.path, entry]))
 
-    expect((byPath.get('a.txt') as ChangedEntry).code).toBe('.M')
-    expect((byPath.get('b.txt') as ChangedEntry).code).toBe('D.')
-    expect((byPath.get('d.txt') as ChangedEntry).code).toBe('A.')
+    const edited = byPath.get('a.txt') as OrdinaryEntry
+    expect([edited.x, edited.y]).toEqual(['.', 'M'])
+    const deleted = byPath.get('b.txt') as OrdinaryEntry
+    expect([deleted.x, deleted.y]).toEqual(['D', '.'])
+    const added = byPath.get('d.txt') as OrdinaryEntry
+    expect([added.x, added.y]).toEqual(['A', '.'])
 
     const rename = byPath.get('c2.txt') as RenamedEntry
-    expect(rename.type).toBe('renamed')
-    expect(rename.operation).toBe('rename')
+    expect(rename.kind).toBe('renamed')
     expect(rename.origPath).toBe('c.txt')
 
-    expect(byPath.get('e with space.txt')?.type).toBe('untracked')
+    expect(byPath.get('e with space.txt')?.kind).toBe('untracked')
   })
 
-  it('reports both sides and the conflict kind of a merge', async () => {
+  it('reports the conflict code of each unmerged file of a merge', async () => {
     const repo = await repository()
     repo.write('both.txt', 'base\n')
     await repo.git(['add', '.'])
@@ -100,11 +102,11 @@ describe('readStatus against real repositories', () => {
 
     const status = await readStatus(runner, repo.path)
     const conflicts = status.entries.filter(
-      (entry): entry is UnmergedEntry => entry.type === 'unmerged'
+      (entry): entry is UnmergedEntry => entry.kind === 'unmerged'
     )
-    expect(conflicts.map((entry) => [entry.path, entry.conflict]).sort()).toEqual([
-      ['addboth.txt', 'both-added'],
-      ['both.txt', 'both-modified']
+    expect(conflicts.map((entry) => [entry.path, entry.xy]).sort()).toEqual([
+      ['addboth.txt', 'AA'],
+      ['both.txt', 'UU']
     ])
     expect(status.branch.head).toBe('main')
   })

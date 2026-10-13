@@ -18,7 +18,7 @@ export class SampleRepository {
   /** Runs Git in the repository. Throws when the command exits non-zero. */
   async git(args: readonly string[]): Promise<string> {
     const result = await this.run(args)
-    if (result.exitCode !== 0) {
+    if (result.code !== 0) {
       throw new Error(`git ${args.join(' ')} failed: ${result.stderr.trim()}`)
     }
     return result.stdout.toString('utf8')
@@ -51,7 +51,7 @@ export class SampleRepository {
   /** Runs Git in the repository but fails when the command succeeds. */
   async gitExpectingFailure(args: readonly string[]): Promise<GitRunResult> {
     const result = await this.run(args)
-    if (result.exitCode === 0) {
+    if (result.code === 0) {
       throw new Error(`git ${args.join(' ')} unexpectedly succeeded`)
     }
     return result
