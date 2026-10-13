@@ -22,7 +22,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "samples": "vitest run test/sample-repositories.test.ts --disable-console-intercept"
   },
   "dependencies": {
     "i18next": "^26.4.4",

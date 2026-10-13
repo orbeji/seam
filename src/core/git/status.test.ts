@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 import { describe, expect, it } from 'vitest'
+import { summarizeChanges } from './changes'
 import { GitError } from './errors'
 import {
   parseStatus,
@@ -151,6 +152,34 @@ describe('parseStatus: headers and unmerged entries', () => {
 
     const detached = parseStatus(stream('# branch.head (detached)'))
     expect(detached.branch.head).toBeNull()
+  })
+})
+
+describe('summarizeChanges', () => {
+  it('groups ordinary entries into staged and unstaged by their letters', () => {
+    const summary = summarizeChanges(parseStatus(MIXED))
+    expect(summary.staged.map((entry) => entry.path)).toEqual(['b.txt', 'c2.txt', 'd.txt'])
+    expect(summary.unstaged.map((entry) => entry.path)).toEqual(['a.txt'])
+    expect(summary.untracked.map((entry) => entry.path)).toEqual(['e with space.txt', 'e.txt'])
+    expect(summary.conflicts).toEqual([])
+  })
+
+  it('puts an entry that changed on both sides in both lists', () => {
+    const record = '1 MM N... 100644 100644 100644 a b both.txt'
+    const summary = summarizeChanges(parseStatus(stream(record)))
+    expect(summary.staged.map((entry) => entry.path)).toEqual(['both.txt'])
+    expect(summary.unstaged.map((entry) => entry.path)).toEqual(['both.txt'])
+  })
+
+  it('keeps unmerged entries out of the staged and unstaged lists', () => {
+    const summary = summarizeChanges(parseStatus(CONFLICTED))
+    expect(summary.conflicts.map((entry) => entry.path)).toEqual(['addboth.txt', 'both.txt'])
+    // The fixture also has two ordinary entries, which group as usual.
+    expect(summary.staged.map((entry) => entry.path)).toEqual([
+      'deletedbythem.txt',
+      'theirsmod.txt'
+    ])
+    expect(summary.unstaged).toEqual([])
   })
 })
 
