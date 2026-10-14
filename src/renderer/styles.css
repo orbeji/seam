@@ -161,15 +161,32 @@ body {
 
 .changes__item {
   display: flex;
-  align-items: baseline;
-  gap: 8px;
-  padding: 2px 4px;
-  border-radius: 4px;
   font-size: 13px;
 }
 
-.changes__item:hover {
+.changes__entry {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  padding: 2px 4px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.changes__entry:hover {
   background: var(--surface-hover);
+}
+
+.changes__entry:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 
 .changes__badge {
@@ -248,4 +265,110 @@ body {
 .language__select:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
+}
+
+/* Diff viewer */
+
+.diff {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  height: 100%;
+  min-height: 0;
+}
+
+.diff__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.diff__path {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-weight: 600;
+  margin-right: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 40%;
+}
+
+.diff__count {
+  color: var(--text-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.diff__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-muted);
+}
+
+.diff__select,
+.diff__number {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font: inherit;
+}
+
+.diff__number {
+  width: 60px;
+}
+
+.diff__button {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 10px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.diff__button:hover {
+  background: var(--surface-hover);
+}
+
+.diff__button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.diff__error {
+  margin: 0;
+  color: #e06c75;
+}
+
+.diff__notice {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.diff__panes {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.diff__panes .cm-editor {
+  height: 100%;
+}
+
+.diff__panes .cm-scroller {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+
+.diff__panes .cm-mergeView {
+  height: 100%;
 }

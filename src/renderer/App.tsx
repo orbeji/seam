@@ -2,8 +2,10 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import type { IpcErrorCode, RepositorySnapshot } from '../shared/ipc'
+import type { ChangeSummary } from '../shared/git'
+import type { FileVersionSource, IpcErrorCode, RepositorySnapshot } from '../shared/ipc'
 import ChangesView from './changes/ChangesView'
+import DiffView from './diff/DiffView'
 import { SUPPORTED_LANGUAGES, type SupportedLanguage } from './i18n'
 
 type View =
@@ -11,6 +13,36 @@ type View =
   | { state: 'loading' }
   | { state: 'ready'; snapshot: RepositorySnapshot }
   | { state: 'error'; code: IpcErrorCode; message: string }
+
+/** The file the viewer shows and the two versions it compares. */
+interface Selection {
+  path: string
+  from: FileVersionSource
+  to: FileVersionSource
+}
+
+/** The files a section shows, paired with the versions their rows compare. */
+function entriesOf(
+  entries: ChangeSummary['staged'],
+  from: FileVersionSource,
+  to: FileVersionSource
+): Selection[] {
+  return entries.map((entry) => ({ path: entry.path, from, to }))
+}
+
+/** Every file in a summary, in the order the screen shows them. */
+export function summaryEntries(summary: ChangeSummary): Selection[] {
+  return [
+    ...entriesOf(summary.staged, 'head', 'index'),
+    ...entriesOf(summary.unstaged, 'index', 'worktree'),
+    ...entriesOf(summary.untracked, 'head', 'worktree'),
+    ...entriesOf(summary.conflicts, 'stage2', 'stage3')
+  ]
+}
+
+function sameFile(a: Selection, b: Selection): boolean {
+  return a.path === b.path && a.from === b.from && a.to === b.to
+}
 
 /** Translation key for each failure the main process can report. */
 const ERROR_KEYS: Record<IpcErrorCode, string> = {
@@ -26,8 +58,10 @@ export default function App() {
   const current: SupportedLanguage = (i18n.resolvedLanguage as SupportedLanguage) ?? 'en'
   const [view, setView] = useState<View>({ state: 'idle' })
   const [recent, setRecent] = useState<string[]>([])
+  const [selected, setSelected] = useState<Selection | null>(null)
 
   const open = useCallback(async (repo: string) => {
+    setSelected(null)
     setView({ state: 'loading' })
     const result = await window.seam.readRepositoryStatus(repo)
     if (result.ok) {
@@ -53,6 +87,14 @@ export default function App() {
   }, [open])
 
   const currentRepo = view.state === 'ready' ? view.snapshot.repo : null
+
+  /** Opens a file, and on navigation past either end moves to the neighbouring file. */
+  const move = (summary: ChangeSummary, current: Selection, direction: 1 | -1): void => {
+    const files = summaryEntries(summary)
+    const index = files.findIndex((file) => sameFile(file, current))
+    const next = index === -1 ? undefined : files[index + direction]
+    if (next !== undefined) setSelected(next)
+  }
 
   return (
     <div className="app">
@@ -126,7 +168,21 @@ export default function App() {
                 {t(`changes.operation.${view.snapshot.operation}`)}
               </p>
             )}
-            <ChangesView summary={view.snapshot.summary} />
+            {selected === null ? (
+              <ChangesView
+                summary={view.snapshot.summary}
+                onOpen={(path, from, to) => setSelected({ path, from, to })}
+              />
+            ) : (
+              <DiffView
+                repo={view.snapshot.repo}
+                path={selected.path}
+                from={selected.from}
+                to={selected.to}
+                onClose={() => setSelected(null)}
+                onEdge={(direction) => move(view.snapshot.summary, selected, direction)}
+              />
+            )}
           </>
         )
     }

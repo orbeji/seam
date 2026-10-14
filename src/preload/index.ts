@@ -4,6 +4,8 @@ import { contextBridge, ipcRenderer } from 'electron'
 import {
   IPC_CHANNELS,
   IPC_CONTRACT_VERSION,
+  type FileComparison,
+  type FileComparisonRequest,
   type IpcResult,
   type RepositorySnapshot,
   type SeamApi
@@ -20,6 +22,10 @@ const seamApi: SeamApi = {
   readRepositoryStatus: (repo: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.readRepositoryStatus, repo) as Promise<
       IpcResult<RepositorySnapshot>
+    >,
+  readFileComparison: (request: FileComparisonRequest) =>
+    ipcRenderer.invoke(IPC_CHANNELS.readFileComparison, request) as Promise<
+      IpcResult<FileComparison>
     >
 }
 

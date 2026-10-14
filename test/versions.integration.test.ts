@@ -6,9 +6,9 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { diffLines } from '../src/core/diff'
 import {
   GitRunner,
+  readComparison,
   readEol,
   readVersion,
-  readWorktreeComparison,
   shouldNormaliseWorktree,
   type EolInfo
 } from '../src/core/git'
@@ -111,12 +111,10 @@ describe('line-ending normalisation', () => {
     const index = await readVersion(runner, repo.path, 'crlf.txt', 'index')
     expect(decodeText(index.bytes as Uint8Array)).toBe('a\nb\n')
 
-    const comparison = await readWorktreeComparison(runner, repo.path, 'crlf.txt')
+    const comparison = await readComparison(runner, repo.path, 'crlf.txt', 'index', 'worktree')
     expect(comparison.normalised).toBe(true)
-    expect(comparison.worktree?.lines).toEqual(['a', 'b'])
-    expect(
-      diffLines(comparison.index?.lines ?? [], comparison.worktree?.lines ?? [], 'none')
-    ).toEqual([])
+    expect(comparison.to?.lines).toEqual(['a', 'b'])
+    expect(diffLines(comparison.from?.lines ?? [], comparison.to?.lines ?? [], 'none')).toEqual([])
   })
 
   it('keeps a stray CRLF as a change when core.autocrlf=false', async () => {
@@ -126,9 +124,9 @@ describe('line-ending normalisation', () => {
     await repo.git(['commit', '-qm', 'one'])
     repo.write('f.txt', 'a\r\nb\r\n')
 
-    const comparison = await readWorktreeComparison(runner, repo.path, 'f.txt')
+    const comparison = await readComparison(runner, repo.path, 'f.txt', 'index', 'worktree')
     expect(comparison.normalised).toBe(false)
-    const hunks = diffLines(comparison.index?.lines ?? [], comparison.worktree?.lines ?? [], 'none')
+    const hunks = diffLines(comparison.from?.lines ?? [], comparison.to?.lines ?? [], 'none')
     expect(hunks).not.toEqual([])
   })
 
@@ -164,9 +162,9 @@ describe('binaries', () => {
     await repo.git(['add', 'bin.dat'])
     await repo.git(['commit', '-qm', 'one'])
 
-    const comparison = await readWorktreeComparison(runner, repo.path, 'bin.dat')
+    const comparison = await readComparison(runner, repo.path, 'bin.dat', 'index', 'worktree')
     expect(comparison.binary).toBe(true)
-    expect(comparison.index).toBeNull()
-    expect(comparison.worktree).toBeNull()
+    expect(comparison.from).toBeNull()
+    expect(comparison.to).toBeNull()
   })
 })

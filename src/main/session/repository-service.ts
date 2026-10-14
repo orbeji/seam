@@ -8,12 +8,14 @@ import {
   GitNotFoundError,
   GitRunner,
   GitVersionError,
+  readComparison,
   readStatus,
-  summarizeChanges
+  summarizeChanges,
+  type VersionSource
 } from '../../core/git'
-import type { IpcErrorCode, IpcResult, RepositorySnapshot } from '../../shared/ipc'
+import type { FileComparison, IpcErrorCode, IpcResult, RepositorySnapshot } from '../../shared/ipc'
 
-type Failure = Extract<IpcResult<RepositorySnapshot>, { readonly ok: false }>
+type Failure = { readonly ok: false; readonly code: IpcErrorCode; readonly message: string }
 
 function failure(code: IpcErrorCode, message: string): Failure {
   return { ok: false, code, message }
@@ -39,9 +41,9 @@ function isDirectory(path: string): boolean {
 }
 
 /**
- * Reads everything the changes screen needs from a repository. It owns one Git
- * runner and checks the Git version once, so the interface gets a clear error
- * instead of a failed command when Git is missing or too old.
+ * Reads everything the interface needs from a repository. It owns one Git runner
+ * and checks the Git version once, so the interface gets a clear error instead of
+ * a failed command when Git is missing or too old.
  */
 export class RepositoryService {
   private versionChecked: Promise<unknown> | null = null
@@ -49,17 +51,10 @@ export class RepositoryService {
   constructor(private readonly runner: GitRunner = new GitRunner()) {}
 
   async snapshot(repo: string): Promise<IpcResult<RepositorySnapshot>> {
-    if (!isDirectory(repo)) {
-      return failure('not-a-repository', `Not a folder: ${repo}`)
-    }
+    const opened = await this.open(repo)
+    if (!opened.ok) return opened
 
     try {
-      await this.ensureGit(repo)
-      const probe = await this.runner.run(['rev-parse', '--git-dir'], { cwd: repo, readOnly: true })
-      if (probe.code !== 0) {
-        return failure('not-a-repository', probe.stderr.trim() || repo)
-      }
-
       const status = await readStatus(this.runner, repo)
       const operation = await detectOperation(this.runner, repo)
       return {
@@ -71,8 +66,49 @@ export class RepositoryService {
     }
   }
 
-  private async ensureGit(repo: string): Promise<void> {
-    this.versionChecked ??= this.runner.ensureVersion(repo)
-    await this.versionChecked
+  async readFileComparison(
+    repo: string,
+    path: string,
+    from: VersionSource,
+    to: VersionSource
+  ): Promise<IpcResult<FileComparison>> {
+    const opened = await this.open(repo)
+    if (!opened.ok) return opened
+
+    try {
+      const comparison = await readComparison(this.runner, repo, path, from, to)
+      return {
+        ok: true,
+        value: {
+          from: comparison.from,
+          to: comparison.to,
+          fromSize: comparison.fromSize,
+          toSize: comparison.toSize,
+          binary: comparison.binary,
+          normalised: comparison.normalised
+        }
+      }
+    } catch (error) {
+      return failureFrom(error)
+    }
+  }
+
+  /** Checks that the path is a repository that this Git version can read. */
+  private async open(repo: string): Promise<{ ok: true; value: null } | Failure> {
+    if (!isDirectory(repo)) {
+      return failure('not-a-repository', `Not a folder: ${repo}`)
+    }
+
+    try {
+      this.versionChecked ??= this.runner.ensureVersion(repo)
+      await this.versionChecked
+      const probe = await this.runner.run(['rev-parse', '--git-dir'], { cwd: repo, readOnly: true })
+      if (probe.code !== 0) {
+        return failure('not-a-repository', probe.stderr.trim() || repo)
+      }
+      return { ok: true, value: null }
+    } catch (error) {
+      return failureFrom(error)
+    }
   }
 }

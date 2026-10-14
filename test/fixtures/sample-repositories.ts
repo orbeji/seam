@@ -47,6 +47,30 @@ function write(repo: string, name: string, contents: string | Uint8Array): void 
   writeFileSync(join(repo, name), contents)
 }
 
+/**
+ * A file comfortably over 5 MB but under 50 000 lines, so the viewer's large
+ * file path is triggered by size alone. `tail` differs between the two versions
+ * the tests compare.
+ */
+function largeFile(tail: string): string {
+  const lines: string[] = []
+  for (let index = 0; index < 31_000; index += 1) {
+    lines.push(`line ${index} `.padEnd(199, 'x'))
+  }
+  lines.push(tail)
+  return `${lines.join('\n')}\n`
+}
+
+/** A file of short numbered lines, optionally changing one of them. */
+function numberedLines(count: number, changedLine: number | null): string {
+  const lines: string[] = []
+  for (let index = 0; index < count; index += 1) {
+    const number = index + 1
+    lines.push(number === changedLine ? `line ${number} changed` : `line ${number}`)
+  }
+  return `${lines.join('\n')}\n`
+}
+
 async function makeClean(runner: GitRunner, repo: string): Promise<void> {
   await git(runner, repo, ['init', '-q'])
   write(repo, 'a.txt', 'first\n')
@@ -65,6 +89,11 @@ async function makeMixed(runner: GitRunner, repo: string): Promise<void> {
   write(repo, 'deleted.txt', 'to be deleted\n')
   write(repo, 'binary.dat', new Uint8Array([0, 1, 2, 3]))
   write(repo, 'café con leche.txt', 'accents\n')
+  write(repo, 'page.php', '<?php\n\necho "hello";\n')
+  write(repo, 'tool', '#!/usr/bin/env python3\nprint("hi")\n')
+  write(repo, 'spaces.txt', 'alpha\nbeta\n')
+  write(repo, 'context.txt', numberedLines(30, null))
+  write(repo, 'large.txt', largeFile('end'))
   await git(runner, repo, ['add', '.'])
   await git(runner, repo, ['commit', '-qm', 'Base'])
 
@@ -97,6 +126,16 @@ async function makeMixed(runner: GitRunner, repo: string): Promise<void> {
 
   // Unstaged change to a name with spaces and accents.
   write(repo, 'café con leche.txt', 'accents changed\n')
+
+  // Unstaged changes used by the viewer tests: a language from the extension,
+  // one from a shebang with no extension, and a file over 5 MB.
+  write(repo, 'page.php', '<?php\n\necho "hello";\necho "again";\n')
+  write(repo, 'tool', '#!/usr/bin/env python3\nprint("hi")\nprint("again")\n')
+  // Only a trailing space differs, so the whitespace modes have something to ignore.
+  write(repo, 'spaces.txt', 'alpha \nbeta\n')
+  // A change in the middle, so the unchanged blocks around it can be folded.
+  write(repo, 'context.txt', numberedLines(30, 16))
+  write(repo, 'large.txt', largeFile('end changed'))
 }
 
 async function makeConflicts(runner: GitRunner, repo: string): Promise<void> {

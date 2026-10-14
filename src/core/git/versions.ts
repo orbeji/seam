@@ -181,70 +181,61 @@ export function shouldNormaliseWorktree(eol: EolInfo, autocrlf: string): boolean
   return autocrlf === 'true' || autocrlf === 'input'
 }
 
-/** The lines of a version, decoded, or null when it does not exist or is binary. */
-export interface VersionText {
-  source: VersionSource
-  lines: string[]
-  finalNewline: boolean
+/** Two versions of a path, ready to diff against each other. */
+export interface Comparison {
+  /** The text of the `from` version, or null when it does not exist. */
+  from: TextLines | null
+  /** The text of the `to` version, or null when it does not exist. */
+  to: TextLines | null
+  /** The byte size of the `from` version, 0 when it does not exist. */
+  fromSize: number
+  /** The byte size of the `to` version, 0 when it does not exist. */
+  toSize: number
   binary: boolean
+  /** Whether the working copy's line endings were normalised to match a Git version. */
+  normalised: boolean
 }
 
-/** Decodes and splits a version, marking binary files instead of decoding them. */
-export function versionText(version: FileVersion, normalise: boolean): VersionText | null {
+/** Decodes and splits a version, or null when it does not exist or is binary. */
+function linesOf(version: FileVersion, normalise: boolean): TextLines | null {
   if (version.bytes === null) return null
-  if (isBinary(version.bytes)) {
-    return { source: version.source, lines: [], finalNewline: false, binary: true }
-  }
   const text = normalise
     ? normaliseLineEndings(decodeText(version.bytes))
     : decodeText(version.bytes)
-  const { lines, finalNewline } = splitText(text)
-  return { source: version.source, lines, finalNewline, binary: false }
-}
-
-/** The index and working-copy texts of a path, ready to diff against each other. */
-export interface WorktreeComparison {
-  index: TextLines | null
-  worktree: TextLines | null
-  binary: boolean
-  /** Whether the working copy's line endings were normalised to match the index. */
-  normalised: boolean
-}
-
-/** The index and working-copy texts of a path, ready to diff against each other. */
-export interface WorktreeComparison {
-  index: TextLines | null
-  worktree: TextLines | null
-  binary: boolean
-  /** Whether the working copy's line endings were normalised to match the index. */
-  normalised: boolean
+  return splitText(text)
 }
 
 /**
- * Reads the index and working-copy versions of a path. Either side may be null
- * when the file is only in one of them. When Git stores `LF` in the index and
- * the working copy has `CRLF` only because of `core.autocrlf` or the attributes,
- * the working copy is normalised, so a `CRLF` file is not read as changed from
- * end to end.
+ * Reads two versions of a path. Either side may be null when the file is only in
+ * one of them. When one side is the working copy and the other is a Git version,
+ * and Git stores `LF` in the index while the working copy has `CRLF` only because
+ * of `core.autocrlf` or the attributes, the working copy is normalised, so the
+ * file is not read as changed from end to end.
  */
-export async function readWorktreeComparison(
+export async function readComparison(
   runner: GitRunner,
   cwd: string,
-  path: string
-): Promise<WorktreeComparison> {
-  const [index, worktree] = await Promise.all([
-    readVersion(runner, cwd, path, 'index'),
-    readVersion(runner, cwd, path, 'worktree')
+  path: string,
+  from: VersionSource,
+  to: VersionSource
+): Promise<Comparison> {
+  const [fromVersion, toVersion] = await Promise.all([
+    readVersion(runner, cwd, path, from),
+    readVersion(runner, cwd, path, to)
   ])
 
   const binary =
-    (index.bytes !== null && isBinary(index.bytes)) ||
-    (worktree.bytes !== null && isBinary(worktree.bytes))
+    (fromVersion.bytes !== null && isBinary(fromVersion.bytes)) ||
+    (toVersion.bytes !== null && isBinary(toVersion.bytes))
 
-  let normalised = false
-  if (!binary && index.bytes !== null && worktree.bytes !== null) {
+  // Only the working-copy side is ever normalised, and only against a Git version.
+  const worktreeIsFrom = from === 'worktree' && to !== 'worktree'
+  const worktreeIsTo = to === 'worktree' && from !== 'worktree'
+
+  let normaliseWorktree = false
+  if (!binary && (worktreeIsFrom || worktreeIsTo)) {
     const eol = await readEol(runner, cwd, path)
-    normalised =
+    normaliseWorktree =
       eol !== null &&
       hasCarriageReturn(eol.worktree) &&
       !hasCarriageReturn(eol.index) &&
@@ -252,16 +243,11 @@ export async function readWorktreeComparison(
   }
 
   return {
-    index: index.bytes === null || binary ? null : splitText(decodeText(index.bytes)),
-    worktree:
-      worktree.bytes === null || binary
-        ? null
-        : splitText(
-            normalised
-              ? normaliseLineEndings(decodeText(worktree.bytes))
-              : decodeText(worktree.bytes)
-          ),
+    from: binary ? null : linesOf(fromVersion, worktreeIsFrom && normaliseWorktree),
+    to: binary ? null : linesOf(toVersion, worktreeIsTo && normaliseWorktree),
+    fromSize: fromVersion.bytes?.length ?? 0,
+    toSize: toVersion.bytes?.length ?? 0,
     binary,
-    normalised
+    normalised: normaliseWorktree
   }
 }

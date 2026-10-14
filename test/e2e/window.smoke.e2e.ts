@@ -60,10 +60,15 @@ describe('the window over the mixed repository', () => {
 
   it('lists the unstaged files', async () => {
     const unstaged = await entries('unstaged')
-    expect(unstaged).toHaveLength(3)
+    expect(unstaged).toHaveLength(8)
     expect(unstaged.join(' ')).toContain('tracked.txt')
     expect(unstaged.join(' ')).toContain('binary.dat')
     expect(unstaged.join(' ')).toContain('café con leche.txt')
+    expect(unstaged.join(' ')).toContain('page.php')
+    expect(unstaged.join(' ')).toContain('tool')
+    expect(unstaged.join(' ')).toContain('spaces.txt')
+    expect(unstaged.join(' ')).toContain('context.txt')
+    expect(unstaged.join(' ')).toContain('large.txt')
   })
 
   it('lists the untracked files', async () => {

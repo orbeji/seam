@@ -29,6 +29,39 @@
       "rebase": "Rebase en curso"
     }
   },
+  "diff": {
+    "close": "Cerrar",
+    "loading": "Leyendo ambas versiones…",
+    "binary": "Es un archivo binario: {{from}} bytes frente a {{to}} bytes.",
+    "large": "El archivo es grande, así que el resaltado dentro de la línea está desactivado y la diferencia se lee línea a línea.",
+    "collapse": "Plegar lo que no cambia",
+    "context": "Contexto",
+    "layout": {
+      "label": "Disposición",
+      "side-by-side": "Lado a lado",
+      "unified": "Unificado"
+    },
+    "granularity": {
+      "label": "Resaltado",
+      "words": "Palabras",
+      "lines": "Líneas",
+      "split": "Cambios divididos",
+      "characters": "Caracteres",
+      "none": "Ninguno"
+    },
+    "whitespace": {
+      "label": "Espacios",
+      "none": "Mostrar todo",
+      "trim": "Ignorar en los extremos",
+      "ignore": "Ignorar todos",
+      "ignore-and-blank": "Ignorar todos y las líneas en blanco"
+    },
+    "navigation": {
+      "previous": "Diferencia anterior",
+      "next": "Diferencia siguiente"
+    },
+    "count": "Diferencias: {{count}}"
+  },
   "errors": {
     "gitNotFound": "No se ha encontrado Git. Instala Git 2.30 o posterior y vuelve a abrir Seam.",
     "gitTooOld": "El Git instalado es demasiado antiguo. Se necesita la versión 2.30 o posterior.",

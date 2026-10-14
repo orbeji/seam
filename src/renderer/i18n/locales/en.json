@@ -29,6 +29,39 @@
       "rebase": "Rebase in progress"
     }
   },
+  "diff": {
+    "close": "Close",
+    "loading": "Reading both versions…",
+    "binary": "This is a binary file: {{from}} bytes against {{to}} bytes.",
+    "large": "This file is large, so inline highlighting is off and the diff is read line by line.",
+    "collapse": "Fold unchanged",
+    "context": "Context",
+    "layout": {
+      "label": "Layout",
+      "side-by-side": "Side by side",
+      "unified": "Unified"
+    },
+    "granularity": {
+      "label": "Highlight",
+      "words": "Words",
+      "lines": "Lines",
+      "split": "Split changes",
+      "characters": "Characters",
+      "none": "None"
+    },
+    "whitespace": {
+      "label": "Whitespace",
+      "none": "Show all",
+      "trim": "Ignore around",
+      "ignore": "Ignore all",
+      "ignore-and-blank": "Ignore all and blank lines"
+    },
+    "navigation": {
+      "previous": "Previous difference",
+      "next": "Next difference"
+    },
+    "count": "Differences: {{count}}"
+  },
   "errors": {
     "gitNotFound": "Git was not found. Install Git 2.30 or newer and reopen Seam.",
     "gitTooOld": "The installed Git is too old. Version 2.30 or newer is required.",
