@@ -29,5 +29,6 @@
     "src/core/merge/**/*",
     "src/core/text/**/*",
     "src/preload/index.d.ts"
-  ]
+  ],
+  "exclude": ["src/core/**/*.test.ts"]
 }

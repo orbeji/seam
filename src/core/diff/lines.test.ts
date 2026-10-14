@@ -1,0 +1,265 @@
+// SPDX-License-Identifier: MIT
+
+import { execFileSync } from 'node:child_process'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterAll, describe, expect, it } from 'vitest'
+import { applyHunks, diffLines, lineKey, type LineHunk, type WhitespaceMode } from './lines'
+
+/** A small deterministic generator so a failing case can be reproduced. */
+function random(seed: number): () => number {
+  let state = seed >>> 0
+  return () => {
+    state += 0x6d2b79f5
+    let t = state
+    t = Math.imul(t ^ (t >>> 15), t | 1)
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
+/** The alphabet the property test draws lines from, mixing plain and whitespace. */
+const ALPHABET = ['', ' ', '  ', 'a', 'b', 'a ', ' a', 'a\t', 'ab', ' a b ', 'café', '🙂']
+
+function randomLines(next: () => number): string[] {
+  const count = Math.floor(next() * 9)
+  const lines: string[] = []
+  for (let i = 0; i < count; i += 1) {
+    lines.push(ALPHABET[Math.floor(next() * ALPHABET.length)] as string)
+  }
+  return lines
+}
+
+describe('diffLines edge cases', () => {
+  it('reports nothing for equal files', () => {
+    expect(diffLines(['a', 'b'], ['a', 'b'], 'none')).toEqual([])
+  })
+
+  it('reports nothing for two empty files', () => {
+    expect(diffLines([], [], 'none')).toEqual([])
+  })
+
+  it('reports one insertion when the left side is empty', () => {
+    expect(diffLines([], ['a', 'b'], 'none')).toEqual([
+      { aStart: 0, aLines: 0, bStart: 0, bLines: 2 }
+    ])
+  })
+
+  it('reports one deletion when the right side is empty', () => {
+    expect(diffLines(['a', 'b'], [], 'none')).toEqual([
+      { aStart: 0, aLines: 2, bStart: 0, bLines: 0 }
+    ])
+  })
+
+  it('separates changes that are far apart', () => {
+    const hunks = diffLines(['a', 'b', 'c', 'd', 'e'], ['a', 'B', 'c', 'd', 'E'], 'none')
+    expect(hunks).toEqual([
+      { aStart: 1, aLines: 1, bStart: 1, bLines: 1 },
+      { aStart: 4, aLines: 1, bStart: 4, bLines: 1 }
+    ])
+  })
+
+  it('handles a missing final newline through the line arrays', () => {
+    // splitText turns "a\nb" and "a\nb\n" into the same lines, so the engine sees
+    // no change; the difference lives in `finalNewline`, not in the line diff.
+    expect(diffLines(['a', 'b'], ['a', 'b'], 'none')).toEqual([])
+  })
+
+  it('keeps Unicode lines whole', () => {
+    const hunks = diffLines(['café', '🙂', 'niño'], ['café', '🙃', 'niño'], 'none')
+    expect(hunks).toEqual([{ aStart: 1, aLines: 1, bStart: 1, bLines: 1 }])
+  })
+})
+
+describe('whitespace modes', () => {
+  it('none sees trailing spaces as a change', () => {
+    expect(diffLines(['a'], ['a '], 'none')).toEqual([
+      { aStart: 0, aLines: 1, bStart: 0, bLines: 1 }
+    ])
+  })
+
+  it('trim ignores leading and trailing spaces', () => {
+    expect(diffLines(['  a  '], ['a'], 'trim')).toEqual([])
+    expect(diffLines(['a'], ['\ta\t'], 'trim')).toEqual([])
+  })
+
+  it('ignore drops spaces and tabs anywhere', () => {
+    expect(diffLines(['a b'], ['ab'], 'ignore')).toEqual([])
+    expect(diffLines(['a\tb'], ['a b'], 'ignore')).toEqual([])
+  })
+
+  it('ignore-and-blank does not count added or removed blank lines', () => {
+    expect(diffLines(['a', '', 'b'], ['a', 'b'], 'ignore-and-blank')).toEqual([])
+    expect(diffLines(['a', 'b'], ['a', ' ', 'b'], 'ignore-and-blank')).toEqual([])
+    expect(diffLines(['a', 'b'], ['a', 'x', 'b'], 'ignore-and-blank')).toEqual([
+      { aStart: 1, aLines: 0, bStart: 1, bLines: 1 }
+    ])
+  })
+
+  it('ignore-and-blank still points its ranges at the original lines', () => {
+    const a = ['', 'a', ' ', 'b', '']
+    const b = ['a', '', 'x', 'b']
+    const hunks = diffLines(a, b, 'ignore-and-blank')
+    expect(hunks).toEqual([{ aStart: 3, aLines: 0, bStart: 2, bLines: 1 }])
+    expect(applyHunks(a, b, hunks).filter((line) => line.trim() !== '')).toEqual(['a', 'x', 'b'])
+  })
+})
+
+describe('lineKey', () => {
+  it('matches each mode', () => {
+    expect(lineKey('  a  ', 'none')).toBe('  a  ')
+    expect(lineKey('  a  ', 'trim')).toBe('a')
+    expect(lineKey(' a b ', 'ignore')).toBe('ab')
+    expect(lineKey('   ', 'ignore-and-blank')).toBe('')
+  })
+})
+
+describe('the diff is a valid edit script', () => {
+  const modes: WhitespaceMode[] = ['none', 'trim', 'ignore', 'ignore-and-blank']
+
+  /** For ignore-and-blank, comparing the keys after dropping blank lines is the contract. */
+  function signature(lines: string[], mode: WhitespaceMode): string[] {
+    const keys = lines.map((line) => lineKey(line, mode))
+    return mode === 'ignore-and-blank' ? keys.filter((key) => key !== '') : keys
+  }
+
+  it('reconstructs the right side exactly with mode none', () => {
+    const next = random(1)
+    for (let trial = 0; trial < 4000; trial += 1) {
+      const a = randomLines(next)
+      const b = randomLines(next)
+      const hunks = diffLines(a, b, 'none')
+      expect(applyHunks(a, b, hunks)).toEqual(b)
+    }
+  })
+
+  it('reconstructs the right keys in every whitespace mode', () => {
+    const next = random(2)
+    for (const mode of modes) {
+      for (let trial = 0; trial < 2000; trial += 1) {
+        const a = randomLines(next)
+        const b = randomLines(next)
+        const hunks = diffLines(a, b, mode)
+        expect(signature(applyHunks(a, b, hunks), mode)).toEqual(signature(b, mode))
+      }
+    }
+  })
+
+  it('never overlaps and stays in order', () => {
+    const next = random(3)
+    for (let trial = 0; trial < 2000; trial += 1) {
+      const a = randomLines(next)
+      const b = randomLines(next)
+      const hunks = diffLines(a, b, 'none')
+      let aCursor = 0
+      let bCursor = 0
+      for (const hunk of hunks) {
+        expect(hunk.aStart).toBeGreaterThanOrEqual(aCursor)
+        expect(hunk.bStart).toBeGreaterThanOrEqual(bCursor)
+        expect(hunk.aLines).toBeGreaterThanOrEqual(0)
+        expect(hunk.bLines).toBeGreaterThanOrEqual(0)
+        aCursor = hunk.aStart + hunk.aLines
+        bCursor = hunk.bStart + hunk.bLines
+      }
+    }
+  })
+})
+
+describe('compared with git diff', () => {
+  const base = mkdtempSync(join(tmpdir(), 'seam-diff-'))
+  let file = 0
+
+  afterAll(() => {
+    rmSync(base, { recursive: true, force: true })
+  })
+
+  /** The hunks git reports for two files, in the same shape as ours. */
+  function gitHunks(a: readonly string[], b: readonly string[]): LineHunk[] {
+    const left = join(base, `a${file}`)
+    const right = join(base, `b${file}`)
+    file += 1
+    // An empty array is an empty file, not one empty line.
+    writeFileSync(left, a.length === 0 ? '' : `${a.join('\n')}\n`)
+    writeFileSync(right, b.length === 0 ? '' : `${b.join('\n')}\n`)
+
+    let output = ''
+    try {
+      output = execFileSync(
+        'git',
+        ['-c', 'core.quotepath=false', 'diff', '--no-index', '--unified=0', '--', left, right],
+        { encoding: 'utf8' }
+      )
+    } catch (error) {
+      output = (error as { stdout?: string }).stdout ?? ''
+    }
+
+    const hunks: LineHunk[] = []
+    const header = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/gm
+    for (const match of output.matchAll(header)) {
+      // Git prints a 1-based start for a range with lines, but a 0-based
+      // position when the range is empty, which is how it points at a pure
+      // insertion or deletion.
+      const aLines = match[2] === undefined ? 1 : Number(match[2])
+      const bLines = match[4] === undefined ? 1 : Number(match[4])
+      hunks.push({
+        aStart: aLines === 0 ? Number(match[1]) : Number(match[1]) - 1,
+        aLines,
+        bStart: bLines === 0 ? Number(match[3]) : Number(match[3]) - 1,
+        bLines
+      })
+    }
+    return hunks
+  }
+
+  // Fixtures use distinct lines, so the minimal edit script is unambiguous and
+  // git and Myers agree. Inputs with repeated lines may be aligned differently.
+  const cases: Array<[string[], string[]]> = [
+    [
+      ['a', 'b', 'c'],
+      ['a', 'b', 'c']
+    ],
+    [
+      ['a', 'b', 'c'],
+      ['a', 'B', 'c']
+    ],
+    [
+      ['a', 'b', 'c'],
+      ['a', 'c']
+    ],
+    [
+      ['a', 'c'],
+      ['a', 'b', 'c']
+    ],
+    [
+      ['a', 'b', 'c', 'd', 'e'],
+      ['a', 'B', 'c', 'd', 'E']
+    ],
+    [
+      ['a', 'b', 'c', 'd'],
+      ['a', 'd']
+    ],
+    [
+      ['a', 'd'],
+      ['a', 'b', 'c', 'd']
+    ],
+    [
+      ['one', 'two', 'three'],
+      ['zero', 'one', 'two', 'three', 'four']
+    ],
+    [['one', 'two', 'three'], []],
+    [[], ['one', 'two', 'three']],
+    [
+      ['x', 'y', 'z', 'w'],
+      ['x', 'z', 'w', 'v']
+    ],
+    [
+      ['café', 'niño'],
+      ['café', 'nino', 'niño']
+    ]
+  ]
+
+  it.each(cases)('agrees for %j against %j', (a, b) => {
+    expect(diffLines(a, b, 'none')).toEqual(gitHunks(a, b))
+  })
+})
