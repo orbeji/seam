@@ -2,10 +2,8 @@
 
 import { existsSync } from 'node:fs'
 import { isAbsolute, resolve } from 'node:path'
+import type { GitOperation } from '../../shared/git'
 import type { GitRunner } from './runner'
-
-/** A Git operation that can be stopped halfway. */
-export type GitOperation = 'merge' | 'cherry-pick' | 'revert' | 'rebase'
 
 /**
  * Markers in the order they are checked. `rebase` has two: `rebase-merge` for

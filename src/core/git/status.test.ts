@@ -1,15 +1,10 @@
 // SPDX-License-Identifier: MIT
 
 import { describe, expect, it } from 'vitest'
+import type { ConflictCode, OrdinaryEntry, RenamedEntry, UnmergedEntry } from '../../shared/git'
 import { summarizeChanges } from './changes'
 import { GitError } from './errors'
-import {
-  parseStatus,
-  type ConflictCode,
-  type OrdinaryEntry,
-  type RenamedEntry,
-  type UnmergedEntry
-} from './status'
+import { parseStatus } from './status'
 
 const NUL = '\0'
 

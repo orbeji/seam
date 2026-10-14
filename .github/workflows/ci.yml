@@ -12,11 +12,8 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# There are no end-to-end tests yet, so CI never launches Electron. Skipping the
-# ~120 MB binary download keeps the install fast on both runners.
-env:
-  ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
-
+# The end-to-end smoke test launches the real Electron application, so the
+# binary is needed on both runners.
 jobs:
   check:
     name: ${{ matrix.os }}
@@ -50,3 +47,17 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Install xvfb (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y xvfb
+
+      # Electron needs a display; a headless runner has none. Windows runners
+      # have an interactive desktop, so they run the test directly.
+      - name: End-to-end smoke test (Linux)
+        if: runner.os == 'Linux'
+        run: xvfb-run --auto-servernum npm run test:e2e
+
+      - name: End-to-end smoke test (Windows)
+        if: runner.os == 'Windows'
+        run: npm run test:e2e

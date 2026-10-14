@@ -2,6 +2,17 @@
 
 import { app, BrowserWindow } from 'electron'
 import { join } from 'node:path'
+import { registerRepositoryHandlers } from './ipc/repository-handlers'
+import { repositoryFromArgv } from './session/launch-arguments'
+import { RecentRepositories } from './session/recent-repositories'
+import { RepositoryService } from './session/repository-service'
+
+// Lets a portable install, and the end-to-end test, keep its data out of the
+// real user profile. Must run before the app is ready.
+const userData = process.env['SEAM_USER_DATA']
+if (userData !== undefined && userData !== '') {
+  app.setPath('userData', userData)
+}
 
 function createWindow(): BrowserWindow {
   const window = new BrowserWindow({
@@ -35,6 +46,11 @@ function createWindow(): BrowserWindow {
 }
 
 void app.whenReady().then(() => {
+  const recent = new RecentRepositories(join(app.getPath('userData'), 'recent-repositories.json'))
+  const initialRepository = repositoryFromArgv(process.argv)
+  if (initialRepository) recent.remember(initialRepository)
+  registerRepositoryHandlers(new RepositoryService(), recent, initialRepository)
+
   createWindow()
 
   app.on('activate', () => {

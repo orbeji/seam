@@ -11,6 +11,29 @@
     }
   },
   "changes": {
-    "empty": "Abre un repositorio para ver sus cambios preparados, sin preparar y sin seguimiento."
+    "empty": "Abre un repositorio para ver sus cambios preparados, sin preparar y sin seguimiento.",
+    "open": "Abrir repositorio…",
+    "recent": "Repositorios recientes",
+    "loading": "Leyendo el repositorio…",
+    "none": "Nada por aquí.",
+    "sections": {
+      "staged": "Preparados",
+      "unstaged": "Sin preparar",
+      "untracked": "Sin seguimiento",
+      "conflicts": "Conflictos de fusión"
+    },
+    "operation": {
+      "merge": "Fusión en curso",
+      "cherry-pick": "Cherry-pick en curso",
+      "revert": "Revert en curso",
+      "rebase": "Rebase en curso"
+    }
+  },
+  "errors": {
+    "gitNotFound": "No se ha encontrado Git. Instala Git 2.30 o posterior y vuelve a abrir Seam.",
+    "gitTooOld": "El Git instalado es demasiado antiguo. Se necesita la versión 2.30 o posterior.",
+    "notARepository": "Esa carpeta no es un repositorio de Git.",
+    "commandFailed": "El comando de Git ha fallado.",
+    "unknown": "Algo ha ido mal al leer el repositorio."
   }
 }

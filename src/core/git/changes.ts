@@ -1,18 +1,12 @@
 // SPDX-License-Identifier: MIT
 
-import type { RepoStatus, StatusEntry, UnmergedEntry, UntrackedEntry } from './status'
-
-/**
- * The four lists the changes screen shows. An entry can be both staged and
- * unstaged (porcelain `MM`), in which case it appears in both, like the reference client.
- * Unmerged entries are kept apart so the conflict dialog can own them.
- */
-export interface ChangeSummary {
-  staged: StatusEntry[]
-  unstaged: StatusEntry[]
-  untracked: UntrackedEntry[]
-  conflicts: UnmergedEntry[]
-}
+import type {
+  ChangeSummary,
+  RepoStatus,
+  StatusEntry,
+  UnmergedEntry,
+  UntrackedEntry
+} from '../../shared/git'
 
 export function summarizeChanges(status: RepoStatus): ChangeSummary {
   const staged: StatusEntry[] = []

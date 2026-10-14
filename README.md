@@ -11,8 +11,10 @@ expose the regions the merge editor needs.
 
 ## Status
 
-Phase 0 (foundations). The window opens, the English and Spanish catalogs are
-wired up and the language is detected from the system. No Git integration yet.
+Phase 0 (foundations). The window opens over a chosen folder and lists its
+staged, unstaged, untracked and conflicting changes, read through the real `git`
+executable. The interface is translated into English and Spanish, and the
+language is detected from the system.
 
 ## Requirements
 
@@ -30,6 +32,15 @@ wired up and the language is detected from the system. No Git integration yet.
 | `npm run lint`      | Runs ESLint                                            |
 | `npm run format`    | Formats with Prettier                                  |
 | `npm test`          | Runs the Vitest suite once                             |
+| `npm run test:e2e`  | Builds and runs the Playwright smoke test              |
+
+`npm run test:e2e` launches the built application, so it needs a display. On a
+headless Linux machine run it under `xvfb-run`.
+
+## Opening a repository
+
+Use **Open repository…** to pick a folder; Seam remembers the ten most recent
+ones. From a shell, `seam --repo <path>` opens a repository directly.
 
 ## Layout
 

@@ -11,6 +11,29 @@
     }
   },
   "changes": {
-    "empty": "Open a repository to see its staged, unstaged and untracked changes."
+    "empty": "Open a repository to see its staged, unstaged and untracked changes.",
+    "open": "Open repository…",
+    "recent": "Recent repositories",
+    "loading": "Reading the repository…",
+    "none": "Nothing here.",
+    "sections": {
+      "staged": "Staged",
+      "unstaged": "Unstaged",
+      "untracked": "Untracked",
+      "conflicts": "Merge Conflicts"
+    },
+    "operation": {
+      "merge": "Merge in progress",
+      "cherry-pick": "Cherry-pick in progress",
+      "revert": "Revert in progress",
+      "rebase": "Rebase in progress"
+    }
+  },
+  "errors": {
+    "gitNotFound": "Git was not found. Install Git 2.30 or newer and reopen Seam.",
+    "gitTooOld": "The installed Git is too old. Version 2.30 or newer is required.",
+    "notARepository": "That folder is not a Git repository.",
+    "commandFailed": "The Git command failed.",
+    "unknown": "Something went wrong while reading the repository."
   }
 }

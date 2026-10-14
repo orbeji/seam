@@ -23,6 +23,7 @@
     "format:check": "prettier --check .",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:e2e": "electron-vite build && vitest run --config vitest.e2e.config.ts",
     "samples": "vitest run test/sample-repositories.test.ts --disable-console-intercept"
   },
   "dependencies": {
@@ -45,6 +46,7 @@
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^7.1.1",
     "globals": "^17.13.0",
+    "playwright-core": "^1.64.1",
     "prettier": "^3.9.10",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.71.2",

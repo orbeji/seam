@@ -1,0 +1,98 @@
+// SPDX-License-Identifier: MIT
+
+/**
+ * The shape of a repository's status. It lives in `shared` because it crosses
+ * IPC: the main process builds it with `core/git` and the interface renders it,
+ * and the interface may not import `core/git`. Nothing here touches Node or
+ * Electron, so every layer can depend on it.
+ */
+
+/**
+ * The seven two-letter codes Git uses for an unmerged file. The first letter is
+ * the HEAD side and the second the other side. Phase 5 turns each into the
+ * actions the conflict dialog offers.
+ */
+export type ConflictCode = 'DD' | 'AU' | 'UD' | 'UA' | 'DU' | 'AA' | 'UU'
+
+/**
+ * File modes of an entry. For an ordinary or renamed entry they are the modes
+ * in HEAD, the index and the working tree. For an unmerged entry the three
+ * modes are the merge stages (01 base, 02 ours, 03 theirs), which is how a
+ * conflict tells that one side deleted the file (mode `000000`).
+ */
+export interface Modes {
+  head: string
+  index: string
+  worktree: string
+}
+
+export interface BranchStatus {
+  /** Commit the branch points at, or null before the first commit. */
+  oid: string | null
+  /** Branch name, or null when HEAD is detached. */
+  head: string | null
+  /** Only present with `--branch` and when the branch has an upstream. */
+  upstream?: string
+  /** Commits ahead of the upstream; only present when the upstream is known. */
+  ahead?: number
+  /** Commits behind the upstream; only present when the upstream is known. */
+  behind?: number
+}
+
+/** An ordinary changed entry (porcelain record type `1`). */
+export interface OrdinaryEntry {
+  kind: 'ordinary'
+  /** Index status letter (X), `.` when the change is not staged. */
+  x: string
+  /** Worktree status letter (Y), `.` when the change exists only in the index. */
+  y: string
+  path: string
+  modes: Modes
+}
+
+/** A renamed entry (porcelain record type `2`). */
+export interface RenamedEntry {
+  kind: 'renamed'
+  x: string
+  y: string
+  path: string
+  /** The path the file had before the rename. */
+  origPath: string
+  /** Similarity score between 0 and 100. */
+  score: number
+}
+
+/** An unmerged entry (porcelain record type `u`). */
+export interface UnmergedEntry {
+  kind: 'unmerged'
+  xy: ConflictCode
+  path: string
+  modes: Modes
+}
+
+export interface UntrackedEntry {
+  kind: 'untracked'
+  path: string
+}
+
+export type StatusEntry = OrdinaryEntry | RenamedEntry | UnmergedEntry | UntrackedEntry
+
+export interface RepoStatus {
+  branch: BranchStatus
+  entries: StatusEntry[]
+}
+
+/** A Git operation that can be stopped halfway. */
+export type GitOperation = 'merge' | 'cherry-pick' | 'revert' | 'rebase'
+
+/**
+ * The four lists the changes screen shows. An entry can be both staged and
+ * unstaged (porcelain `MM`), in which case it appears in both, like the reference client.
+ * Unmerged entries are kept apart so the conflict dialog can own them.
+ */
+export interface ChangeSummary {
+  staged: StatusEntry[]
+  unstaged: StatusEntry[]
+  untracked: UntrackedEntry[]
+  conflicts: UnmergedEntry[]
+}
