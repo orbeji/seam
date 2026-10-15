@@ -26,7 +26,8 @@ export interface InlineChange {
 /** Inline diffs run on single lines, so the budget only guards against long ones. */
 const MAX_EDITS = 2048
 
-interface Token {
+/** One token inside a line: its text and its offset in the line. */
+export interface InlineToken {
   text: string
   start: number
 }
@@ -34,8 +35,13 @@ interface Token {
 /** A run of letters, numbers and underscores, a run of spaces, or a run of other. */
 const WORD_PATTERN = /[\p{L}\p{N}_]+|\s+|[^\p{L}\p{N}_\s]+/gu
 
-function tokenize(text: string, unit: InlineUnit): Token[] {
-  const tokens: Token[] = []
+/**
+ * Splits a line into the units the inline diff compares. The tokens cover the
+ * whole text in order, so concatenating their texts returns the original. The
+ * merge engine reuses it to look at a whole region word by word.
+ */
+export function tokenizeInline(text: string, unit: InlineUnit): InlineToken[] {
+  const tokens: InlineToken[] = []
 
   if (unit === 'char') {
     let start = 0
@@ -61,8 +67,8 @@ function tokenize(text: string, unit: InlineUnit): Token[] {
 export function diffInline(a: string, b: string, unit: InlineUnit): InlineChange[] {
   if (a === b) return []
 
-  const aTokens = tokenize(a, unit)
-  const bTokens = tokenize(b, unit)
+  const aTokens = tokenizeInline(a, unit)
+  const bTokens = tokenizeInline(b, unit)
   const ops = myersOps(
     aTokens.map((token) => token.text),
     bTokens.map((token) => token.text),
@@ -71,9 +77,9 @@ export function diffInline(a: string, b: string, unit: InlineUnit): InlineChange
   if (!ops) return [{ aFrom: 0, aTo: a.length, bFrom: 0, bTo: b.length }]
 
   const aOffset = (index: number): number =>
-    index < aTokens.length ? (aTokens[index] as Token).start : a.length
+    index < aTokens.length ? (aTokens[index] as InlineToken).start : a.length
   const bOffset = (index: number): number =>
-    index < bTokens.length ? (bTokens[index] as Token).start : b.length
+    index < bTokens.length ? (bTokens[index] as InlineToken).start : b.length
 
   const changes: InlineChange[] = []
   let aIndex = 0
