@@ -6,8 +6,10 @@ import { join } from 'node:path'
 import { GitRunner, type GitRunResult } from '../../src/core/git'
 
 /**
- * A throwaway repository for a test. Commits use a fixed identity so the
- * environment's Git configuration never leaks into the fixtures.
+ * A throwaway repository for a test. Commits use a fixed identity and line
+ * endings are pinned to `LF`, so the environment's Git configuration never
+ * leaks into the fixtures: on Windows a global `core.autocrlf=true` is common
+ * and would normalise the working copies a test wrote on purpose.
  */
 export class SampleRepository {
   constructor(
@@ -66,5 +68,8 @@ export async function createRepository(): Promise<SampleRepository> {
   const path = mkdtempSync(join(tmpdir(), 'seam-repo-'))
   const repository = new SampleRepository(path, new GitRunner())
   await repository.git(['init', '-q'])
+  // The fixtures decide their own line endings; a global `core.autocrlf=true`,
+  // as Git for Windows installs, must not override them.
+  await repository.git(['config', 'core.autocrlf', 'false'])
   return repository
 }

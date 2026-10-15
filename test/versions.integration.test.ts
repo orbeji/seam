@@ -52,10 +52,16 @@ describe('readVersion', () => {
     repo.write('run.sh', '#!/bin/sh\necho hi\n')
     chmodSync(join(repo.path, 'run.sh'), 0o755)
     await repo.git(['add', 'run.sh'])
+    // Windows has no executable bit on disk and `core.filemode` is false there,
+    // so the mode has to be forced in the index for the commit to record 100755.
+    await repo.git(['update-index', '--chmod=+x', 'run.sh'])
     await repo.git(['commit', '-qm', 'one'])
 
     expect((await readVersion(runner, repo.path, 'run.sh', 'head')).mode).toBe('100755')
-    expect((await readVersion(runner, repo.path, 'run.sh', 'worktree')).mode).toBe('100755')
+    if (process.platform !== 'win32') {
+      // On Windows the working copy has no mode to report; Git ignores it too.
+      expect((await readVersion(runner, repo.path, 'run.sh', 'worktree')).mode).toBe('100755')
+    }
   })
 
   it('returns null for a version that does not exist', async () => {
