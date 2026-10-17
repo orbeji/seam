@@ -9,11 +9,21 @@ import {
   GitRunner,
   GitVersionError,
   readComparison,
+  readFileModel,
   readStatus,
+  stagePaths,
   summarizeChanges,
+  unstagePaths,
   type VersionSource
 } from '../../core/git'
-import type { FileComparison, IpcErrorCode, IpcResult, RepositorySnapshot } from '../../shared/ipc'
+import type {
+  FileComparison,
+  IpcErrorCode,
+  IpcResult,
+  RepositorySnapshot,
+  StagingModel
+} from '../../shared/ipc'
+import { GitWatcher } from './git-watcher'
 
 type Failure = { readonly ok: false; readonly code: IpcErrorCode; readonly message: string }
 
@@ -90,6 +100,73 @@ export class RepositoryService {
       }
     } catch (error) {
       return failureFrom(error)
+    }
+  }
+
+  /**
+   * Reads the three versions of a file and the changes between them, for the
+   * viewer's staging markers. Null when the file is binary and has no lines.
+   */
+  async readStagingModel(repo: string, path: string): Promise<IpcResult<StagingModel | null>> {
+    const opened = await this.open(repo)
+    if (!opened.ok) return opened
+
+    try {
+      return { ok: true, value: await readFileModel(this.runner, repo, path) }
+    } catch (error) {
+      return failureFrom(error)
+    }
+  }
+
+  /** Stages the given paths: one file, several or a whole section, in one write. */
+  stage(repo: string, paths: readonly string[]): Promise<IpcResult<null>> {
+    return this.write(repo, () => stagePaths(this.runner, repo, paths))
+  }
+
+  /** Removes the given paths from the index, leaving the working tree alone. */
+  unstage(repo: string, paths: readonly string[]): Promise<IpcResult<null>> {
+    return this.write(repo, () => unstagePaths(this.runner, repo, paths))
+  }
+
+  /** Opens the repository, runs one write and maps any failure to a result. */
+  private async write(repo: string, action: () => Promise<unknown>): Promise<IpcResult<null>> {
+    const opened = await this.open(repo)
+    if (!opened.ok) return opened
+
+    try {
+      await action()
+      return { ok: true, value: null }
+    } catch (error) {
+      return failureFrom(error)
+    }
+  }
+
+  /**
+   * Starts watching the files Git writes, so the interface can refresh when a
+   * `git add` or `commit` happens outside Seam. Returns null when the path is
+   * not a repository this Git version can read.
+   */
+  async watch(repo: string, onChange: () => void): Promise<GitWatcher | null> {
+    const gitDir = await this.gitDirectory(repo)
+    if (gitDir === null) return null
+    return new GitWatcher(gitDir, onChange)
+  }
+
+  /** Absolute path of the repository's git folder, or null when it is not one. */
+  async gitDirectory(repo: string): Promise<string | null> {
+    const opened = await this.open(repo)
+    if (!opened.ok) return null
+
+    try {
+      const result = await this.runner.run(['rev-parse', '--absolute-git-dir'], {
+        cwd: repo,
+        readOnly: true
+      })
+      if (result.code !== 0) return null
+      const path = result.stdout.toString('utf8').trim()
+      return path === '' ? null : path
+    } catch {
+      return null
     }
   }
 

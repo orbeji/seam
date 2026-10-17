@@ -9,9 +9,17 @@ import { EditorView, drawSelection, keymap, lineNumbers } from '@codemirror/view
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { WHITESPACE_MODES, type WhitespaceMode } from '../../core/diff'
-import type { DiffSide, FileComparison, FileVersionSource } from '../../shared/ipc'
+import type {
+  DiffSide,
+  FileComparison,
+  FileVersionSource,
+  IpcResult,
+  StagingModel
+} from '../../shared/ipc'
 import { computeChanges, type HighlightGranularity } from './changes'
 import { detectLanguageId, loadLanguage } from './languages'
+import { markerLines, type MarkerLine } from './staging-markers'
+import { stagingGutter } from './staging-gutter'
 
 /** Above these limits the viewer drops inline highlighting, per the spec. */
 const LARGE_BYTES = 5 * 1024 * 1024
@@ -83,6 +91,7 @@ export default function DiffView({ repo, path, from, to, onClose, onEdge }: Diff
   const [loaded, setLoaded] = useState<{
     key: string
     comparison: FileComparison | null
+    model: StagingModel | null
     error: string | null
   } | null>(null)
 
@@ -92,6 +101,14 @@ export default function DiffView({ repo, path, from, to, onClose, onEdge }: Diff
   const [collapse, setCollapse] = useState(false)
   const [context, setContext] = useState(3)
   const [language, setLanguage] = useState<Extension | null>(null)
+  // The hunk menu opened by clicking a marker, if any, and where it sits. It
+  // remembers the file it belongs to, so moving on closes it without an effect.
+  const [menu, setMenu] = useState<{
+    key: string
+    marker: MarkerLine
+    x: number
+    y: number
+  } | null>(null)
 
   const containerRef = useRef<HTMLDivElement | null>(null)
   const viewRef = useRef<EditorView | null>(null)
@@ -103,11 +120,15 @@ export default function DiffView({ repo, path, from, to, onClose, onEdge }: Diff
   // user has already left is ignored rather than shown.
   const requestKey = `${repo}\u0000${path}\u0000${from}\u0000${to}`
   const comparison = loaded?.key === requestKey ? loaded.comparison : null
+  const model = loaded?.key === requestKey ? loaded.model : null
   const error = loaded?.key === requestKey ? loaded.error : null
   const loading = loaded?.key !== requestKey
+  // A menu opened for a file the viewer has since left is dropped.
+  const openMenu = menu !== null && menu.key === requestKey ? menu : null
 
   const fromText = useMemo(() => sideText(comparison?.from ?? null), [comparison])
   const toText = useMemo(() => sideText(comparison?.to ?? null), [comparison])
+  const markers = useMemo(() => (model === null ? [] : markerLines(model)), [model])
   const languageId = useMemo(
     () => detectLanguageId(path, firstLine(comparison?.to ?? comparison?.from ?? null)),
     [path, comparison]
@@ -129,16 +150,29 @@ export default function DiffView({ repo, path, from, to, onClose, onEdge }: Diff
     [binary, large, fromText, toText, whitespace, effectiveGranularity]
   )
 
-  // Load the comparison over IPC. The result is stored with its key, so nothing
-  // is set synchronously and a superseded request leaves no trace.
+  // Load the comparison and the staging model over IPC. The result is stored
+  // with its key, so nothing is set synchronously and a superseded request
+  // leaves no trace. The comparison drives the panes; the model only drives the
+  // margin markers, so a failed model read leaves the diff itself untouched.
   useEffect(() => {
     let active = true
-    void window.seam.readFileComparison({ repo, path, from, to }).then((result) => {
+    const files = window.seam.readFileComparison({ repo, path, from, to })
+    const staging: Promise<IpcResult<StagingModel | null>> =
+      to === 'worktree'
+        ? window.seam.readStagingModel({ repo, path })
+        : Promise.resolve({ ok: true, value: null })
+
+    void Promise.all([files, staging]).then(([fileResult, modelResult]) => {
       if (!active) return
       setLoaded(
-        result.ok
-          ? { key: requestKey, comparison: result.value, error: null }
-          : { key: requestKey, comparison: null, error: result.message }
+        fileResult.ok
+          ? {
+              key: requestKey,
+              comparison: fileResult.value,
+              model: modelResult.ok ? modelResult.value : null,
+              error: null
+            }
+          : { key: requestKey, comparison: null, model: null, error: fileResult.message }
       )
     })
     return () => {
@@ -156,6 +190,30 @@ export default function DiffView({ repo, path, from, to, onClose, onEdge }: Diff
       active = false
     }
   }, [languageId])
+
+  const handleMarker = useCallback(
+    (marker: MarkerLine, event: MouseEvent) => {
+      setMenu({ key: requestKey, marker, x: event.clientX, y: event.clientY })
+    },
+    [requestKey]
+  )
+
+  // A click outside the gutter and the menu itself closes it, so the popup never
+  // lingers over a file the user has moved on from.
+  useEffect(() => {
+    if (openMenu === null) return
+    const close = (event: MouseEvent): void => {
+      const target = event.target
+      if (target instanceof Element && target.closest('.staging-gutter, .diff__hunk-menu')) {
+        return
+      }
+      setMenu(null)
+    }
+    window.addEventListener('mousedown', close)
+    return () => {
+      window.removeEventListener('mousedown', close)
+    }
+  }, [openMenu])
 
   const navigate = useCallback(
     (direction: 1 | -1) => {
@@ -260,6 +318,10 @@ export default function DiffView({ repo, path, from, to, onClose, onEdge }: Diff
       readOnlyExtensions.push(language)
     }
 
+    if (editable && markers.length > 0) {
+      editableExtensions.push(stagingGutter(markers, handleMarker))
+    }
+
     if (layout === 'unified') {
       const view = new EditorView({
         parent: container,
@@ -313,6 +375,8 @@ export default function DiffView({ repo, path, from, to, onClose, onEdge }: Diff
     fromText,
     toText,
     requestKey,
+    markers,
+    handleMarker,
     navigate
   ])
 
@@ -437,6 +501,29 @@ export default function DiffView({ repo, path, from, to, onClose, onEdge }: Diff
         <p className="diff__notice" data-testid="diff-large">
           {t('diff.large')}
         </p>
+      )}
+
+      {openMenu !== null && (
+        <div
+          className="diff__hunk-menu"
+          data-testid="diff-hunk-menu"
+          role="menu"
+          style={{ left: openMenu.x, top: openMenu.y }}
+        >
+          {openMenu.marker.unstaged && (
+            <button type="button" role="menuitem" data-testid="hunk-stage" disabled>
+              {t('diff.hunk.stage')}
+            </button>
+          )}
+          {openMenu.marker.staged && (
+            <button type="button" role="menuitem" data-testid="hunk-unstage" disabled>
+              {t('diff.hunk.unstage')}
+            </button>
+          )}
+          <button type="button" role="menuitem" data-testid="hunk-revert" disabled>
+            {t('diff.hunk.revert')}
+          </button>
+        </div>
       )}
 
       <div className="diff__panes" data-testid="diff-panes" ref={containerRef} />

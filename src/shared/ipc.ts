@@ -7,7 +7,7 @@ import type { ChangeSummary, GitOperation, RepoStatus } from './git'
  * interface. Bump it whenever a message shape changes so the three layers can
  * detect a mismatch instead of failing silently.
  */
-export const IPC_CONTRACT_VERSION = 1
+export const IPC_CONTRACT_VERSION = 3
 
 /** Channel names shared by the main process and the preload bridge. */
 export const IPC_CHANNELS = {
@@ -15,7 +15,12 @@ export const IPC_CHANNELS = {
   listRecentRepositories: 'repo:recent:list',
   readRepositoryStatus: 'repo:status',
   readFileComparison: 'diff:read',
-  initialRepository: 'app:initial-repository'
+  readStagingModel: 'staging:read',
+  initialRepository: 'app:initial-repository',
+  /** Sent from main to the interface when Git changed a repository on disk. */
+  repositoryChanged: 'repo:changed',
+  stageFiles: 'repo:stage',
+  unstageFiles: 'repo:unstage'
 } as const
 
 /** Why a call failed, so the interface can show a translated message. */
@@ -68,6 +73,56 @@ export interface FileComparisonRequest {
 }
 
 /**
+ * A changed region of a file: `a`'s lines `[aStart, aStart + aLines)` become
+ * `b`'s lines `[bStart, bStart + bLines)`. A pure insertion has `aLines === 0`,
+ * a pure deletion has `bLines === 0`.
+ */
+export interface HunkRange {
+  readonly aStart: number
+  readonly aLines: number
+  readonly bStart: number
+  readonly bLines: number
+}
+
+/** A prepared hunk placed on the working copy's lines, for the margin marker. */
+export interface PlacedMarker {
+  readonly hunk: HunkRange
+  /** First working-copy line the marker covers. */
+  readonly start: number
+  /** How many working-copy lines it covers; 0 marks a point between two lines. */
+  readonly lines: number
+}
+
+/**
+ * The three versions of one file and the two changes between them. The viewer
+ * shows the working copy, so the prepared hunks, which are written on the
+ * index's lines, are carried over to the working copy as well.
+ */
+export interface StagingModel {
+  readonly head: DiffSide | null
+  readonly index: DiffSide | null
+  readonly worktree: DiffSide | null
+  /** HEAD against the index: the prepared change, drawn as a hollow marker. */
+  readonly staged: readonly HunkRange[]
+  /** The index against the working copy: a solid marker. */
+  readonly unstaged: readonly HunkRange[]
+  /** The prepared hunks placed on the working copy's lines. */
+  readonly stagedInWorktree: readonly PlacedMarker[]
+}
+
+/** What the viewer asks for when it draws the staging markers of a file. */
+export interface StagingModelRequest {
+  readonly repo: string
+  readonly path: string
+}
+
+/** One file, several or a whole section to stage or unstage in one write. */
+export interface StagePathsRequest {
+  readonly repo: string
+  readonly paths: readonly string[]
+}
+
+/**
  * Surface the preload script exposes to the renderer on `window.seam`. It grows
  * as the interface needs typed calls: stage, commit, resolve, continue and abort
  * arrive in later phases.
@@ -84,4 +139,19 @@ export interface SeamApi {
   readRepositoryStatus(repo: string): Promise<IpcResult<RepositorySnapshot>>
   /** Reads two versions of a file for the diff viewer; never throws. */
   readFileComparison(request: FileComparisonRequest): Promise<IpcResult<FileComparison>>
+  /**
+   * Reads the three versions of a file and the changes between them, so the
+   * viewer can mark prepared and pending hunks. Null for a binary file.
+   */
+  readStagingModel(request: StagingModelRequest): Promise<IpcResult<StagingModel | null>>
+  /** Stages paths in one write; never throws. */
+  stageFiles(request: StagePathsRequest): Promise<IpcResult<null>>
+  /** Removes paths from the index in one write; never throws. */
+  unstageFiles(request: StagePathsRequest): Promise<IpcResult<null>>
+  /**
+   * Calls the listener when Git changed the given repository on disk, so the
+   * interface can refresh without the user doing anything. Returns a function
+   * that removes the listener.
+   */
+  onRepositoryChanged(listener: (repo: string) => void): () => void
 }

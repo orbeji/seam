@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 import { spawn } from 'node:child_process'
+import { resolve } from 'node:path'
 import {
   GitAbortError,
   GitCommandError,
@@ -11,6 +12,32 @@ import {
 } from './errors'
 
 const DEFAULT_TIMEOUT_MS = 30_000
+
+/**
+ * When a write fails because another process holds the index lock, Seam waits
+ * and tries again. Three retries with a growing wait, as the phase 3 chapter
+ * describes, then the error is returned.
+ */
+const INDEX_LOCK_ATTEMPTS = 3
+const INDEX_LOCK_FIRST_WAIT_MS = 50
+
+/** Matches the message Git prints when the index is locked by another process. */
+function isIndexLocked(result: GitRunResult): boolean {
+  return result.code !== 0 && /index\.lock/i.test(result.stderr)
+}
+
+interface WriteJob {
+  readonly args: readonly string[]
+  readonly options: GitRunOptions
+  readonly resolve: (result: GitRunResult) => void
+  readonly reject: (error: unknown) => void
+  attempts: number
+}
+
+interface WriteQueue {
+  readonly jobs: WriteJob[]
+  running: boolean
+}
 
 /** Environment every Git call runs with, so output is stable and parsable. */
 const BASE_ENV = {
@@ -110,6 +137,7 @@ export class GitRunner {
   private readonly globalArgs: readonly string[]
   private readonly env: Record<string, string>
   private readonly timeoutMs: number
+  private readonly writeQueues = new Map<string, WriteQueue>()
 
   constructor(options: GitRunnerOptions = {}) {
     this.gitPath = options.gitPath ?? 'git'
@@ -118,12 +146,62 @@ export class GitRunner {
     this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS
   }
 
+  private getWriteQueue(cwd: string): WriteQueue {
+    // Normalise the key so the same repository always shares one queue, even
+    // when callers pass the path with a trailing separator.
+    const key = resolve(cwd)
+    let queue = this.writeQueues.get(key)
+    if (queue === undefined) {
+      queue = { jobs: [], running: false }
+      this.writeQueues.set(key, queue)
+    }
+    return queue
+  }
+
+  /**
+   * Runs the queued writes one at a time. Git takes the index lock for the
+   * length of a command, so two writes at once would fail; serialising them
+   * here means the second simply waits. A write that loses the lock to a
+   * terminal Git is retried a few times before its error reaches the caller.
+   */
+  private async processWriteQueue(queue: WriteQueue): Promise<void> {
+    try {
+      while (queue.jobs.length > 0) {
+        const job = queue.jobs[0]
+        if (job === undefined) break
+
+        let result: GitRunResult
+        try {
+          result = await this.executeGit(job.args, job.options)
+        } catch (error) {
+          // A failure to start Git, a timeout or an abort is final.
+          queue.jobs.shift()
+          job.reject(error)
+          continue
+        }
+
+        if (isIndexLocked(result) && job.attempts < INDEX_LOCK_ATTEMPTS) {
+          job.attempts += 1
+          const wait = INDEX_LOCK_FIRST_WAIT_MS * 2 ** (job.attempts - 1)
+          await new Promise((settle) => setTimeout(settle, wait))
+          // Leave the job at the head of the queue and try it again.
+          continue
+        }
+
+        queue.jobs.shift()
+        job.resolve(result)
+      }
+    } finally {
+      queue.running = false
+    }
+  }
+
   /**
    * Runs Git and resolves with its output whatever the exit code, because a
    * non-zero status is a normal result for `merge`, `diff --exit-code` and the
    * like. Use {@link runOrThrow} when a non-zero status is an error.
    */
-  run(args: readonly string[], options: GitRunOptions): Promise<GitRunResult> {
+  private executeGit(args: readonly string[], options: GitRunOptions): Promise<GitRunResult> {
     const timeoutMs = options.timeoutMs ?? this.timeoutMs
     const argv = [...this.globalArgs, ...args]
     const signal = options.signal
@@ -211,6 +289,23 @@ export class GitRunner {
         child.stdin.end()
       } else {
         child.stdin.end(options.stdin)
+      }
+    })
+  }
+
+  run(args: readonly string[], options: GitRunOptions): Promise<GitRunResult> {
+    // If it's a read-only operation, run it directly in parallel
+    if (options.readOnly) {
+      return this.executeGit(args, options)
+    }
+    // For write operations, queue them per repository (per cwd)
+    const cwd = options.cwd
+    const queue = this.getWriteQueue(cwd)
+    return new Promise<GitRunResult>((resolve, reject) => {
+      queue.jobs.push({ args, options, resolve, reject, attempts: 0 })
+      if (!queue.running) {
+        queue.running = true
+        void this.processWriteQueue(queue)
       }
     })
   }

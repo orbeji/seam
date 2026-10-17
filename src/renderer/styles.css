@@ -113,6 +113,15 @@ body {
   white-space: pre-wrap;
 }
 
+/* A failed write, shown above the lists instead of replacing them. */
+.app__error--inline {
+  margin: 0 0 12px;
+  border: 1px solid var(--conflict);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: var(--surface);
+}
+
 .changes {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
@@ -144,6 +153,36 @@ body {
   font-size: 12px;
 }
 
+.changes__heading-tools {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* The per-file and per-section stage/unstage buttons. */
+.changes__action {
+  flex: none;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 11px;
+  line-height: 1;
+  padding: 3px 6px;
+  cursor: pointer;
+}
+
+.changes__action:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.changes__action:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
 .changes__none {
   margin: 0;
   color: var(--text-muted);
@@ -161,6 +200,8 @@ body {
 
 .changes__item {
   display: flex;
+  align-items: center;
+  gap: 4px;
   font-size: 13px;
 }
 
@@ -358,6 +399,70 @@ body {
   border: 1px solid var(--border);
   border-radius: 6px;
   background: var(--surface);
+}
+
+/* The staging margin: a hollow dot for a prepared hunk, a solid one for a
+   hunk still to prepare, next to the working-copy line it covers. */
+.staging-gutter {
+  width: 16px;
+}
+
+.staging-gutter .cm-gutterElement {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.staging-marker {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+
+.staging-marker--spacer {
+  visibility: hidden;
+}
+
+.staging-marker--unstaged {
+  background: var(--accent);
+}
+
+.staging-marker--staged {
+  border: 2px solid var(--accent);
+  background: transparent;
+}
+
+.staging-marker--staged.staging-marker--unstaged {
+  background: var(--accent);
+  box-shadow: inset 0 0 0 2px var(--surface);
+}
+
+.diff__hunk-menu {
+  position: fixed;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  min-width: 140px;
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+}
+
+.diff__hunk-menu button {
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+}
+
+.diff__hunk-menu button:disabled {
+  color: var(--text-muted);
 }
 
 .diff__panes .cm-editor {

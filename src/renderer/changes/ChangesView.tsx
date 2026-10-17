@@ -8,6 +8,12 @@ import { entryView } from './entry-view'
 /** Opens a file in the diff viewer, comparing two of its versions. */
 export type OpenDiff = (path: string, from: FileVersionSource, to: FileVersionSource) => void
 
+/** Stages or unstages the given paths: one file or a whole section. */
+export type StageAction = (paths: readonly string[]) => void
+
+/** Whether a list stages its files, unstages them, or offers no action. */
+type SectionAction = 'stage' | 'unstage' | null
+
 interface SectionProps {
   testId: string
   titleKey: string
@@ -15,17 +21,42 @@ interface SectionProps {
   from: FileVersionSource
   to: FileVersionSource
   onOpen: OpenDiff
+  action: SectionAction
+  onAction: StageAction
 }
 
-function Section({ testId, titleKey, entries, from, to, onOpen }: SectionProps) {
+/**
+ * The paths an action sends for one row. A rename is staged or unstaged by
+ * naming its old and new paths in the same command, which is what Git needs to
+ * record it as a rename instead of a delete plus an add.
+ */
+function pathsFor(entry: StatusEntry): string[] {
+  return entry.kind === 'renamed' ? [entry.path, entry.origPath] : [entry.path]
+}
+
+function Section({ testId, titleKey, entries, from, to, onOpen, action, onAction }: SectionProps) {
   const { t } = useTranslation()
+  const labelKey = action === 'stage' ? 'changes.actions.stage' : 'changes.actions.unstage'
+  const allKey = action === 'stage' ? 'changes.actions.stageAll' : 'changes.actions.unstageAll'
 
   return (
     <section className="changes__section" data-testid={testId} aria-labelledby={`${testId}-title`}>
       <h2 className="changes__heading" id={`${testId}-title`}>
         <span className="changes__section-title">{t(titleKey)}</span>
-        <span className="changes__count" data-testid={`${testId}-count`}>
-          {entries.length}
+        <span className="changes__heading-tools">
+          {action !== null && entries.length > 0 && (
+            <button
+              type="button"
+              className="changes__action"
+              data-testid={`${testId}-action`}
+              onClick={() => onAction(entries.flatMap(pathsFor))}
+            >
+              {t(allKey)}
+            </button>
+          )}
+          <span className="changes__count" data-testid={`${testId}-count`}>
+            {entries.length}
+          </span>
         </span>
       </h2>
 
@@ -46,6 +77,17 @@ function Section({ testId, titleKey, entries, from, to, onOpen }: SectionProps) 
                   <span className="changes__badge">{view.badge}</span>
                   <span className="changes__path">{view.label}</span>
                 </button>
+                {action !== null && (
+                  <button
+                    type="button"
+                    className="changes__action"
+                    data-testid="entry-action"
+                    aria-label={`${t(labelKey)}: ${view.label}`}
+                    onClick={() => onAction(pathsFor(entry))}
+                  >
+                    {t(labelKey)}
+                  </button>
+                )}
               </li>
             )
           })}
@@ -58,14 +100,18 @@ function Section({ testId, titleKey, entries, from, to, onOpen }: SectionProps) 
 /**
  * The four lists of the changes screen: staged, unstaged, untracked, conflicts.
  * Each list knows which two versions its rows compare, because the viewer opens
- * straight from a row.
+ * straight from a row, and whether it stages or unstages the files it shows.
  */
 export default function ChangesView({
   summary,
-  onOpen
+  onOpen,
+  onStage,
+  onUnstage
 }: {
   summary: ChangeSummary
   onOpen: OpenDiff
+  onStage: StageAction
+  onUnstage: StageAction
 }) {
   return (
     <div className="changes">
@@ -73,9 +119,11 @@ export default function ChangesView({
         testId="staged"
         titleKey="changes.sections.staged"
         entries={summary.staged}
-        from="head"
-        to="index"
+        from="index"
+        to="worktree"
         onOpen={onOpen}
+        action="unstage"
+        onAction={onUnstage}
       />
       <Section
         testId="unstaged"
@@ -84,14 +132,18 @@ export default function ChangesView({
         from="index"
         to="worktree"
         onOpen={onOpen}
+        action="stage"
+        onAction={onStage}
       />
       <Section
         testId="untracked"
         titleKey="changes.sections.untracked"
         entries={summary.untracked}
-        from="head"
+        from="index"
         to="worktree"
         onOpen={onOpen}
+        action="stage"
+        onAction={onStage}
       />
       <Section
         testId="conflicts"
@@ -100,6 +152,8 @@ export default function ChangesView({
         from="stage2"
         to="stage3"
         onOpen={onOpen}
+        action={null}
+        onAction={onStage}
       />
     </div>
   )

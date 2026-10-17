@@ -2,7 +2,7 @@
 
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { isAbsolute, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { GitRunner } from '../src/core/git'
 import { RepositoryService } from '../src/main/session/repository-service'
@@ -87,5 +87,19 @@ describe('RepositoryService.snapshot', () => {
     const runner = new GitRunner({ gitPath: 'seam-definitely-missing-git', globalArgs: [] })
     const result = await new RepositoryService(runner).snapshot(repo.path)
     expect(result).toMatchObject({ ok: false, code: 'git-not-found' })
+  })
+})
+
+describe('RepositoryService.gitDirectory', () => {
+  it('resolves the absolute git folder of a repository', async () => {
+    const repo = await repository()
+    const found = await new RepositoryService().gitDirectory(repo.path)
+    expect(found).not.toBeNull()
+    expect(isAbsolute(found ?? '')).toBe(true)
+    expect(found?.endsWith('.git')).toBe(true)
+  })
+
+  it('is null for a folder that is not a repository', async () => {
+    await expect(new RepositoryService().gitDirectory(tempDirectory())).resolves.toBeNull()
   })
 })

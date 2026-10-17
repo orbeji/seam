@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { ChangeSummary } from '../shared/git'
 import type { FileVersionSource, IpcErrorCode, RepositorySnapshot } from '../shared/ipc'
@@ -30,14 +30,26 @@ function entriesOf(
   return entries.map((entry) => ({ path: entry.path, from, to }))
 }
 
-/** Every file in a summary, in the order the screen shows them. */
+/**
+ * Every file in a summary, in the order the screen shows them. Every staging
+ * list opens the viewer the same way, against the working copy, so a file that
+ * appears in two lists is listed once and navigation does not get stuck on it.
+ */
 export function summaryEntries(summary: ChangeSummary): Selection[] {
-  return [
-    ...entriesOf(summary.staged, 'head', 'index'),
+  const entries = [
+    ...entriesOf(summary.staged, 'index', 'worktree'),
     ...entriesOf(summary.unstaged, 'index', 'worktree'),
-    ...entriesOf(summary.untracked, 'head', 'worktree'),
+    ...entriesOf(summary.untracked, 'index', 'worktree'),
     ...entriesOf(summary.conflicts, 'stage2', 'stage3')
   ]
+
+  const seen = new Set<string>()
+  return entries.filter((entry) => {
+    const key = `${entry.path}\u0000${entry.from}\u0000${entry.to}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
 }
 
 function sameFile(a: Selection, b: Selection): boolean {
@@ -59,15 +71,39 @@ export default function App() {
   const [view, setView] = useState<View>({ state: 'idle' })
   const [recent, setRecent] = useState<string[]>([])
   const [selected, setSelected] = useState<Selection | null>(null)
+  // A failed stage or unstage, shown above the lists without hiding them.
+  const [writeError, setWriteError] = useState<{
+    code: IpcErrorCode
+    message: string
+  } | null>(null)
 
   const open = useCallback(async (repo: string) => {
     setSelected(null)
+    setWriteError(null)
     setView({ state: 'loading' })
     const result = await window.seam.readRepositoryStatus(repo)
     if (result.ok) {
       setView({ state: 'ready', snapshot: result.value })
     } else {
       setView({ state: 'error', code: result.code, message: result.message })
+    }
+  }, [])
+
+  const currentRepo = view.state === 'ready' ? view.snapshot.repo : null
+
+  // The open repository, kept in a ref so the focus and change listeners can be
+  // set up once and never resubscribe as the view changes.
+  const repoRef = useRef<string | null>(null)
+  useEffect(() => {
+    repoRef.current = currentRepo
+  }, [currentRepo])
+
+  const refresh = useCallback(async () => {
+    const repo = repoRef.current
+    if (repo === null) return
+    const result = await window.seam.readRepositoryStatus(repo)
+    if (result.ok) {
+      setView({ state: 'ready', snapshot: result.value })
     }
   }, [])
 
@@ -79,6 +115,19 @@ export default function App() {
     })()
   }, [open])
 
+  useEffect(() => {
+    // The working tree is not watched, so a change to a file on disk is picked
+    // up when the window regains focus; the git folder is watched, so a change
+    // there arrives as a `repositoryChanged` message.
+    const handleFocus = () => void refresh()
+    window.addEventListener('focus', handleFocus)
+    const stopWatching = window.seam.onRepositoryChanged(() => void refresh())
+    return () => {
+      window.removeEventListener('focus', handleFocus)
+      stopWatching()
+    }
+  }, [refresh])
+
   const choose = useCallback(async () => {
     const repo = await window.seam.chooseRepository()
     if (repo === null) return
@@ -86,7 +135,26 @@ export default function App() {
     await open(repo)
   }, [open])
 
-  const currentRepo = view.state === 'ready' ? view.snapshot.repo : null
+  // Stages or unstages the rows that asked for it, then rereads the repository.
+  // The main process serialises the write, so a burst of clicks cannot race.
+  const writeStaging = useCallback(
+    async (paths: readonly string[], unstage: boolean) => {
+      const repo = repoRef.current
+      if (repo === null) return
+
+      const result = unstage
+        ? await window.seam.unstageFiles({ repo, paths })
+        : await window.seam.stageFiles({ repo, paths })
+
+      if (result.ok) {
+        setWriteError(null)
+        await refresh()
+      } else {
+        setWriteError({ code: result.code, message: result.message })
+      }
+    },
+    [refresh]
+  )
 
   /** Opens a file, and on navigation past either end moves to the neighbouring file. */
   const move = (summary: ChangeSummary, current: Selection, direction: 1 | -1): void => {
@@ -168,10 +236,18 @@ export default function App() {
                 {t(`changes.operation.${view.snapshot.operation}`)}
               </p>
             )}
+            {writeError !== null && (
+              <div className="app__error app__error--inline" role="alert" data-testid="write-error">
+                <p className="app__error-title">{t(ERROR_KEYS[writeError.code])}</p>
+                <p className="app__error-detail">{writeError.message}</p>
+              </div>
+            )}
             {selected === null ? (
               <ChangesView
                 summary={view.snapshot.summary}
                 onOpen={(path, from, to) => setSelected({ path, from, to })}
+                onStage={(paths) => void writeStaging(paths, false)}
+                onUnstage={(paths) => void writeStaging(paths, true)}
               />
             ) : (
               <DiffView

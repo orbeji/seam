@@ -2,6 +2,7 @@
 
 import { readFile, stat } from 'node:fs/promises'
 import { join } from 'node:path'
+import { buildFileModel, type FileModel } from '../diff'
 import type { TextLines } from '../text'
 import { decodeText, isBinary, normaliseLineEndings, splitText } from '../text'
 import type { GitRunner } from './runner'
@@ -250,4 +251,25 @@ export async function readComparison(
     binary,
     normalised: normaliseWorktree
   }
+}
+
+/**
+ * Reads the three versions of a path and compares them: HEAD against the index
+ * for what is prepared, and the index against the working copy for what is not.
+ * The working copy is normalised against the index exactly as the comparison
+ * does, so a `CRLF` working copy over an `LF` index is not read as changed.
+ *
+ * A binary file has no line model and comes back as null.
+ */
+export async function readFileModel(
+  runner: GitRunner,
+  cwd: string,
+  path: string
+): Promise<FileModel | null> {
+  const [staged, unstaged] = await Promise.all([
+    readComparison(runner, cwd, path, 'head', 'index'),
+    readComparison(runner, cwd, path, 'index', 'worktree')
+  ])
+  if (staged.binary || unstaged.binary) return null
+  return buildFileModel(staged.from, staged.to, unstaged.to)
 }

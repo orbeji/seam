@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
 import {
   IPC_CHANNELS,
   IPC_CONTRACT_VERSION,
@@ -8,7 +8,10 @@ import {
   type FileComparisonRequest,
   type IpcResult,
   type RepositorySnapshot,
-  type SeamApi
+  type SeamApi,
+  type StagePathsRequest,
+  type StagingModel,
+  type StagingModelRequest
 } from '../shared/ipc'
 
 const seamApi: SeamApi = {
@@ -26,7 +29,22 @@ const seamApi: SeamApi = {
   readFileComparison: (request: FileComparisonRequest) =>
     ipcRenderer.invoke(IPC_CHANNELS.readFileComparison, request) as Promise<
       IpcResult<FileComparison>
-    >
+    >,
+  readStagingModel: (request: StagingModelRequest) =>
+    ipcRenderer.invoke(IPC_CHANNELS.readStagingModel, request) as Promise<
+      IpcResult<StagingModel | null>
+    >,
+  stageFiles: (request: StagePathsRequest) =>
+    ipcRenderer.invoke(IPC_CHANNELS.stageFiles, request) as Promise<IpcResult<null>>,
+  unstageFiles: (request: StagePathsRequest) =>
+    ipcRenderer.invoke(IPC_CHANNELS.unstageFiles, request) as Promise<IpcResult<null>>,
+  onRepositoryChanged: (listener: (repo: string) => void) => {
+    const handler = (_event: IpcRendererEvent, repo: string): void => listener(repo)
+    ipcRenderer.on(IPC_CHANNELS.repositoryChanged, handler)
+    return () => {
+      ipcRenderer.removeListener(IPC_CHANNELS.repositoryChanged, handler)
+    }
+  }
 }
 
 contextBridge.exposeInMainWorld('seam', seamApi)

@@ -22,6 +22,12 @@
       "untracked": "Sin seguimiento",
       "conflicts": "Conflictos de fusión"
     },
+    "actions": {
+      "stage": "Preparar",
+      "unstage": "Quitar",
+      "stageAll": "Preparar todo",
+      "unstageAll": "Quitar todo"
+    },
     "operation": {
       "merge": "Fusión en curso",
       "cherry-pick": "Cherry-pick en curso",
@@ -59,6 +65,11 @@
     "navigation": {
       "previous": "Diferencia anterior",
       "next": "Diferencia siguiente"
+    },
+    "hunk": {
+      "stage": "Preparar hunk",
+      "unstage": "Quitar hunk",
+      "revert": "Revertir hunk"
     },
     "count": "Diferencias: {{count}}"
   },
