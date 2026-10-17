@@ -142,15 +142,14 @@ export default function DiffView({
   // Reads and errors are keyed by the request, so a stale answer for a file the
   // user has already left is ignored rather than shown.
   const requestKey = `${repo}\u0000${path}\u0000${from}\u0000${to}`
-  // The revision is part of the view's identity but not of the request's, so a
-  // reload keeps the pane on screen instead of blinking through the notice.
-  const viewKey = `${requestKey}\u0000${revision}`
   const comparison = loaded?.key === requestKey ? loaded.comparison : null
   const model = loaded?.key === requestKey ? loaded.model : null
   const error = loaded?.key === requestKey ? loaded.error : null
   const loading = loaded?.key !== requestKey
-  // A menu opened for a file the viewer has since left or reread is dropped.
-  const openMenu = menu !== null && menu.key === viewKey ? menu : null
+  // A menu opened for a file the viewer has since left is dropped. It is keyed
+  // to the request and not to the revision, so a refresh that arrives while the
+  // menu is open does not unmount it from under the click.
+  const openMenu = menu !== null && menu.key === requestKey ? menu : null
 
   const fromText = useMemo(() => sideText(comparison?.from ?? null), [comparison])
   const toText = useMemo(() => sideText(comparison?.to ?? null), [comparison])
@@ -231,9 +230,9 @@ export default function DiffView({
   const handleMarker = useCallback(
     (marker: MarkerLine, event: MouseEvent) => {
       const hunks = model === null ? { staged: [], unstaged: [] } : hunksAt(model, marker.line)
-      setMenu({ key: viewKey, marker, hunks, x: event.clientX, y: event.clientY })
+      setMenu({ key: requestKey, marker, hunks, x: event.clientX, y: event.clientY })
     },
-    [viewKey, model]
+    [requestKey, model]
   )
 
   // Prepare or remove the hunks a marker stands for. The index's text is rebuilt
