@@ -153,7 +153,10 @@ export function registerRepositoryHandlers(
   ipcMain.handle(IPC_CHANNELS.readRepositoryStatus, async (event, repo: unknown) => {
     const path = typeof repo === 'string' ? repo : ''
     const result = await service.snapshot(path)
-    if (result.ok) void watch(path, event.sender)
+    // Start watching before answering: a Git command that runs as soon as the
+    // window shows the repository would otherwise race the watcher and go
+    // unnoticed until the next change.
+    if (result.ok) await watch(path, event.sender)
     return result
   })
 
