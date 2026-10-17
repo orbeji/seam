@@ -9,15 +9,25 @@ import { createRepository, type SampleRepository } from './fixtures/repository'
 const runner = new GitRunner()
 const repositories: SampleRepository[] = []
 
-async function repository(): Promise<SampleRepository> {
-  const repo = await createRepository()
+// The scale test stages 5 000 files, which takes longer than the runner's 30 s
+// default on a Windows runner: `git add` and `git status` both walk the whole
+// working tree there. The default stays as it is, because the interface relies
+// on it to fail a command that is truly stuck, and the scale test asks for the
+// headroom it needs instead. One command may use SCALE_TIMEOUT_MS, and the test
+// as a whole (several such commands plus the fixture) gets the larger budget.
+const SCALE_TIMEOUT_MS = 120_000
+const SCALE_TEST_TIMEOUT_MS = 300_000
+const scaleRunner = new GitRunner({ timeoutMs: SCALE_TIMEOUT_MS })
+
+async function repository(timeoutMs?: number): Promise<SampleRepository> {
+  const repo = await createRepository(timeoutMs === undefined ? {} : { timeoutMs })
   repositories.push(repo)
   return repo
 }
 
 /** A repository with one committed file, so unstaging has a HEAD to compare. */
-async function committed(): Promise<SampleRepository> {
-  const repo = await repository()
+async function committed(timeoutMs?: number): Promise<SampleRepository> {
+  const repo = await repository(timeoutMs)
   repo.write('tracked.txt', 'base\n')
   await repo.git(['add', 'tracked.txt'])
   await repo.git(['commit', '-qm', 'base'])
@@ -102,29 +112,33 @@ describe('staging a rename', () => {
 describe('staging a section', () => {
   // The point of the phase: a section action puts every path on stdin, so this
   // many paths never has to fit in a command line, which Windows caps sharply.
-  it('stages and unstages five thousand files in one write', async () => {
-    // A commit must exist: `git restore --staged` resolves the index against
-    // HEAD. The no-commit case takes a different command and has its own tests.
-    const repo = await committed()
-    mkdirSync(join(repo.path, 'bulk'))
+  it(
+    'stages and unstages five thousand files in one write',
+    async () => {
+      // A commit must exist: `git restore --staged` resolves the index against
+      // HEAD. The no-commit case takes a different command and has its own tests.
+      const repo = await committed(SCALE_TIMEOUT_MS)
+      mkdirSync(join(repo.path, 'bulk'))
 
-    const paths: string[] = []
-    for (let index = 0; index < 5000; index += 1) {
-      const name = `bulk/f${index}.txt`
-      paths.push(name)
-      repo.write(name, `${index}\n`)
-    }
+      const paths: string[] = []
+      for (let index = 0; index < 5000; index += 1) {
+        const name = `bulk/f${index}.txt`
+        paths.push(name)
+        repo.write(name, `${index}\n`)
+      }
 
-    await stagePaths(runner, repo.path, paths)
-    const staged = await porcelain(repo)
-    expect(staged).toHaveLength(5000)
-    expect(staged.every((line) => line.startsWith('A  '))).toBe(true)
+      await stagePaths(scaleRunner, repo.path, paths)
+      const staged = await porcelain(repo)
+      expect(staged).toHaveLength(5000)
+      expect(staged.every((line) => line.startsWith('A  '))).toBe(true)
 
-    await unstagePaths(runner, repo.path, paths)
-    const unstaged = await porcelain(repo)
-    expect(unstaged).toHaveLength(5000)
-    expect(unstaged.every((line) => line.startsWith('?? '))).toBe(true)
-  }, 120_000)
+      await unstagePaths(scaleRunner, repo.path, paths)
+      const unstaged = await porcelain(repo)
+      expect(unstaged).toHaveLength(5000)
+      expect(unstaged.every((line) => line.startsWith('?? '))).toBe(true)
+    },
+    SCALE_TEST_TIMEOUT_MS
+  )
 })
 
 describe('unstaging in a repository without commits', () => {

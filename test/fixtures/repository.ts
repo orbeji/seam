@@ -3,7 +3,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { GitRunner, type GitRunResult } from '../../src/core/git'
+import { GitRunner, type GitRunnerOptions, type GitRunResult } from '../../src/core/git'
 
 /**
  * A throwaway repository for a test. Commits use a fixed identity and line
@@ -64,9 +64,9 @@ export class SampleRepository {
   }
 }
 
-export async function createRepository(): Promise<SampleRepository> {
+export async function createRepository(options: GitRunnerOptions = {}): Promise<SampleRepository> {
   const path = mkdtempSync(join(tmpdir(), 'seam-repo-'))
-  const repository = new SampleRepository(path, new GitRunner())
+  const repository = new SampleRepository(path, new GitRunner(options))
   await repository.git(['init', '-q'])
   // The fixtures decide their own line endings; a global `core.autocrlf=true`,
   // as Git for Windows installs, must not override them.
