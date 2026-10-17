@@ -6,6 +6,7 @@ import type { ChangeSummary } from '../shared/git'
 import type { FileVersionSource, IpcErrorCode, RepositorySnapshot } from '../shared/ipc'
 import ChangesView from './changes/ChangesView'
 import DiffView from './diff/DiffView'
+import { ERROR_KEYS } from './errors'
 import { SUPPORTED_LANGUAGES, type SupportedLanguage } from './i18n'
 
 type View =
@@ -54,15 +55,6 @@ export function summaryEntries(summary: ChangeSummary): Selection[] {
 
 function sameFile(a: Selection, b: Selection): boolean {
   return a.path === b.path && a.from === b.from && a.to === b.to
-}
-
-/** Translation key for each failure the main process can report. */
-const ERROR_KEYS: Record<IpcErrorCode, string> = {
-  'git-not-found': 'errors.gitNotFound',
-  'git-too-old': 'errors.gitTooOld',
-  'not-a-repository': 'errors.notARepository',
-  'command-failed': 'errors.commandFailed',
-  unknown: 'errors.unknown'
 }
 
 export default function App() {
@@ -257,6 +249,7 @@ export default function App() {
                 to={selected.to}
                 onClose={() => setSelected(null)}
                 onEdge={(direction) => move(view.snapshot.summary, selected, direction)}
+                onChanged={() => void refresh()}
               />
             )}
           </>

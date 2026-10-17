@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-import type { StagingModel } from '../../shared/ipc'
+import type { HunkRange, StagingModel } from '../../shared/ipc'
 
 /**
  * The margin markers of the staging viewer. A prepared change (HEAD against the
@@ -28,6 +28,40 @@ interface Flags {
   unstaged: boolean
 }
 
+/** The line a point marker, the one a pure deletion becomes, sits on. */
+function pointLine(start: number, total: number): number {
+  return Math.min(Math.max(start, 0), total - 1)
+}
+
+/** The hunks a marker stands for, in both directions, for the hunk menu. */
+export interface MarkerHunks {
+  /** The prepared hunks under the marker, in HEAD and index lines. */
+  readonly staged: readonly HunkRange[]
+  /** The hunks still to prepare, in index and working-copy lines. */
+  readonly unstaged: readonly HunkRange[]
+}
+
+/** Whether a marker at `start`, covering `count` lines, sits on `line`. */
+function covers(start: number, count: number, line: number, total: number): boolean {
+  if (count > 0) return line >= start && line < start + count
+  return total > 0 && pointLine(start, total) === line
+}
+
+/**
+ * The hunks a marker line stands for. The menu acts on what the dot beside a
+ * line means, so it needs the hunk the marker was drawn from, not just the line:
+ * a prepared hunk comes back in HEAD and index numbers, as the model has it.
+ */
+export function hunksAt(model: StagingModel, line: number): MarkerHunks {
+  const total = model.worktree?.lines.length ?? 0
+  return {
+    unstaged: model.unstaged.filter((hunk) => covers(hunk.bStart, hunk.bLines, line, total)),
+    staged: model.stagedInWorktree
+      .filter((placed) => covers(placed.start, placed.lines, line, total))
+      .map((placed) => placed.hunk)
+  }
+}
+
 /**
  * The working-copy lines that carry a marker, in order. When a prepared and a
  * pending change cover the same line, one marker carries both flags rather than
@@ -51,7 +85,7 @@ export function markerLines(model: StagingModel): MarkerLine[] {
     if (count > 0) {
       for (let line = start; line < start + count; line += 1) mark(line, staged)
     } else if (total > 0) {
-      mark(Math.min(Math.max(start, 0), total - 1), staged)
+      mark(pointLine(start, total), staged)
     }
   }
 

@@ -1,7 +1,12 @@
 // SPDX-License-Identifier: MIT
 
 import { BrowserWindow, dialog, ipcMain, type OpenDialogOptions, type WebContents } from 'electron'
-import type { FileVersionSource, StagePathsRequest } from '../../shared/ipc'
+import type {
+  FileVersionSource,
+  HunkRange,
+  HunkWriteRequest,
+  StagePathsRequest
+} from '../../shared/ipc'
 import { IPC_CHANNELS } from '../../shared/ipc'
 import type { GitWatcher } from '../session/git-watcher'
 import type { RecentRepositories } from '../session/recent-repositories'
@@ -42,6 +47,28 @@ function parseStagePaths(value: unknown): StagePathsRequest | null {
   if (typeof repo !== 'string') return null
   if (!Array.isArray(paths) || paths.some((path) => typeof path !== 'string')) return null
   return { repo, paths: paths as string[] }
+}
+
+/** Whether a value is a hunk range: four line numbers and nothing else. */
+function isHunkRange(value: unknown): value is HunkRange {
+  if (typeof value !== 'object' || value === null) return false
+  const { aStart, aLines, bStart, bLines } = value as Record<string, unknown>
+  return (
+    typeof aStart === 'number' &&
+    typeof aLines === 'number' &&
+    typeof bStart === 'number' &&
+    typeof bLines === 'number'
+  )
+}
+
+/** Narrows an IPC payload to a write of hunks, rejecting anything else. */
+function parseHunkWrite(value: unknown): HunkWriteRequest | null {
+  if (typeof value !== 'object' || value === null) return null
+  const { repo, path, action, hunks } = value as Record<string, unknown>
+  if (typeof repo !== 'string' || typeof path !== 'string') return null
+  if (action !== 'stage' && action !== 'unstage') return null
+  if (!Array.isArray(hunks) || !hunks.every(isHunkRange)) return null
+  return { repo, path, action, hunks }
 }
 
 /** Narrows an IPC payload to a repository and a path, rejecting anything else. */
@@ -148,5 +175,11 @@ export function registerRepositoryHandlers(
     const parsed = parseStagePaths(request)
     if (!parsed) return { ok: false, code: 'unknown', message: 'Invalid staging request' }
     return service.unstage(parsed.repo, parsed.paths)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.writeHunks, (_event, request: unknown) => {
+    const parsed = parseHunkWrite(request)
+    if (!parsed) return { ok: false, code: 'unknown', message: 'Invalid hunk write request' }
+    return service.writeHunks(parsed.repo, parsed.path, parsed.action, parsed.hunks)
   })
 }

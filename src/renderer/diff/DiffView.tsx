@@ -13,12 +13,15 @@ import type {
   DiffSide,
   FileComparison,
   FileVersionSource,
+  HunkRange,
+  IpcErrorCode,
   IpcResult,
   StagingModel
 } from '../../shared/ipc'
+import { ERROR_KEYS } from '../errors'
 import { computeChanges, type HighlightGranularity } from './changes'
 import { detectLanguageId, loadLanguage } from './languages'
-import { markerLines, type MarkerLine } from './staging-markers'
+import { hunksAt, markerLines, type MarkerLine, type MarkerHunks } from './staging-markers'
 import { stagingGutter } from './staging-gutter'
 
 /** Above these limits the viewer drops inline highlighting, per the spec. */
@@ -43,6 +46,8 @@ interface DiffViewProps {
   readonly onClose: () => void
   /** Called when navigation runs off the end, so the caller can open the next file. */
   readonly onEdge?: (direction: 1 | -1) => void
+  /** Called after a hunk write, so the caller can refresh the lists. */
+  readonly onChanged?: () => void
 }
 
 /** Rebuilds the document text of one side the way the viewer's editors hold it. */
@@ -86,7 +91,15 @@ function isLarge(comparison: FileComparison): boolean {
  * The differences viewer. It loads two versions over IPC and renders them with
  * CodeMirror's merge view, feeding it our own diff engine through `diffConfig`.
  */
-export default function DiffView({ repo, path, from, to, onClose, onEdge }: DiffViewProps) {
+export default function DiffView({
+  repo,
+  path,
+  from,
+  to,
+  onClose,
+  onEdge,
+  onChanged
+}: DiffViewProps) {
   const { t } = useTranslation()
   const [loaded, setLoaded] = useState<{
     key: string
@@ -106,9 +119,19 @@ export default function DiffView({ repo, path, from, to, onClose, onEdge }: Diff
   const [menu, setMenu] = useState<{
     key: string
     marker: MarkerLine
+    hunks: MarkerHunks
     x: number
     y: number
   } | null>(null)
+  // Bumped after a hunk write and when Git changes the repository, so both
+  // panes and the staging model are read again without leaving the file.
+  const [revision, setRevision] = useState(0)
+  // A failed hunk write, shown over the viewer without hiding the diff.
+  const [writeError, setWriteError] = useState<{
+    code: IpcErrorCode
+    message: string
+  } | null>(null)
+  const [writing, setWriting] = useState(false)
 
   const containerRef = useRef<HTMLDivElement | null>(null)
   const viewRef = useRef<EditorView | null>(null)
@@ -119,12 +142,15 @@ export default function DiffView({ repo, path, from, to, onClose, onEdge }: Diff
   // Reads and errors are keyed by the request, so a stale answer for a file the
   // user has already left is ignored rather than shown.
   const requestKey = `${repo}\u0000${path}\u0000${from}\u0000${to}`
+  // The revision is part of the view's identity but not of the request's, so a
+  // reload keeps the pane on screen instead of blinking through the notice.
+  const viewKey = `${requestKey}\u0000${revision}`
   const comparison = loaded?.key === requestKey ? loaded.comparison : null
   const model = loaded?.key === requestKey ? loaded.model : null
   const error = loaded?.key === requestKey ? loaded.error : null
   const loading = loaded?.key !== requestKey
-  // A menu opened for a file the viewer has since left is dropped.
-  const openMenu = menu !== null && menu.key === requestKey ? menu : null
+  // A menu opened for a file the viewer has since left or reread is dropped.
+  const openMenu = menu !== null && menu.key === viewKey ? menu : null
 
   const fromText = useMemo(() => sideText(comparison?.from ?? null), [comparison])
   const toText = useMemo(() => sideText(comparison?.to ?? null), [comparison])
@@ -178,7 +204,18 @@ export default function DiffView({ repo, path, from, to, onClose, onEdge }: Diff
     return () => {
       active = false
     }
-  }, [repo, path, from, to, requestKey])
+  }, [repo, path, from, to, requestKey, revision])
+
+  // A change Git makes on disk - an `add` from the terminal, a commit, a
+  // checkout - re-reads the file, so a hunk prepared elsewhere becomes a hollow
+  // marker here without the user reopening it.
+  useEffect(
+    () =>
+      window.seam.onRepositoryChanged((changed) => {
+        if (changed === repo) setRevision((value) => value + 1)
+      }),
+    [repo]
+  )
 
   // Load the language grammar on demand.
   useEffect(() => {
@@ -193,9 +230,34 @@ export default function DiffView({ repo, path, from, to, onClose, onEdge }: Diff
 
   const handleMarker = useCallback(
     (marker: MarkerLine, event: MouseEvent) => {
-      setMenu({ key: requestKey, marker, x: event.clientX, y: event.clientY })
+      const hunks = model === null ? { staged: [], unstaged: [] } : hunksAt(model, marker.line)
+      setMenu({ key: viewKey, marker, hunks, x: event.clientX, y: event.clientY })
     },
-    [requestKey]
+    [viewKey, model]
+  )
+
+  // Prepare or remove the hunks a marker stands for. The index's text is rebuilt
+  // in the main process and written without touching the working copy, and the
+  // viewer then rereads both versions so the marker moves where it belongs.
+  const writeHunk = useCallback(
+    async (action: 'stage' | 'unstage', hunks: readonly HunkRange[]) => {
+      if (hunks.length === 0) return
+      setMenu(null)
+      setWriteError(null)
+      setWriting(true)
+      try {
+        const result = await window.seam.writeHunks({ repo, path, action, hunks })
+        if (result.ok) {
+          setRevision((value) => value + 1)
+          onChanged?.()
+        } else {
+          setWriteError({ code: result.code, message: result.message })
+        }
+      } finally {
+        setWriting(false)
+      }
+    },
+    [repo, path, onChanged]
   )
 
   // A click outside the gutter and the menu itself closes it, so the popup never
@@ -492,6 +554,11 @@ export default function DiffView({ repo, path, from, to, onClose, onEdge }: Diff
           {error}
         </p>
       )}
+      {writeError !== null && (
+        <p className="diff__error" role="alert" data-testid="diff-write-error">
+          {t(ERROR_KEYS[writeError.code])} {writeError.message}
+        </p>
+      )}
       {binary && (
         <p className="diff__notice" data-testid="diff-binary">
           {t('diff.binary', { from: comparison?.fromSize ?? 0, to: comparison?.toSize ?? 0 })}
@@ -511,12 +578,24 @@ export default function DiffView({ repo, path, from, to, onClose, onEdge }: Diff
           style={{ left: openMenu.x, top: openMenu.y }}
         >
           {openMenu.marker.unstaged && (
-            <button type="button" role="menuitem" data-testid="hunk-stage" disabled>
+            <button
+              type="button"
+              role="menuitem"
+              data-testid="hunk-stage"
+              disabled={writing || openMenu.hunks.unstaged.length === 0}
+              onClick={() => void writeHunk('stage', openMenu.hunks.unstaged)}
+            >
               {t('diff.hunk.stage')}
             </button>
           )}
           {openMenu.marker.staged && (
-            <button type="button" role="menuitem" data-testid="hunk-unstage" disabled>
+            <button
+              type="button"
+              role="menuitem"
+              data-testid="hunk-unstage"
+              disabled={writing || openMenu.hunks.staged.length === 0}
+              onClick={() => void writeHunk('unstage', openMenu.hunks.staged)}
+            >
               {t('diff.hunk.unstage')}
             </button>
           )}

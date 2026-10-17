@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 import { existsSync, statSync } from 'node:fs'
+import { stageHunks, unstageHunks } from '../../core/diff'
 import {
   detectOperation,
   GitCommandError,
@@ -11,13 +12,16 @@ import {
   readComparison,
   readFileModel,
   readStatus,
+  removeIndexPaths,
   stagePaths,
   summarizeChanges,
   unstagePaths,
+  writeIndexEntry,
   type VersionSource
 } from '../../core/git'
 import type {
   FileComparison,
+  HunkRange,
   IpcErrorCode,
   IpcResult,
   RepositorySnapshot,
@@ -29,6 +33,16 @@ type Failure = { readonly ok: false; readonly code: IpcErrorCode; readonly messa
 
 function failure(code: IpcErrorCode, message: string): Failure {
   return { ok: false, code, message }
+}
+
+/** Whether two hunks cover the same lines, so a stale request can be refused. */
+function sameHunk(left: HunkRange, right: HunkRange): boolean {
+  return (
+    left.aStart === right.aStart &&
+    left.aLines === right.aLines &&
+    left.bStart === right.bStart &&
+    left.bLines === right.bLines
+  )
 }
 
 function failureFrom(error: unknown): Failure {
@@ -126,6 +140,48 @@ export class RepositoryService {
   /** Removes the given paths from the index, leaving the working tree alone. */
   unstage(repo: string, paths: readonly string[]): Promise<IpcResult<null>> {
     return this.write(repo, () => unstagePaths(this.runner, repo, paths))
+  }
+
+  /**
+   * Prepares the given hunks of a file or removes them, rebuilding the index's
+   * text and writing it without touching the working copy.
+   *
+   * The model is read again first, so the hunks are applied to the index as it
+   * is now. A hunk the file no longer has - because it changed after the viewer
+   * read it - is refused rather than applied at coordinates that have moved.
+   */
+  async writeHunks(
+    repo: string,
+    path: string,
+    action: 'stage' | 'unstage',
+    hunks: readonly HunkRange[]
+  ): Promise<IpcResult<null>> {
+    const opened = await this.open(repo)
+    if (!opened.ok) return opened
+
+    try {
+      const model = await readFileModel(this.runner, repo, path)
+      if (model === null) {
+        return failure('command-failed', `${path} is binary, so it cannot be prepared by hunk.`)
+      }
+
+      const known = action === 'stage' ? model.unstaged : model.staged
+      if (!hunks.every((hunk) => known.some((candidate) => sameHunk(candidate, hunk)))) {
+        return failure('command-failed', `${path} changed since it was read. Open it again.`)
+      }
+
+      if (action === 'stage') {
+        const content = stageHunks(model.index, model.worktree, hunks)
+        await writeIndexEntry(this.runner, repo, path, content)
+      } else {
+        const content = unstageHunks(model.head, model.index, hunks)
+        if (content === null) await removeIndexPaths(this.runner, repo, [path])
+        else await writeIndexEntry(this.runner, repo, path, content)
+      }
+      return { ok: true, value: null }
+    } catch (error) {
+      return failureFrom(error)
+    }
   }
 
   /** Opens the repository, runs one write and maps any failure to a result. */

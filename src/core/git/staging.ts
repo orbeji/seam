@@ -39,6 +39,26 @@ async function hasCommit(runner: GitRunner, repo: string): Promise<boolean> {
 }
 
 /**
+ * Removes the paths from the index without touching the working tree. It is how
+ * a prepared hunk that HEAD does not have disappears: writing the empty text
+ * would leave an empty file staged, where the path must leave the index.
+ *
+ * Always `git rm --cached`, never `restore --staged`: these paths are not in
+ * HEAD, so there is nothing for `restore` to put back.
+ */
+export function removeIndexPaths(
+  runner: GitRunner,
+  repo: string,
+  paths: readonly string[]
+): Promise<GitRunResult> {
+  if (paths.length === 0) return Promise.resolve(nothing())
+  return runner.runOrThrow(specArgs('rm', '--cached', '--force'), {
+    cwd: repo,
+    stdin: pathspecInput(paths)
+  })
+}
+
+/**
  * Stages the given paths in one write: a single file, a handful or a whole
  * section. A renamed file is staged by passing its old and new paths together,
  * which is what `git add` needs to record the rename.

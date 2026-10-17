@@ -7,7 +7,7 @@ import type { ChangeSummary, GitOperation, RepoStatus } from './git'
  * interface. Bump it whenever a message shape changes so the three layers can
  * detect a mismatch instead of failing silently.
  */
-export const IPC_CONTRACT_VERSION = 3
+export const IPC_CONTRACT_VERSION = 4
 
 /** Channel names shared by the main process and the preload bridge. */
 export const IPC_CHANNELS = {
@@ -16,6 +16,7 @@ export const IPC_CHANNELS = {
   readRepositoryStatus: 'repo:status',
   readFileComparison: 'diff:read',
   readStagingModel: 'staging:read',
+  writeHunks: 'staging:write-hunks',
   initialRepository: 'app:initial-repository',
   /** Sent from main to the interface when Git changed a repository on disk. */
   repositoryChanged: 'repo:changed',
@@ -123,6 +124,18 @@ export interface StagePathsRequest {
 }
 
 /**
+ * Hunks to prepare or remove in one write. The hunks always point at the two
+ * versions the action moves between: the index against the working copy to
+ * prepare, HEAD against the index to remove.
+ */
+export interface HunkWriteRequest {
+  readonly repo: string
+  readonly path: string
+  readonly action: 'stage' | 'unstage'
+  readonly hunks: readonly HunkRange[]
+}
+
+/**
  * Surface the preload script exposes to the renderer on `window.seam`. It grows
  * as the interface needs typed calls: stage, commit, resolve, continue and abort
  * arrive in later phases.
@@ -148,6 +161,11 @@ export interface SeamApi {
   stageFiles(request: StagePathsRequest): Promise<IpcResult<null>>
   /** Removes paths from the index in one write; never throws. */
   unstageFiles(request: StagePathsRequest): Promise<IpcResult<null>>
+  /**
+   * Prepares the given hunks of a file or removes them, rebuilding the index's
+   * text; never throws. It is how a single hunk is staged from the viewer.
+   */
+  writeHunks(request: HunkWriteRequest): Promise<IpcResult<null>>
   /**
    * Calls the listener when Git changed the given repository on disk, so the
    * interface can refresh without the user doing anything. Returns a function
