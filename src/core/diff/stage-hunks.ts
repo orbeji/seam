@@ -42,6 +42,45 @@ export function stageHunks(
 }
 
 /**
+ * The new index text after taking only `selected` lines of one hunk.
+ *
+ * The selection is by patch line, the way a `-`/`+` patch lists a hunk: first
+ * the hunk's index-side lines, then its working-copy lines. An index line that
+ * is not selected stays, and a working-copy line that is selected is inserted
+ * after it. So choosing only the addition of a modified line leaves the old
+ * line before the new one, choosing only the deletion drops the old line, and
+ * choosing both replaces it - which is what Git does with the same partial
+ * patch.
+ */
+export function stageSelection(
+  index: TextLines | null,
+  worktree: TextLines | null,
+  hunk: LineHunk,
+  selected: ReadonlySet<number>
+): string {
+  const indexLines = index?.lines ?? []
+  const workLines = worktree?.lines ?? []
+  const lines: string[] = []
+
+  for (let line = 0; line < hunk.aStart; line += 1) lines.push(indexLines[line] as string)
+  for (let line = 0; line < hunk.aLines; line += 1) {
+    if (!selected.has(line)) lines.push(indexLines[hunk.aStart + line] as string)
+  }
+  for (let line = 0; line < hunk.bLines; line += 1) {
+    if (selected.has(hunk.aLines + line)) lines.push(workLines[hunk.bStart + line] as string)
+  }
+  for (let line = hunk.aStart + hunk.aLines; line < indexLines.length; line += 1) {
+    lines.push(indexLines[line] as string)
+  }
+
+  const reachesEnd = hunk.aStart + hunk.aLines >= lineCount(index)
+  return joinText({
+    lines,
+    finalNewline: reachesEnd ? (worktree?.finalNewline ?? false) : (index?.finalNewline ?? false)
+  })
+}
+
+/**
  * The index text after removing `hunks`: HEAD's lines return where a prepared
  * change had replaced them.
  *

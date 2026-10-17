@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { joinText, splitText, type TextLines } from '../text'
 import { buildFileModel } from './file-model'
 import { type LineHunk } from './lines'
-import { stageHunks, unstageHunks } from './stage-hunks'
+import { stageHunks, stageSelection, unstageHunks } from './stage-hunks'
 
 /** A version built from plain line arrays, ending with a terminator. */
 function lines(contents: readonly string[], finalNewline = true): TextLines {
@@ -132,5 +132,77 @@ describe('staging and removing whole files, over random cases', () => {
 
     const after = stageHunks(index, worktree, [model.unstaged[0] as LineHunk])
     expect(after).toBe('ONE\ntwo\nthree\nfour\n')
+  })
+})
+
+describe('staging the chosen lines of a hunk', () => {
+  // A modified line is a deletion plus an addition, listed index side first.
+  const modified: LineHunk = { aStart: 1, aLines: 1, bStart: 1, bLines: 1 }
+
+  it('keeps the old line when only the addition is chosen', () => {
+    const index = lines(['one', 'two', 'three'])
+    const worktree = lines(['one', 'TWO', 'three'])
+
+    expect(stageSelection(index, worktree, modified, new Set([1]))).toBe('one\ntwo\nTWO\nthree\n')
+  })
+
+  it('drops the line when only the deletion is chosen', () => {
+    const index = lines(['one', 'two', 'three'])
+    const worktree = lines(['one', 'TWO', 'three'])
+
+    expect(stageSelection(index, worktree, modified, new Set([0]))).toBe('one\nthree\n')
+  })
+
+  it('replaces the line when both sides are chosen', () => {
+    const index = lines(['one', 'two', 'three'])
+    const worktree = lines(['one', 'TWO', 'three'])
+
+    expect(stageSelection(index, worktree, modified, new Set([0, 1]))).toBe('one\nTWO\nthree\n')
+  })
+
+  it('leaves the index alone when nothing is chosen', () => {
+    const index = lines(['one', 'two', 'three'])
+    const worktree = lines(['one', 'TWO', 'three'])
+
+    expect(stageSelection(index, worktree, modified, new Set())).toBe('one\ntwo\nthree\n')
+  })
+
+  it('takes only the chosen lines of a multi-line insertion', () => {
+    const index = lines(['one', 'five'])
+    const worktree = lines(['one', 'A', 'B', 'C', 'five'])
+    const insertion: LineHunk = { aStart: 1, aLines: 0, bStart: 1, bLines: 3 }
+
+    // Patch line 1 of an insertion is its second working-copy line, `B`.
+    expect(stageSelection(index, worktree, insertion, new Set([1]))).toBe('one\nB\nfive\n')
+    expect(stageSelection(index, worktree, insertion, new Set([0, 2]))).toBe('one\nA\nC\nfive\n')
+  })
+
+  it('follows the working copy ending when the chosen lines reach the end', () => {
+    // Replacing the last line takes the working copy's missing terminator.
+    expect(
+      stageSelection(
+        lines(['one', 'two', 'three']),
+        lines(['one', 'two', 'THREE'], false),
+        { aStart: 2, aLines: 1, bStart: 2, bLines: 1 },
+        new Set([0, 1])
+      )
+    ).toBe('one\ntwo\nTHREE')
+  })
+
+  it('equals staging the whole hunk when every line is chosen', () => {
+    const random = generator(20261018)
+    for (let round = 0; round < 500; round += 1) {
+      const index = round % 11 === 0 ? null : distinct(random, round * 100)
+      const worktree = distinct(random, round * 100 + 40)
+      const model = buildFileModel(index, index, worktree)
+
+      for (const hunk of model.unstaged) {
+        const every = new Set<number>()
+        for (let line = 0; line < hunk.aLines + hunk.bLines; line += 1) every.add(line)
+        expect(stageSelection(index, worktree, hunk, every)).toBe(
+          stageHunks(index, worktree, [hunk])
+        )
+      }
+    }
   })
 })

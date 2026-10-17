@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest'
 import { buildFileModel } from '../../core/diff'
 import type { TextLines } from '../../core/text'
-import { markerLines, type MarkerLine } from './staging-markers'
+import { hunkPatchLines, markerLines, selectionAt, type MarkerLine } from './staging-markers'
 
 function lines(contents: readonly string[]): TextLines {
   return { lines: [...contents], finalNewline: false }
@@ -81,5 +81,40 @@ describe('the staging margin markers', () => {
     expect(markers(['a'], ['a', 'b'], ['a', 'b'])).toEqual([
       { line: 1, staged: true, unstaged: false }
     ])
+  })
+})
+
+describe('the selected lines of an unstaged hunk', () => {
+  it('turns selected working-copy lines into patch lines', () => {
+    const insertion = { aStart: 2, aLines: 0, bStart: 2, bLines: 3 }
+
+    // With no index lines to list first, the first working-copy line is 0.
+    expect(hunkPatchLines(insertion, [2])).toEqual([0])
+    expect(hunkPatchLines(insertion, [3])).toEqual([1])
+    expect(hunkPatchLines(insertion, [2, 3])).toEqual([0, 1])
+    // A selection outside the hunk, or a repeated line, contributes nothing.
+    expect(hunkPatchLines(insertion, [0, 1, 9])).toEqual([])
+    expect(hunkPatchLines(insertion, [2, 2])).toEqual([0])
+  })
+
+  it('lists a modified line after the index line it replaces', () => {
+    const modified = { aStart: 1, aLines: 1, bStart: 1, bLines: 1 }
+
+    expect(hunkPatchLines(modified, [1])).toEqual([1])
+  })
+
+  it('finds the hunk under the marker and the selected working-copy lines it holds', () => {
+    const model = buildFileModel(
+      lines(['one', 'five']),
+      lines(['one', 'five']),
+      lines(['one', 'A', 'B', 'C', 'five'])
+    )
+    const hunk = model.unstaged[0]
+    expect(hunk).toBeDefined()
+
+    expect(selectionAt(model, 1, [1])).toEqual({ hunk, lines: [0] })
+    expect(selectionAt(model, 1, [3])).toEqual({ hunk, lines: [2] })
+    // A line outside the hunk under the marker selects nothing.
+    expect(selectionAt(model, 1, [0, 4])).toBeNull()
   })
 })

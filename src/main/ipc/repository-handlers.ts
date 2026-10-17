@@ -64,11 +64,17 @@ function isHunkRange(value: unknown): value is HunkRange {
 /** Narrows an IPC payload to a write of hunks, rejecting anything else. */
 function parseHunkWrite(value: unknown): HunkWriteRequest | null {
   if (typeof value !== 'object' || value === null) return null
-  const { repo, path, action, hunks } = value as Record<string, unknown>
+  const { repo, path, action, hunks, lines } = value as Record<string, unknown>
   if (typeof repo !== 'string' || typeof path !== 'string') return null
   if (action !== 'stage' && action !== 'unstage') return null
   if (!Array.isArray(hunks) || !hunks.every(isHunkRange)) return null
-  return { repo, path, action, hunks }
+  if (
+    lines !== undefined &&
+    (!Array.isArray(lines) || lines.some((line) => typeof line !== 'number'))
+  ) {
+    return null
+  }
+  return { repo, path, action, hunks, ...(lines === undefined ? {} : { lines: lines as number[] }) }
 }
 
 /** Narrows an IPC payload to a repository and a path, rejecting anything else. */
@@ -180,6 +186,6 @@ export function registerRepositoryHandlers(
   ipcMain.handle(IPC_CHANNELS.writeHunks, (_event, request: unknown) => {
     const parsed = parseHunkWrite(request)
     if (!parsed) return { ok: false, code: 'unknown', message: 'Invalid hunk write request' }
-    return service.writeHunks(parsed.repo, parsed.path, parsed.action, parsed.hunks)
+    return service.writeHunks(parsed.repo, parsed.path, parsed.action, parsed.hunks, parsed.lines)
   })
 }

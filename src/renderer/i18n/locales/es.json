@@ -68,6 +68,7 @@
     },
     "hunk": {
       "stage": "Preparar hunk",
+      "stageSelection": "Preparar líneas seleccionadas",
       "unstage": "Quitar hunk",
       "revert": "Revertir hunk"
     },

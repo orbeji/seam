@@ -20,8 +20,16 @@ import type {
 } from '../../shared/ipc'
 import { ERROR_KEYS } from '../errors'
 import { computeChanges, type HighlightGranularity } from './changes'
+import { selectedLines } from './line-selection'
 import { detectLanguageId, loadLanguage } from './languages'
-import { hunksAt, markerLines, type MarkerLine, type MarkerHunks } from './staging-markers'
+import {
+  hunksAt,
+  markerLines,
+  selectionAt,
+  type HunkSelection,
+  type MarkerLine,
+  type MarkerHunks
+} from './staging-markers'
 import { stagingGutter } from './staging-gutter'
 
 /** Above these limits the viewer drops inline highlighting, per the spec. */
@@ -120,6 +128,8 @@ export default function DiffView({
     key: string
     marker: MarkerLine
     hunks: MarkerHunks
+    /** The selected lines of an unstaged hunk, ready to prepare on their own. */
+    selection: HunkSelection | null
     x: number
     y: number
   } | null>(null)
@@ -138,6 +148,13 @@ export default function DiffView({
   const chunkIndexRef = useRef(-1)
   const editableTextRef = useRef('')
   const editKeyRef = useRef('')
+  // The working-copy lines selected in the editable pane. It is kept in a ref
+  // so the menu can still read it when the click that opens the menu moves the
+  // editor's selection.
+  const selectionRef = useRef<number[]>([])
+  // The text the selection was made on. A refresh that reads the same content
+  // rebuilds the editor but does not throw the selection away.
+  const docRef = useRef('')
 
   // Reads and errors are keyed by the request, so a stale answer for a file the
   // user has already left is ignored rather than shown.
@@ -230,7 +247,9 @@ export default function DiffView({
   const handleMarker = useCallback(
     (marker: MarkerLine, event: MouseEvent) => {
       const hunks = model === null ? { staged: [], unstaged: [] } : hunksAt(model, marker.line)
-      setMenu({ key: requestKey, marker, hunks, x: event.clientX, y: event.clientY })
+      const selection =
+        model === null ? null : selectionAt(model, marker.line, selectionRef.current)
+      setMenu({ key: requestKey, marker, hunks, selection, x: event.clientX, y: event.clientY })
     },
     [requestKey, model]
   )
@@ -238,14 +257,24 @@ export default function DiffView({
   // Prepare or remove the hunks a marker stands for. The index's text is rebuilt
   // in the main process and written without touching the working copy, and the
   // viewer then rereads both versions so the marker moves where it belongs.
+  //
+  // With `lines`, only those patch lines of a single hunk are taken, so the rest
+  // of the hunk stays pending.
   const writeHunk = useCallback(
-    async (action: 'stage' | 'unstage', hunks: readonly HunkRange[]) => {
+    async (action: 'stage' | 'unstage', hunks: readonly HunkRange[], lines?: readonly number[]) => {
       if (hunks.length === 0) return
       setMenu(null)
+      selectionRef.current = []
       setWriteError(null)
       setWriting(true)
       try {
-        const result = await window.seam.writeHunks({ repo, path, action, hunks })
+        const result = await window.seam.writeHunks({
+          repo,
+          path,
+          action,
+          hunks,
+          ...(lines === undefined ? {} : { lines })
+        })
         if (result.ok) {
           setRevision((value) => value + 1)
           onChanged?.()
@@ -323,13 +352,20 @@ export default function DiffView({
       editKeyRef.current = requestKey
     }
 
+    const editable = to === 'worktree'
+    // Drop the selection only when the text it was made on is gone.
+    const doc = editable ? editableTextRef.current : toText
+    if (docRef.current !== doc) {
+      selectionRef.current = []
+      docRef.current = doc
+    }
+
     const override = (a: string, b: string): readonly Change[] =>
       computeChanges(a, b, { whitespace, granularity: effectiveGranularity }).map(
         (change) => new Change(change.fromA, change.toA, change.fromB, change.toB)
       )
     const diffConfig = { override }
     const collapseOption = collapse ? { margin: context, minSize: 1 } : undefined
-    const editable = to === 'worktree'
 
     const common: Extension[] = [
       lineNumbers(),
@@ -365,6 +401,9 @@ export default function DiffView({
       EditorView.editable.of(true),
       EditorView.updateListener.of((update) => {
         if (update.docChanged) editableTextRef.current = update.state.doc.toString()
+        if (update.selectionSet || update.docChanged) {
+          selectionRef.current = selectedLines(update.state)
+        }
       })
     ]
 
@@ -585,6 +624,20 @@ export default function DiffView({
               onClick={() => void writeHunk('stage', openMenu.hunks.unstaged)}
             >
               {t('diff.hunk.stage')}
+            </button>
+          )}
+          {openMenu.marker.unstaged && (
+            <button
+              type="button"
+              role="menuitem"
+              data-testid="hunk-stage-selection"
+              disabled={writing || openMenu.selection === null}
+              onClick={() => {
+                const selection = openMenu.selection
+                if (selection !== null) void writeHunk('stage', [selection.hunk], selection.lines)
+              }}
+            >
+              {t('diff.hunk.stageSelection')}
             </button>
           )}
           {openMenu.marker.staged && (

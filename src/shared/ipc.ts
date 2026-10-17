@@ -7,7 +7,7 @@ import type { ChangeSummary, GitOperation, RepoStatus } from './git'
  * interface. Bump it whenever a message shape changes so the three layers can
  * detect a mismatch instead of failing silently.
  */
-export const IPC_CONTRACT_VERSION = 4
+export const IPC_CONTRACT_VERSION = 5
 
 /** Channel names shared by the main process and the preload bridge. */
 export const IPC_CHANNELS = {
@@ -133,6 +133,12 @@ export interface HunkWriteRequest {
   readonly path: string
   readonly action: 'stage' | 'unstage'
   readonly hunks: readonly HunkRange[]
+  /**
+   * With exactly one hunk in `hunks`: the hunk's patch lines to take, its
+   * index-side lines first, instead of the whole hunk. Absent means the whole
+   * hunk. It is how a single line is prepared from the viewer.
+   */
+  readonly lines?: readonly number[]
 }
 
 /**

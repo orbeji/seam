@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 import { existsSync, statSync } from 'node:fs'
-import { stageHunks, unstageHunks } from '../../core/diff'
+import { stageHunks, stageSelection, unstageHunks } from '../../core/diff'
 import {
   detectOperation,
   GitCommandError,
@@ -149,12 +149,16 @@ export class RepositoryService {
    * The model is read again first, so the hunks are applied to the index as it
    * is now. A hunk the file no longer has - because it changed after the viewer
    * read it - is refused rather than applied at coordinates that have moved.
+   *
+   * With `lines`, only those patch lines of a single hunk are taken, so a
+   * prepared hunk can end up holding some of its lines and not the rest.
    */
   async writeHunks(
     repo: string,
     path: string,
     action: 'stage' | 'unstage',
-    hunks: readonly HunkRange[]
+    hunks: readonly HunkRange[],
+    lines?: readonly number[]
   ): Promise<IpcResult<null>> {
     const opened = await this.open(repo)
     if (!opened.ok) return opened
@@ -170,7 +174,21 @@ export class RepositoryService {
         return failure('command-failed', `${path} changed since it was read. Open it again.`)
       }
 
-      if (action === 'stage') {
+      if (lines !== undefined) {
+        const hunk = hunks[0]
+        if (action !== 'stage' || hunk === undefined || hunks.length !== 1) {
+          return failure('unknown', `Only one hunk can be prepared by line at a time.`)
+        }
+        if (
+          !lines.every(
+            (line) => Number.isInteger(line) && line >= 0 && line < hunk.aLines + hunk.bLines
+          )
+        ) {
+          return failure('command-failed', `${path} changed since it was read. Open it again.`)
+        }
+        const content = stageSelection(model.index, model.worktree, hunk, new Set(lines))
+        await writeIndexEntry(this.runner, repo, path, content)
+      } else if (action === 'stage') {
         const content = stageHunks(model.index, model.worktree, hunks)
         await writeIndexEntry(this.runner, repo, path, content)
       } else {

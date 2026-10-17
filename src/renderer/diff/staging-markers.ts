@@ -47,6 +47,45 @@ function covers(start: number, count: number, line: number, total: number): bool
   return total > 0 && pointLine(start, total) === line
 }
 
+/** One unstaged hunk with the lines of it a partial preparation takes. */
+export interface HunkSelection {
+  /** The hunk, in index and working-copy lines. */
+  readonly hunk: HunkRange
+  /** Patch-line indices within the hunk, its index lines first. */
+  readonly lines: readonly number[]
+}
+
+/**
+ * The patch lines of `hunk` the selected working-copy lines stand for. The
+ * hunk's index lines come first in a patch, so a working-copy line at `bStart`
+ * is the patch line after all the hunk's index lines.
+ */
+export function hunkPatchLines(hunk: HunkRange, selected: readonly number[]): number[] {
+  const lines = new Set<number>()
+  for (const line of selected) {
+    if (line < hunk.bStart || line >= hunk.bStart + hunk.bLines) continue
+    lines.add(hunk.aLines + (line - hunk.bStart))
+  }
+  return [...lines].sort((left, right) => left - right)
+}
+
+/**
+ * The unstaged hunk under a marker together with the selected working-copy
+ * lines it holds, for the menu's partial preparation. Null when the selection
+ * reaches none of the hunks under the marker.
+ */
+export function selectionAt(
+  model: StagingModel,
+  line: number,
+  selected: readonly number[]
+): HunkSelection | null {
+  for (const hunk of hunksAt(model, line).unstaged) {
+    const lines = hunkPatchLines(hunk, selected)
+    if (lines.length > 0) return { hunk, lines }
+  }
+  return null
+}
+
 /**
  * The hunks a marker line stands for. The menu acts on what the dot beside a
  * line means, so it needs the hunk the marker was drawn from, not just the line:
