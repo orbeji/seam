@@ -202,6 +202,15 @@ export class RepositoryService {
     }
   }
 
+  /**
+   * Writes `content` as the file's index version, leaving the working copy
+   * alone. It is what the three-pane view's Done button stores: the whole text
+   * of the centre, filters and all, exactly as `git add` would.
+   */
+  writeIndex(repo: string, path: string, content: string): Promise<IpcResult<null>> {
+    return this.write(repo, () => writeIndexEntry(this.runner, repo, path, content))
+  }
+
   /** Opens the repository, runs one write and maps any failure to a result. */
   private async write(repo: string, action: () => Promise<unknown>): Promise<IpcResult<null>> {
     const opened = await this.open(repo)

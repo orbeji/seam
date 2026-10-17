@@ -5,6 +5,7 @@ import type {
   FileVersionSource,
   HunkRange,
   HunkWriteRequest,
+  IndexWriteRequest,
   StagePathsRequest
 } from '../../shared/ipc'
 import { IPC_CHANNELS } from '../../shared/ipc'
@@ -75,6 +76,16 @@ function parseHunkWrite(value: unknown): HunkWriteRequest | null {
     return null
   }
   return { repo, path, action, hunks, ...(lines === undefined ? {} : { lines: lines as number[] }) }
+}
+
+/** Narrows an IPC payload to a write of the index's whole text. */
+function parseIndexWrite(value: unknown): IndexWriteRequest | null {
+  if (typeof value !== 'object' || value === null) return null
+  const { repo, path, content } = value as Record<string, unknown>
+  if (typeof repo !== 'string' || typeof path !== 'string' || typeof content !== 'string') {
+    return null
+  }
+  return { repo, path, content }
 }
 
 /** Narrows an IPC payload to a repository and a path, rejecting anything else. */
@@ -190,5 +201,11 @@ export function registerRepositoryHandlers(
     const parsed = parseHunkWrite(request)
     if (!parsed) return { ok: false, code: 'unknown', message: 'Invalid hunk write request' }
     return service.writeHunks(parsed.repo, parsed.path, parsed.action, parsed.hunks, parsed.lines)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.writeIndex, (_event, request: unknown) => {
+    const parsed = parseIndexWrite(request)
+    if (!parsed) return { ok: false, code: 'unknown', message: 'Invalid index write request' }
+    return service.writeIndex(parsed.repo, parsed.path, parsed.content)
   })
 }

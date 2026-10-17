@@ -7,6 +7,7 @@ import {
   type FileComparison,
   type FileComparisonRequest,
   type HunkWriteRequest,
+  type IndexWriteRequest,
   type IpcResult,
   type RepositorySnapshot,
   type SeamApi,
@@ -41,6 +42,8 @@ const seamApi: SeamApi = {
     ipcRenderer.invoke(IPC_CHANNELS.unstageFiles, request) as Promise<IpcResult<null>>,
   writeHunks: (request: HunkWriteRequest) =>
     ipcRenderer.invoke(IPC_CHANNELS.writeHunks, request) as Promise<IpcResult<null>>,
+  writeIndex: (request: IndexWriteRequest) =>
+    ipcRenderer.invoke(IPC_CHANNELS.writeIndex, request) as Promise<IpcResult<null>>,
   onRepositoryChanged: (listener: (repo: string) => void) => {
     const handler = (_event: IpcRendererEvent, repo: string): void => listener(repo)
     ipcRenderer.on(IPC_CHANNELS.repositoryChanged, handler)

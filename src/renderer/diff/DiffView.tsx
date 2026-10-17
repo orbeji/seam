@@ -31,6 +31,7 @@ import {
   type MarkerHunks
 } from './staging-markers'
 import { stagingGutter } from './staging-gutter'
+import ThreePaneView from './ThreePaneView'
 
 /** Above these limits the viewer drops inline highlighting, per the spec. */
 const LARGE_BYTES = 5 * 1024 * 1024
@@ -44,7 +45,7 @@ const GRANULARITIES: readonly HighlightGranularity[] = [
   'none'
 ]
 
-export type DiffLayout = 'side-by-side' | 'unified'
+export type DiffLayout = 'side-by-side' | 'unified' | 'three-pane'
 
 interface DiffViewProps {
   readonly repo: string
@@ -506,81 +507,91 @@ export default function DiffView({
           >
             <option value="side-by-side">{t('diff.layout.side-by-side')}</option>
             <option value="unified">{t('diff.layout.unified')}</option>
+            <option
+              value="three-pane"
+              disabled={from.startsWith('stage') || to.startsWith('stage')}
+            >
+              {t('diff.layout.three-pane')}
+            </option>
           </select>
         </label>
 
-        <label className="diff__label">
-          {t('diff.granularity.label')}
-          <select
-            className="diff__select"
-            data-testid="diff-granularity"
-            value={effectiveGranularity}
-            disabled={binary || large}
-            onChange={(event) => setGranularity(event.target.value as HighlightGranularity)}
-          >
-            {GRANULARITIES.map((value) => (
-              <option key={value} value={value}>
-                {t(`diff.granularity.${value}`)}
-              </option>
-            ))}
-          </select>
-        </label>
+        {layout !== 'three-pane' && (
+          <>
+            <label className="diff__label">
+              {t('diff.granularity.label')}
+              <select
+                className="diff__select"
+                data-testid="diff-granularity"
+                value={effectiveGranularity}
+                disabled={binary || large}
+                onChange={(event) => setGranularity(event.target.value as HighlightGranularity)}
+              >
+                {GRANULARITIES.map((value) => (
+                  <option key={value} value={value}>
+                    {t(`diff.granularity.${value}`)}
+                  </option>
+                ))}
+              </select>
+            </label>
 
-        <label className="diff__label">
-          {t('diff.whitespace.label')}
-          <select
-            className="diff__select"
-            data-testid="diff-whitespace"
-            value={whitespace}
-            onChange={(event) => setWhitespace(event.target.value as WhitespaceMode)}
-          >
-            {WHITESPACE_MODES.map((mode) => (
-              <option key={mode} value={mode}>
-                {t(`diff.whitespace.${mode}`)}
-              </option>
-            ))}
-          </select>
-        </label>
+            <label className="diff__label">
+              {t('diff.whitespace.label')}
+              <select
+                className="diff__select"
+                data-testid="diff-whitespace"
+                value={whitespace}
+                onChange={(event) => setWhitespace(event.target.value as WhitespaceMode)}
+              >
+                {WHITESPACE_MODES.map((mode) => (
+                  <option key={mode} value={mode}>
+                    {t(`diff.whitespace.${mode}`)}
+                  </option>
+                ))}
+              </select>
+            </label>
 
-        <label className="diff__label diff__label--check">
-          <input
-            type="checkbox"
-            data-testid="diff-collapse"
-            checked={collapse}
-            onChange={(event) => setCollapse(event.target.checked)}
-          />
-          {t('diff.collapse')}
-        </label>
+            <label className="diff__label diff__label--check">
+              <input
+                type="checkbox"
+                data-testid="diff-collapse"
+                checked={collapse}
+                onChange={(event) => setCollapse(event.target.checked)}
+              />
+              {t('diff.collapse')}
+            </label>
 
-        <label className="diff__label">
-          {t('diff.context')}
-          <input
-            className="diff__number"
-            data-testid="diff-context"
-            type="number"
-            min={0}
-            max={50}
-            value={context}
-            onChange={(event) => setContext(Math.max(0, Number(event.target.value) || 0))}
-          />
-        </label>
+            <label className="diff__label">
+              {t('diff.context')}
+              <input
+                className="diff__number"
+                data-testid="diff-context"
+                type="number"
+                min={0}
+                max={50}
+                value={context}
+                onChange={(event) => setContext(Math.max(0, Number(event.target.value) || 0))}
+              />
+            </label>
 
-        <button
-          type="button"
-          className="diff__button"
-          data-testid="diff-previous"
-          onClick={previousDifference}
-        >
-          {t('diff.navigation.previous')}
-        </button>
-        <button
-          type="button"
-          className="diff__button"
-          data-testid="diff-next"
-          onClick={nextDifference}
-        >
-          {t('diff.navigation.next')}
-        </button>
+            <button
+              type="button"
+              className="diff__button"
+              data-testid="diff-previous"
+              onClick={previousDifference}
+            >
+              {t('diff.navigation.previous')}
+            </button>
+            <button
+              type="button"
+              className="diff__button"
+              data-testid="diff-next"
+              onClick={nextDifference}
+            >
+              {t('diff.navigation.next')}
+            </button>
+          </>
+        )}
         <button type="button" className="diff__button" data-testid="diff-close" onClick={onClose}>
           {t('diff.close')}
         </button>
@@ -657,7 +668,16 @@ export default function DiffView({
         </div>
       )}
 
-      <div className="diff__panes" data-testid="diff-panes" ref={containerRef} />
+      {layout === 'three-pane' ? (
+        <ThreePaneView
+          repo={repo}
+          path={path}
+          {...(onChanged === undefined ? {} : { onChanged })}
+          onExit={() => setLayout('side-by-side')}
+        />
+      ) : (
+        <div className="diff__panes" data-testid="diff-panes" ref={containerRef} />
+      )}
     </div>
   )
 }

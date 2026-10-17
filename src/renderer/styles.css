@@ -477,3 +477,125 @@ body {
 .diff__panes .cm-mergeView {
   height: 100%;
 }
+
+/* Three-pane staging view: HEAD, the editable index and the working copy,
+   aligned line by line with an arrow between each pair. */
+
+.three {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  min-height: 0;
+}
+
+.three__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.three__toolbar .diff__path {
+  margin-right: auto;
+}
+
+.three__grid {
+  --three-line: 20px;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+
+.three__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 32px minmax(0, 1fr) 32px minmax(0, 1fr);
+  align-items: stretch;
+  min-height: var(--three-line);
+}
+
+.three__cell {
+  box-sizing: border-box;
+  height: var(--three-line);
+  padding: 0 6px;
+  line-height: var(--three-line);
+  white-space: pre;
+  overflow: hidden;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+}
+
+.three__heading {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.three__cell--changed {
+  background: rgba(88, 166, 87, 0.18);
+}
+
+.three__cell--empty {
+  background: rgba(150, 150, 150, 0.08);
+}
+
+.three__arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  height: var(--three-line);
+}
+
+/* The band that connects the changed lines of two panels through their arrow. */
+.three__arrow--changed {
+  background: rgba(88, 166, 87, 0.12);
+}
+
+.three__take {
+  width: 20px;
+  height: 16px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.three__take:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.three__take:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.three__input {
+  width: 100%;
+  resize: none;
+  outline: none;
+}
+
+.three__input--padding {
+  background: rgba(150, 150, 150, 0.06);
+}
+
+.three__input:focus {
+  background: rgba(86, 132, 219, 0.18);
+}

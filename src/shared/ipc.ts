@@ -7,7 +7,7 @@ import type { ChangeSummary, GitOperation, RepoStatus } from './git'
  * interface. Bump it whenever a message shape changes so the three layers can
  * detect a mismatch instead of failing silently.
  */
-export const IPC_CONTRACT_VERSION = 5
+export const IPC_CONTRACT_VERSION = 6
 
 /** Channel names shared by the main process and the preload bridge. */
 export const IPC_CHANNELS = {
@@ -17,6 +17,7 @@ export const IPC_CHANNELS = {
   readFileComparison: 'diff:read',
   readStagingModel: 'staging:read',
   writeHunks: 'staging:write-hunks',
+  writeIndex: 'staging:write-index',
   initialRepository: 'app:initial-repository',
   /** Sent from main to the interface when Git changed a repository on disk. */
   repositoryChanged: 'repo:changed',
@@ -142,6 +143,17 @@ export interface HunkWriteRequest {
 }
 
 /**
+ * The text the three-pane view's centre holds, written as the file's index
+ * version. It is the whole index side, not a patch, so Done stores exactly what
+ * the panel shows.
+ */
+export interface IndexWriteRequest {
+  readonly repo: string
+  readonly path: string
+  readonly content: string
+}
+
+/**
  * Surface the preload script exposes to the renderer on `window.seam`. It grows
  * as the interface needs typed calls: stage, commit, resolve, continue and abort
  * arrive in later phases.
@@ -172,6 +184,12 @@ export interface SeamApi {
    * text; never throws. It is how a single hunk is staged from the viewer.
    */
   writeHunks(request: HunkWriteRequest): Promise<IpcResult<null>>
+  /**
+   * Writes `content` as the file's index version without touching the working
+   * copy. It is how the three-pane view's Done button stages what the centre
+   * holds; never throws.
+   */
+  writeIndex(request: IndexWriteRequest): Promise<IpcResult<null>>
   /**
    * Calls the listener when Git changed the given repository on disk, so the
    * interface can refresh without the user doing anything. Returns a function

@@ -45,7 +45,8 @@
     "layout": {
       "label": "Layout",
       "side-by-side": "Side by side",
-      "unified": "Unified"
+      "unified": "Unified",
+      "three-pane": "Three panes"
     },
     "granularity": {
       "label": "Highlight",
@@ -72,7 +73,19 @@
       "unstage": "Unstage hunk",
       "revert": "Revert hunk"
     },
-    "count": "Differences: {{count}}"
+    "count": "Differences: {{count}}",
+    "three": {
+      "head": "HEAD",
+      "index": "Index",
+      "worktree": "Working copy",
+      "done": "Done",
+      "close": "Close",
+      "binary": "This file is binary, so it cannot be prepared by line.",
+      "takeHead": "Take this line from HEAD",
+      "takeHeadHunk": "Take this change from HEAD",
+      "takeWorktree": "Take this line from the working copy",
+      "takeWorktreeHunk": "Take this change from the working copy"
+    }
   },
   "errors": {
     "gitNotFound": "Git was not found. Install Git 2.30 or newer and reopen Seam.",
