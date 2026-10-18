@@ -35,6 +35,12 @@
       "rebase": "Rebase in progress"
     }
   },
+  "commit": {
+    "message": {
+      "label": "Commit message",
+      "placeholder": "Describe the staged changes"
+    }
+  },
   "diff": {
     "close": "Close",
     "loading": "Reading both versions…",

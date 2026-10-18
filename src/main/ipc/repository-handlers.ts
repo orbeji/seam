@@ -2,6 +2,7 @@
 
 import { BrowserWindow, dialog, ipcMain, type OpenDialogOptions, type WebContents } from 'electron'
 import type {
+  CommitDraftWriteRequest,
   FileVersionSource,
   HunkRange,
   HunkWriteRequest,
@@ -10,6 +11,7 @@ import type {
   StagePathsRequest
 } from '../../shared/ipc'
 import { IPC_CHANNELS } from '../../shared/ipc'
+import type { CommitDrafts } from '../session/commit-drafts'
 import type { GitWatcher } from '../session/git-watcher'
 import type { RecentRepositories } from '../session/recent-repositories'
 import type { RepositoryService } from '../session/repository-service'
@@ -106,6 +108,14 @@ function parsePathRequest(value: unknown): { repo: string; path: string } | null
   return { repo, path }
 }
 
+/** Narrows an IPC payload to a commit draft write, rejecting anything else. */
+function parseDraftWrite(value: unknown): CommitDraftWriteRequest | null {
+  if (typeof value !== 'object' || value === null) return null
+  const { repo, message } = value as Record<string, unknown>
+  if (typeof repo !== 'string' || typeof message !== 'string') return null
+  return { repo, message }
+}
+
 /** One window's watch over the repository it currently shows. */
 interface WatchEntry {
   readonly repo: string
@@ -123,6 +133,7 @@ interface WatchEntry {
 export function registerRepositoryHandlers(
   service: RepositoryService,
   recent: RecentRepositories,
+  drafts: CommitDrafts,
   initialRepository: string | null
 ): void {
   const watches = new Map<number, WatchEntry>()
@@ -223,5 +234,29 @@ export function registerRepositoryHandlers(
     const parsed = parseRevertHunks(request)
     if (!parsed) return { ok: false, code: 'unknown', message: 'Invalid hunk revert request' }
     return service.revert(parsed.repo, parsed.path, parsed.hunks)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.readCommitDraft, (_event, repo: unknown) => {
+    if (typeof repo !== 'string') {
+      return { ok: false, code: 'unknown', message: 'Invalid commit draft request' }
+    }
+    return { ok: true, value: drafts.read(repo) }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.writeCommitDraft, (_event, request: unknown) => {
+    const parsed = parseDraftWrite(request)
+    if (parsed === null) {
+      return { ok: false, code: 'unknown', message: 'Invalid commit draft request' }
+    }
+    try {
+      drafts.write(parsed.repo, parsed.message)
+      return { ok: true, value: null }
+    } catch (error) {
+      return {
+        ok: false,
+        code: 'unknown',
+        message: error instanceof Error ? error.message : String(error)
+      }
+    }
   })
 }

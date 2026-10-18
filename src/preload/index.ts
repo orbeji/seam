@@ -4,6 +4,7 @@ import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
 import {
   IPC_CHANNELS,
   IPC_CONTRACT_VERSION,
+  type CommitDraftWriteRequest,
   type FileComparison,
   type FileComparisonRequest,
   type HunkWriteRequest,
@@ -47,6 +48,10 @@ const seamApi: SeamApi = {
     ipcRenderer.invoke(IPC_CHANNELS.writeIndex, request) as Promise<IpcResult<null>>,
   revertHunks: (request: RevertHunksRequest) =>
     ipcRenderer.invoke(IPC_CHANNELS.revertHunks, request) as Promise<IpcResult<string>>,
+  readCommitDraft: (repo: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.readCommitDraft, repo) as Promise<IpcResult<string>>,
+  writeCommitDraft: (request: CommitDraftWriteRequest) =>
+    ipcRenderer.invoke(IPC_CHANNELS.writeCommitDraft, request) as Promise<IpcResult<null>>,
   onRepositoryChanged: (listener: (repo: string) => void) => {
     const handler = (_event: IpcRendererEvent, repo: string): void => listener(repo)
     ipcRenderer.on(IPC_CHANNELS.repositoryChanged, handler)

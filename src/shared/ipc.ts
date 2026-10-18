@@ -7,7 +7,7 @@ import type { ChangeSummary, GitOperation, RepoStatus } from './git'
  * interface. Bump it whenever a message shape changes so the three layers can
  * detect a mismatch instead of failing silently.
  */
-export const IPC_CONTRACT_VERSION = 7
+export const IPC_CONTRACT_VERSION = 8
 
 /** Channel names shared by the main process and the preload bridge. */
 export const IPC_CHANNELS = {
@@ -23,7 +23,9 @@ export const IPC_CHANNELS = {
   /** Sent from main to the interface when Git changed a repository on disk. */
   repositoryChanged: 'repo:changed',
   stageFiles: 'repo:stage',
-  unstageFiles: 'repo:unstage'
+  unstageFiles: 'repo:unstage',
+  readCommitDraft: 'commit:draft:read',
+  writeCommitDraft: 'commit:draft:write'
 } as const
 
 /** Why a call failed, so the interface can show a translated message. */
@@ -166,6 +168,15 @@ export interface RevertHunksRequest {
 }
 
 /**
+ * The unconfirmed commit message of a repository, kept until it is confirmed.
+ * An empty message clears the draft.
+ */
+export interface CommitDraftWriteRequest {
+  readonly repo: string
+  readonly message: string
+}
+
+/**
  * Surface the preload script exposes to the renderer on `window.seam`. It grows
  * as the interface needs typed calls: stage, commit, resolve, continue and abort
  * arrive in later phases.
@@ -209,6 +220,14 @@ export interface SeamApi {
    * viewer can show it without reading the file again; never throws.
    */
   revertHunks(request: RevertHunksRequest): Promise<IpcResult<string>>
+  /**
+   * The commit message the user typed and did not confirm for a repository, so
+   * the box can be refilled after switching files or reopening Seam; never
+   * throws. An empty string means there is no draft.
+   */
+  readCommitDraft(repo: string): Promise<IpcResult<string>>
+  /** Stores or clears a repository's unconfirmed commit message; never throws. */
+  writeCommitDraft(request: CommitDraftWriteRequest): Promise<IpcResult<null>>
   /**
    * Calls the listener when Git changed the given repository on disk, so the
    * interface can refresh without the user doing anything. Returns a function

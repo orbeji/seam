@@ -35,6 +35,12 @@
       "rebase": "Rebase en curso"
     }
   },
+  "commit": {
+    "message": {
+      "label": "Mensaje del commit",
+      "placeholder": "Describe los cambios preparados"
+    }
+  },
   "diff": {
     "close": "Cerrar",
     "loading": "Leyendo ambas versiones…",

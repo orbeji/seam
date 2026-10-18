@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next'
 import type { ChangeSummary } from '../shared/git'
 import type { FileVersionSource, IpcErrorCode, RepositorySnapshot } from '../shared/ipc'
 import ChangesView from './changes/ChangesView'
+import CommitBox from './commit/CommitBox'
 import DiffView from './diff/DiffView'
 import { ERROR_KEYS } from './errors'
 import { SUPPORTED_LANGUAGES, type SupportedLanguage } from './i18n'
@@ -68,10 +69,14 @@ export default function App() {
     code: IpcErrorCode
     message: string
   } | null>(null)
+  // The unconfirmed commit message of the open repository. It is stored in the
+  // application data folder as it is typed, so it survives a restart.
+  const [commitMessage, setCommitMessage] = useState('')
 
   const open = useCallback(async (repo: string) => {
     setSelected(null)
     setWriteError(null)
+    setCommitMessage('')
     setView({ state: 'loading' })
     const result = await window.seam.readRepositoryStatus(repo)
     if (result.ok) {
@@ -88,6 +93,19 @@ export default function App() {
   const repoRef = useRef<string | null>(null)
   useEffect(() => {
     repoRef.current = currentRepo
+  }, [currentRepo])
+
+  // Refill the box with the draft this repository had, so reopening Seam or
+  // opening another repository shows what belongs to it, not to the last one.
+  useEffect(() => {
+    if (currentRepo === null) return
+    let active = true
+    void window.seam.readCommitDraft(currentRepo).then((result) => {
+      if (active && result.ok) setCommitMessage(result.value)
+    })
+    return () => {
+      active = false
+    }
   }, [currentRepo])
 
   const refresh = useCallback(async () => {
@@ -148,6 +166,14 @@ export default function App() {
     [refresh]
   )
 
+  // The box is stored as it is typed, one draft per repository. An empty
+  // message clears the repository's draft in the main process.
+  const writeMessage = useCallback((message: string) => {
+    setCommitMessage(message)
+    const repo = repoRef.current
+    if (repo !== null) void window.seam.writeCommitDraft({ repo, message })
+  }, [])
+
   /** Opens a file, and on navigation past either end moves to the neighbouring file. */
   const move = (summary: ChangeSummary, current: Selection, direction: 1 | -1): void => {
     const files = summaryEntries(summary)
@@ -169,6 +195,8 @@ export default function App() {
         </button>
         {currentRepo !== null && <span className="app__repo">{currentRepo}</span>}
       </div>
+
+      {currentRepo !== null && <CommitBox value={commitMessage} onChange={writeMessage} />}
 
       <main className="app__body">{renderBody()}</main>
 
