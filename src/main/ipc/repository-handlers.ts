@@ -6,6 +6,7 @@ import type {
   FileVersionSource,
   HunkRange,
   HunkWriteRequest,
+  IdentityWriteRequest,
   IndexWriteRequest,
   RevertHunksRequest,
   StagePathsRequest
@@ -124,6 +125,15 @@ function parseCommitRequest(value: unknown): CommitRequest | null {
   const amend = (value as Record<string, unknown>)['amend']
   if (typeof amend !== 'boolean') return null
   return { repo: base.repo, message: base.message, amend }
+}
+
+/** Narrows an IPC payload to an identity to store, rejecting anything else. */
+function parseIdentityWrite(value: unknown): IdentityWriteRequest | null {
+  if (typeof value !== 'object' || value === null) return null
+  const { repo, name, email, scope } = value as Record<string, unknown>
+  if (typeof repo !== 'string' || typeof name !== 'string' || typeof email !== 'string') return null
+  if (scope !== 'local' && scope !== 'global') return null
+  return { repo, name, email, scope }
 }
 
 /** One window's watch over the repository it currently shows. */
@@ -283,5 +293,24 @@ export function registerRepositoryHandlers(
       return { ok: false, code: 'unknown', message: 'Invalid head request' }
     }
     return service.readHeadCommit(repo)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.readIdentity, (_event, repo: unknown) => {
+    if (typeof repo !== 'string') {
+      return { ok: false, code: 'unknown', message: 'Invalid identity request' }
+    }
+    return service.readIdentity(repo)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.writeIdentity, (_event, request: unknown) => {
+    const parsed = parseIdentityWrite(request)
+    if (parsed === null) {
+      return { ok: false, code: 'unknown', message: 'Invalid identity request' }
+    }
+    return service.writeIdentity(
+      parsed.repo,
+      { name: parsed.name, email: parsed.email },
+      parsed.scope
+    )
   })
 }

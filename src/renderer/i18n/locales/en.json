@@ -49,6 +49,18 @@
     },
     "operation": "{{operation}}: finish it before committing."
   },
+  "identity": {
+    "title": "Set your identity",
+    "explain": "Git signs every commit with a name and an address, and Seam found neither. They are kept in Git's configuration, not in Seam.",
+    "name": "Name",
+    "email": "Email",
+    "scope": "Keep it",
+    "scopeLocal": "Only for this repository",
+    "scopeGlobal": "For all repositories",
+    "required": "A name and an address are needed to commit.",
+    "save": "Save and commit",
+    "cancel": "Cancel"
+  },
   "diff": {
     "close": "Close",
     "loading": "Reading both versions…",

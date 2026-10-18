@@ -86,6 +86,18 @@ export interface RepoStatus {
 export type GitOperation = 'merge' | 'cherry-pick' | 'revert' | 'rebase'
 
 /**
+ * The name and address Git signs a commit with, read from `user.name` and
+ * `user.email`. Either one may be missing, and then Git would refuse to commit.
+ */
+export interface Identity {
+  readonly name: string | null
+  readonly email: string | null
+}
+
+/** Where a missing identity is written when the user is asked for it. */
+export type IdentityScope = 'local' | 'global'
+
+/**
  * The last commit, as the amend box shows it: enough to fill the message box and
  * to warn when the commit has already been published.
  */

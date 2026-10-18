@@ -1,13 +1,20 @@
 // SPDX-License-Identifier: MIT
 
-import type { ChangeSummary, GitOperation, HeadCommit, RepoStatus } from './git'
+import type {
+  ChangeSummary,
+  GitOperation,
+  HeadCommit,
+  Identity,
+  IdentityScope,
+  RepoStatus
+} from './git'
 
 /**
  * Version of the contract between the main process, the preload bridge and the
  * interface. Bump it whenever a message shape changes so the three layers can
  * detect a mismatch instead of failing silently.
  */
-export const IPC_CONTRACT_VERSION = 10
+export const IPC_CONTRACT_VERSION = 11
 
 /** Channel names shared by the main process and the preload bridge. */
 export const IPC_CHANNELS = {
@@ -27,7 +34,9 @@ export const IPC_CHANNELS = {
   readCommitDraft: 'commit:draft:read',
   writeCommitDraft: 'commit:draft:write',
   createCommit: 'commit:create',
-  readHeadCommit: 'commit:head'
+  readHeadCommit: 'commit:head',
+  readIdentity: 'identity:read',
+  writeIdentity: 'identity:write'
 } as const
 
 /** Why a call failed, so the interface can show a translated message. */
@@ -186,6 +195,15 @@ export interface CommitRequest {
   readonly amend: boolean
 }
 
+/** An identity the user typed in the dialog, and where to keep it. */
+export interface IdentityWriteRequest {
+  readonly repo: string
+  readonly name: string
+  readonly email: string
+  /** `local` keeps it to this repository, `global` to every repository. */
+  readonly scope: IdentityScope
+}
+
 /**
  * Surface the preload script exposes to the renderer on `window.seam`. It grows
  * as the interface needs typed calls: stage, commit, resolve, continue and abort
@@ -250,6 +268,13 @@ export interface SeamApi {
    * the repository has no commits yet.
    */
   readHeadCommit(repo: string): Promise<IpcResult<HeadCommit>>
+  /**
+   * The name and address Git would sign with; never throws. A null field means
+   * the configuration does not set it and the commit would fail without help.
+   */
+  readIdentity(repo: string): Promise<IpcResult<Identity>>
+  /** Stores a missing identity for one repository or for all of them; never throws. */
+  writeIdentity(request: IdentityWriteRequest): Promise<IpcResult<null>>
   /**
    * Calls the listener when Git changed the given repository on disk, so the
    * interface can refresh without the user doing anything. Returns a function

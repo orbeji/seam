@@ -2,10 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import type { ChangeSummary, HeadCommit } from '../shared/git'
+import type { ChangeSummary, HeadCommit, IdentityScope } from '../shared/git'
 import type { FileVersionSource, IpcErrorCode, RepositorySnapshot } from '../shared/ipc'
 import ChangesView from './changes/ChangesView'
 import CommitBox from './commit/CommitBox'
+import IdentityDialog from './commit/IdentityDialog'
 import DiffView from './diff/DiffView'
 import { ERROR_KEYS } from './errors'
 import { SUPPORTED_LANGUAGES, type SupportedLanguage } from './i18n'
@@ -81,6 +82,11 @@ export default function App() {
   const draftBeforeAmend = useRef<string | null>(null)
   // Whether a commit is being created, so its button cannot be pressed twice.
   const [committing, setCommitting] = useState(false)
+  // The identity the dialog is asking for, with whatever Git already has, or
+  // null when the dialog is closed. It opens before a commit that lacks one.
+  const [identityPrompt, setIdentityPrompt] = useState<{ name: string; email: string } | null>(null)
+  // Whether the typed identity is being stored, so its buttons wait.
+  const [savingIdentity, setSavingIdentity] = useState(false)
 
   const open = useCallback(async (repo: string) => {
     setSelected(null)
@@ -89,6 +95,7 @@ export default function App() {
     setAmend(false)
     setHead(null)
     draftBeforeAmend.current = null
+    setIdentityPrompt(null)
     setView({ state: 'loading' })
     const result = await window.seam.readRepositoryStatus(repo)
     if (result.ok) {
@@ -234,10 +241,20 @@ export default function App() {
   // Confirms the index with the typed message. On success the message is spent:
   // the box and its stored draft go back to empty and Amend is cleared, before
   // the lists are read again. A failed commit keeps the message for another try.
+  //
+  // Git refuses to commit without a name and an address, so they are read first;
+  // when either is missing the dialog opens and the commit waits for it.
   const commit = useCallback(async () => {
     const repo = repoRef.current
     if (repo === null) return
     setWriteError(null)
+
+    const identity = await window.seam.readIdentity(repo)
+    if (identity.ok && (identity.value.name === null || identity.value.email === null)) {
+      setIdentityPrompt({ name: identity.value.name ?? '', email: identity.value.email ?? '' })
+      return
+    }
+
     setCommitting(true)
     try {
       const result = await window.seam.commit({ repo, message: commitMessage, amend })
@@ -255,6 +272,29 @@ export default function App() {
       setCommitting(false)
     }
   }, [commitMessage, amend, refresh])
+
+  // Stores the identity the dialog asked for and, if Git takes it, commits the
+  // message that was waiting.
+  const saveIdentity = useCallback(
+    async (identity: { name: string; email: string; scope: IdentityScope }) => {
+      const repo = repoRef.current
+      if (repo === null) return
+      setWriteError(null)
+      setSavingIdentity(true)
+      try {
+        const result = await window.seam.writeIdentity({ repo, ...identity })
+        if (!result.ok) {
+          setWriteError({ code: result.code, message: result.message })
+          return
+        }
+        setIdentityPrompt(null)
+        await commit()
+      } finally {
+        setSavingIdentity(false)
+      }
+    },
+    [commit]
+  )
 
   /** Opens a file, and on navigation past either end moves to the neighbouring file. */
   const move = (summary: ChangeSummary, current: Selection, direction: 1 | -1): void => {
@@ -328,6 +368,17 @@ export default function App() {
           ))}
         </select>
       </footer>
+
+      {identityPrompt !== null && (
+        <IdentityDialog
+          name={identityPrompt.name}
+          email={identityPrompt.email}
+          busy={savingIdentity}
+          error={writeError?.message ?? null}
+          onSave={(identity) => void saveIdentity(identity)}
+          onCancel={() => setIdentityPrompt(null)}
+        />
+      )}
     </div>
   )
 

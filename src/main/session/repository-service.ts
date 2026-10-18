@@ -13,11 +13,13 @@ import {
   readComparison,
   readFileModel,
   readHeadCommit,
+  readIdentity,
   readStatus,
   removeIndexPaths,
   stagePaths,
   summarizeChanges,
   unstagePaths,
+  writeIdentity,
   writeIndexEntry,
   writeWorktreeFile,
   type CommitOptions,
@@ -32,6 +34,7 @@ import type {
   RepositorySnapshot,
   StagingModel
 } from '../../shared/ipc'
+import type { Identity, IdentityScope } from '../../shared/git'
 import { GitWatcher } from './git-watcher'
 
 type Failure = { readonly ok: false; readonly code: IpcErrorCode; readonly message: string }
@@ -238,6 +241,27 @@ export class RepositoryService {
     } catch (error) {
       return failureFrom(error)
     }
+  }
+
+  /** The identity Git would sign a commit with, or nulls where it is unset. */
+  async readIdentity(repo: string): Promise<IpcResult<Identity>> {
+    const opened = await this.open(repo)
+    if (!opened.ok) return opened
+
+    try {
+      return { ok: true, value: await readIdentity(this.runner, repo) }
+    } catch (error) {
+      return failureFrom(error)
+    }
+  }
+
+  /** Stores an identity the user typed, for this repository or for all. */
+  writeIdentity(
+    repo: string,
+    identity: { readonly name: string; readonly email: string },
+    scope: IdentityScope
+  ): Promise<IpcResult<null>> {
+    return this.write(repo, () => writeIdentity(this.runner, repo, identity, scope))
   }
 
   /**

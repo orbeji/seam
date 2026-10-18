@@ -49,6 +49,18 @@
     },
     "operation": "{{operation}}: termínala antes de confirmar."
   },
+  "identity": {
+    "title": "Configura tu identidad",
+    "explain": "Git firma cada commit con un nombre y un correo, y Seam no ha encontrado ninguno. Se guardan en la configuración de Git, no en Seam.",
+    "name": "Nombre",
+    "email": "Correo",
+    "scope": "Guardarla",
+    "scopeLocal": "Solo en este repositorio",
+    "scopeGlobal": "En todos los repositorios",
+    "required": "Hacen falta un nombre y un correo para confirmar.",
+    "save": "Guardar y confirmar",
+    "cancel": "Cancelar"
+  },
   "diff": {
     "close": "Cerrar",
     "loading": "Leyendo ambas versiones…",
