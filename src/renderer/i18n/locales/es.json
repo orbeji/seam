@@ -47,6 +47,7 @@
     "cancel": "Cancelar",
     "output": "Salida de los hooks",
     "timedOut": "El commit seguía en marcha tras cinco minutos y se ha detenido.",
+    "history": "Historial",
     "author": {
       "label": "Autor",
       "placeholder": "Nombre <correo>"

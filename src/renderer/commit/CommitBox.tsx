@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { GitOperation, HeadCommit } from '../../shared/git'
 import { commitAvailability } from './activation'
@@ -36,6 +37,10 @@ interface CommitBoxProps {
   readonly busy: boolean
   /** What the last commit's hooks printed, shown under the button. */
   readonly output: string | null
+  /** The last messages confirmed from this repository, newest first. */
+  readonly history: readonly string[]
+  /** Puts a previous message back in the box. */
+  readonly onPickHistory: (message: string) => void
 }
 
 /**
@@ -62,10 +67,14 @@ export default function CommitBox({
   onCommit,
   onCancel,
   busy,
-  output
+  output,
+  history,
+  onPickHistory
 }: CommitBoxProps) {
   const { t } = useTranslation()
   const availability = commitAvailability({ staged, conflicts, operation, amend })
+  // The history list opens and closes like a menu; picking a message closes it.
+  const [historyOpen, setHistoryOpen] = useState(false)
 
   return (
     <section className="commit">
@@ -81,6 +90,40 @@ export default function CommitBox({
         rows={3}
         onChange={(event) => onChange(event.target.value)}
       />
+
+      {history.length > 0 && (
+        <div className="commit__history">
+          <button
+            type="button"
+            className="commit__history-summary"
+            data-testid="commit-history"
+            aria-expanded={historyOpen}
+            onClick={() => setHistoryOpen((open) => !open)}
+          >
+            {t('commit.history')}
+          </button>
+          {historyOpen && (
+            <ul className="commit__history-list">
+              {history.map((message, index) => (
+                <li key={`${index}-${message}`}>
+                  <button
+                    type="button"
+                    className="commit__history-item"
+                    data-testid="commit-history-item"
+                    title={message}
+                    onClick={() => {
+                      onPickHistory(message)
+                      setHistoryOpen(false)
+                    }}
+                  >
+                    {message.split('\n')[0]}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
 
       <div className="commit__options">
         <label className="commit__option">

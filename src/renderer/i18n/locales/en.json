@@ -47,6 +47,7 @@
     "cancel": "Cancel",
     "output": "Hook output",
     "timedOut": "The commit was still running after five minutes and was stopped.",
+    "history": "History",
     "author": {
       "label": "Author",
       "placeholder": "Name <email>"

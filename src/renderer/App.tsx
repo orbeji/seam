@@ -90,6 +90,10 @@ export default function App() {
   // What the last commit's hooks printed, so a failing hook can be read in the
   // panel under the button; null until a commit has said anything.
   const [commitOutput, setCommitOutput] = useState<string | null>(null)
+  // The last messages confirmed from this repository, newest first, offered by
+  // the history button under the box. They belong to the repository, so they
+  // reset with it.
+  const [commitHistory, setCommitHistory] = useState<readonly string[]>([])
   // Whether a commit is being created, so its button cannot be pressed twice.
   const [committing, setCommitting] = useState(false)
   // The identity the dialog is asking for, with whatever Git already has, or
@@ -108,6 +112,7 @@ export default function App() {
     setAuthor('')
     setSignoff(false)
     setCommitOutput(null)
+    setCommitHistory([])
     setIdentityPrompt(null)
     setView({ state: 'loading' })
     const result = await window.seam.readRepositoryStatus(repo)
@@ -133,12 +138,27 @@ export default function App() {
 
   // Refill the box with the draft this repository had, so reopening Seam or
   // opening another repository shows what belongs to it, not to the last one.
+  // With an empty draft the box comes from `commit.template` instead, and the
+  // history is read for the button that offers a previous message again.
   useEffect(() => {
     if (currentRepo === null) return
     let active = true
-    void window.seam.readCommitDraft(currentRepo).then((result) => {
-      if (active && result.ok) setCommitMessage(result.value)
-    })
+    void (async () => {
+      const [draft, history] = await Promise.all([
+        window.seam.readCommitDraft(currentRepo),
+        window.seam.readCommitHistory(currentRepo)
+      ])
+      if (!active) return
+      if (history.ok) setCommitHistory(history.value)
+      if (!draft.ok) return
+      if (draft.value !== '') {
+        setCommitMessage(draft.value)
+        return
+      }
+
+      const template = await window.seam.readCommitTemplate(currentRepo)
+      if (active && template.ok && template.value !== null) setCommitMessage(template.value)
+    })()
     return () => {
       active = false
     }
@@ -316,6 +336,9 @@ export default function App() {
       draftBeforeAmend.current = null
       await window.seam.writeCommitDraft({ repo, message: '' })
       await refresh()
+      // The message just confirmed is the newest one the history offers.
+      const history = await window.seam.readCommitHistory(repo)
+      if (history.ok) setCommitHistory(history.value)
     } finally {
       setCommitting(false)
     }
@@ -401,6 +424,8 @@ export default function App() {
           onCancel={cancelCommit}
           busy={committing}
           output={commitOutput}
+          history={commitHistory}
+          onPickHistory={writeMessage}
         />
       )}
 
