@@ -39,7 +39,14 @@
     "message": {
       "label": "Mensaje del commit",
       "placeholder": "Describe los cambios preparados"
-    }
+    },
+    "amend": "Enmendar",
+    "button": "Confirmar",
+    "reason": {
+      "nothing-staged": "No hay nada preparado.",
+      "conflicts": "Hay conflictos sin resolver."
+    },
+    "operation": "{{operation}}: termínala antes de confirmar."
   },
   "diff": {
     "close": "Cerrar",

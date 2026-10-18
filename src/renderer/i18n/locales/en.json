@@ -39,7 +39,14 @@
     "message": {
       "label": "Commit message",
       "placeholder": "Describe the staged changes"
-    }
+    },
+    "amend": "Amend",
+    "button": "Commit",
+    "reason": {
+      "nothing-staged": "Nothing is staged.",
+      "conflicts": "There are unresolved conflicts."
+    },
+    "operation": "{{operation}}: finish it before committing."
   },
   "diff": {
     "close": "Close",

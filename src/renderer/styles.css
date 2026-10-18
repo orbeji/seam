@@ -277,6 +277,44 @@ body {
   outline-offset: 1px;
 }
 
+.commit__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.commit__amend {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.commit__tools {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+}
+
+.commit__reason {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.button:disabled {
+  background: var(--surface-hover);
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
+.button:disabled:hover {
+  background: var(--surface-hover);
+}
+
 .app__recent {
   border-top: 1px solid var(--border);
   padding-top: 12px;

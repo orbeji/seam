@@ -72,11 +72,15 @@ export default function App() {
   // The unconfirmed commit message of the open repository. It is stored in the
   // application data folder as it is typed, so it survives a restart.
   const [commitMessage, setCommitMessage] = useState('')
+  // Whether the commit box is amending the last commit. It resets with the
+  // repository, like the draft but without being stored anywhere.
+  const [amend, setAmend] = useState(false)
 
   const open = useCallback(async (repo: string) => {
     setSelected(null)
     setWriteError(null)
     setCommitMessage('')
+    setAmend(false)
     setView({ state: 'loading' })
     const result = await window.seam.readRepositoryStatus(repo)
     if (result.ok) {
@@ -87,6 +91,9 @@ export default function App() {
   }, [])
 
   const currentRepo = view.state === 'ready' ? view.snapshot.repo : null
+  const staged = view.state === 'ready' ? view.snapshot.summary.staged.length : 0
+  const conflicts = view.state === 'ready' ? view.snapshot.summary.conflicts.length : 0
+  const operation = view.state === 'ready' ? view.snapshot.operation : null
 
   // The open repository, kept in a ref so the focus and change listeners can be
   // set up once and never resubscribe as the view changes.
@@ -196,7 +203,17 @@ export default function App() {
         {currentRepo !== null && <span className="app__repo">{currentRepo}</span>}
       </div>
 
-      {currentRepo !== null && <CommitBox value={commitMessage} onChange={writeMessage} />}
+      {currentRepo !== null && (
+        <CommitBox
+          value={commitMessage}
+          onChange={writeMessage}
+          amend={amend}
+          onAmendChange={setAmend}
+          staged={staged}
+          conflicts={conflicts}
+          operation={operation}
+        />
+      )}
 
       <main className="app__body">{renderBody()}</main>
 
