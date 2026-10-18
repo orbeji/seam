@@ -6,6 +6,7 @@ import type {
   HunkRange,
   HunkWriteRequest,
   IndexWriteRequest,
+  RevertHunksRequest,
   StagePathsRequest
 } from '../../shared/ipc'
 import { IPC_CHANNELS } from '../../shared/ipc'
@@ -86,6 +87,15 @@ function parseIndexWrite(value: unknown): IndexWriteRequest | null {
     return null
   }
   return { repo, path, content }
+}
+
+/** Narrows an IPC payload to a revert of hunks, rejecting anything else. */
+function parseRevertHunks(value: unknown): RevertHunksRequest | null {
+  if (typeof value !== 'object' || value === null) return null
+  const { repo, path, hunks } = value as Record<string, unknown>
+  if (typeof repo !== 'string' || typeof path !== 'string') return null
+  if (!Array.isArray(hunks) || !hunks.every(isHunkRange)) return null
+  return { repo, path, hunks }
 }
 
 /** Narrows an IPC payload to a repository and a path, rejecting anything else. */
@@ -207,5 +217,11 @@ export function registerRepositoryHandlers(
     const parsed = parseIndexWrite(request)
     if (!parsed) return { ok: false, code: 'unknown', message: 'Invalid index write request' }
     return service.writeIndex(parsed.repo, parsed.path, parsed.content)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.revertHunks, (_event, request: unknown) => {
+    const parsed = parseRevertHunks(request)
+    if (!parsed) return { ok: false, code: 'unknown', message: 'Invalid hunk revert request' }
+    return service.revert(parsed.repo, parsed.path, parsed.hunks)
   })
 }

@@ -47,3 +47,37 @@ export function decodeText(bytes: Uint8Array): string {
   }
   return new TextDecoder('utf-8').decode(bytes)
 }
+
+/** UTF-16 code units written out as bytes, one way or the other. */
+function utf16Bytes(text: string, littleEndian: boolean): Uint8Array {
+  const bytes = new Uint8Array(text.length * 2)
+  for (let i = 0; i < text.length; i += 1) {
+    const code = text.charCodeAt(i)
+    bytes[i * 2] = littleEndian ? code & 0xff : code >> 8
+    bytes[i * 2 + 1] = littleEndian ? code >> 8 : code & 0xff
+  }
+  return bytes
+}
+
+/** A byte-order mark followed by the encoded body. */
+function withBom(bom: readonly number[], body: Uint8Array): Uint8Array {
+  const bytes = new Uint8Array(bom.length + body.length)
+  bytes.set(bom, 0)
+  bytes.set(body, bom.length)
+  return bytes
+}
+
+/**
+ * The inverse of {@link decodeText} for a file being written back. A file that
+ * carried a byte-order mark, or was UTF-16, keeps its encoding and its mark; a
+ * file with neither is written as plain UTF-8. `like` is the file as it is now,
+ * so a save never rewrites a file's encoding silently.
+ */
+export function encodeText(text: string, like: Uint8Array | null): Uint8Array {
+  if (like !== null) {
+    if (startsWith(like, UTF16LE_BOM)) return withBom(UTF16LE_BOM, utf16Bytes(text, true))
+    if (startsWith(like, UTF16BE_BOM)) return withBom(UTF16BE_BOM, utf16Bytes(text, false))
+    if (startsWith(like, UTF8_BOM)) return withBom(UTF8_BOM, new TextEncoder().encode(text))
+  }
+  return new TextEncoder().encode(text)
+}

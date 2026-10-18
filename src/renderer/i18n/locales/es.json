@@ -71,7 +71,10 @@
       "stage": "Preparar hunk",
       "stageSelection": "Preparar líneas seleccionadas",
       "unstage": "Quitar hunk",
-      "revert": "Revertir hunk"
+      "revert": "Revertir hunk",
+      "revertConfirm": "¿Descartar el cambio pendiente? El archivo vuelve a lo preparado.",
+      "revertAccept": "Revertir",
+      "revertCancel": "Cancelar"
     },
     "count": "Diferencias: {{count}}",
     "three": {

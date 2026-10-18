@@ -71,7 +71,10 @@
       "stage": "Stage hunk",
       "stageSelection": "Stage selected lines",
       "unstage": "Unstage hunk",
-      "revert": "Revert hunk"
+      "revert": "Revert hunk",
+      "revertConfirm": "Revert the pending change? The file goes back to what is staged.",
+      "revertAccept": "Revert",
+      "revertCancel": "Cancel"
     },
     "count": "Differences: {{count}}",
     "three": {

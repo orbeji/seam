@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { joinText, splitText, type TextLines } from '../text'
 import { buildFileModel } from './file-model'
 import { type LineHunk } from './lines'
-import { stageHunks, stageSelection, unstageHunks } from './stage-hunks'
+import { revertHunks, stageHunks, stageSelection, unstageHunks } from './stage-hunks'
 
 /** A version built from plain line arrays, ending with a terminator. */
 function lines(contents: readonly string[], finalNewline = true): TextLines {
@@ -100,6 +100,77 @@ describe('removing a hunk from the index text', () => {
 
     expect(model.staged).toEqual(pending)
     expect(unstageHunks(head, prepared, model.staged)).toBe(joinText(head))
+  })
+})
+
+describe('reverting a hunk to the index text', () => {
+  it('puts the index lines back inside the hunk and keeps the rest of the file', () => {
+    const index = lines(['one', 'two', 'three', 'four'])
+    const worktree = lines(['one', 'TWO', 'three', 'FOUR'])
+    const hunk: LineHunk = { aStart: 1, aLines: 1, bStart: 1, bLines: 1 }
+
+    expect(revertHunks(index, worktree, [hunk])).toBe('one\ntwo\nthree\nFOUR\n')
+  })
+
+  it('brings a deletion back', () => {
+    const index = lines(['one', 'two', 'three'])
+    const worktree = lines(['one', 'three'])
+    const hunk: LineHunk = { aStart: 1, aLines: 1, bStart: 1, bLines: 0 }
+
+    expect(revertHunks(index, worktree, [hunk])).toBe('one\ntwo\nthree\n')
+  })
+
+  it('restores a file that was deleted in the working copy', () => {
+    const index = lines(['one', 'two'])
+    const deletion: LineHunk = { aStart: 0, aLines: 2, bStart: 0, bLines: 0 }
+
+    expect(revertHunks(index, null, [deletion])).toBe('one\ntwo\n')
+  })
+
+  it('drops an insertion that reached the end and takes the index ending', () => {
+    const index = lines(['one', 'two'])
+    const worktree = lines(['one', 'two', 'three'])
+    const insertion: LineHunk = { aStart: 2, aLines: 0, bStart: 2, bLines: 1 }
+
+    expect(revertHunks(index, worktree, [insertion])).toBe('one\ntwo\n')
+  })
+
+  it('keeps the working copy ending when the hunk is not at the end', () => {
+    const index = lines(['one', 'two', 'three'])
+    const worktree = lines(['ONE', 'two', 'three'], false)
+    const hunk: LineHunk = { aStart: 0, aLines: 1, bStart: 0, bLines: 1 }
+
+    expect(revertHunks(index, worktree, [hunk])).toBe('one\ntwo\nthree')
+  })
+
+  it('leaves the file alone when there is nothing to revert', () => {
+    const index = lines(['one', 'two'])
+    const worktree = lines(['one', 'two', 'three'], false)
+
+    expect(revertHunks(index, worktree, [])).toBe(joinText(worktree))
+  })
+
+  it('turns the whole working copy back into the index over random cases', () => {
+    const random = generator(20261019)
+    for (let round = 0; round < 500; round += 1) {
+      const index = round % 11 === 0 ? null : distinct(random, round * 100)
+      const worktree = distinct(random, round * 100 + 40)
+      const model = buildFileModel(index, index, worktree)
+
+      // Reverting every pending hunk leaves exactly what the index holds.
+      expect(revertHunks(index, worktree, model.unstaged)).toBe(
+        index === null ? '' : joinText(index)
+      )
+
+      // Reverting them one by one, re-reading each time, reaches the same text.
+      let current = worktree
+      for (let step = 0; step < 32; step += 1) {
+        const pending = buildFileModel(index, index, current).unstaged
+        if (pending.length === 0) break
+        current = splitText(revertHunks(index, current, [pending[0] as LineHunk]))
+      }
+      expect(joinText(current)).toBe(index === null ? '' : joinText(index))
+    }
   })
 })
 

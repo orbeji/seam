@@ -382,6 +382,31 @@ body {
   outline-offset: 1px;
 }
 
+.diff__button--danger {
+  background: #b4453f;
+  border-color: #b4453f;
+  color: #fff;
+}
+
+.diff__button--danger:hover {
+  background: #c04a43;
+}
+
+.diff__confirm {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--conflict);
+  border-radius: 6px;
+  background: var(--surface);
+  font-size: 13px;
+}
+
+.diff__confirm-text {
+  margin-right: auto;
+}
+
 .diff__error {
   margin: 0;
   color: #e06c75;

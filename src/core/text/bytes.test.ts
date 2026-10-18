@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 import { describe, expect, it } from 'vitest'
-import { decodeText, isBinary } from './bytes'
+import { decodeText, encodeText, isBinary } from './bytes'
 
 const encoder = new TextEncoder()
 
@@ -43,5 +43,34 @@ describe('decodeText', () => {
   it('decodes UTF-16 big-endian', () => {
     const bytes = new Uint8Array([0xfe, 0xff, 0x00, 0x61, 0x00, 0x62])
     expect(decodeText(bytes)).toBe('ab')
+  })
+})
+
+describe('encodeText', () => {
+  it('writes plain UTF-8 when there is no file to follow', () => {
+    expect(encodeText('café', null)).toEqual(encoder.encode('café'))
+  })
+
+  it('round-trips UTF-8', () => {
+    expect(decodeText(encodeText('hola', encoder.encode('x')))).toBe('hola')
+  })
+
+  it('keeps the byte-order mark of the file it follows', () => {
+    const utf8 = new Uint8Array([0xef, 0xbb, 0xbf, ...encoder.encode('hola')])
+    expect(encodeText('adios', utf8)).toEqual(
+      new Uint8Array([0xef, 0xbb, 0xbf, ...encoder.encode('adios')])
+    )
+  })
+
+  it('keeps UTF-16 little-endian and its mark', () => {
+    const utf16 = new Uint8Array([0xff, 0xfe, 0x61, 0x00])
+    expect(encodeText('ab', utf16)).toEqual(new Uint8Array([0xff, 0xfe, 0x61, 0x00, 0x62, 0x00]))
+    expect(decodeText(encodeText('café', utf16))).toBe('café')
+  })
+
+  it('keeps UTF-16 big-endian and its mark', () => {
+    const utf16 = new Uint8Array([0xfe, 0xff, 0x00, 0x61])
+    expect(encodeText('ab', utf16)).toEqual(new Uint8Array([0xfe, 0xff, 0x00, 0x61, 0x00, 0x62]))
+    expect(decodeText(encodeText('café', utf16))).toBe('café')
   })
 })

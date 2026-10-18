@@ -7,7 +7,7 @@ import type { ChangeSummary, GitOperation, RepoStatus } from './git'
  * interface. Bump it whenever a message shape changes so the three layers can
  * detect a mismatch instead of failing silently.
  */
-export const IPC_CONTRACT_VERSION = 6
+export const IPC_CONTRACT_VERSION = 7
 
 /** Channel names shared by the main process and the preload bridge. */
 export const IPC_CHANNELS = {
@@ -18,6 +18,7 @@ export const IPC_CHANNELS = {
   readStagingModel: 'staging:read',
   writeHunks: 'staging:write-hunks',
   writeIndex: 'staging:write-index',
+  revertHunks: 'staging:revert-hunks',
   initialRepository: 'app:initial-repository',
   /** Sent from main to the interface when Git changed a repository on disk. */
   repositoryChanged: 'repo:changed',
@@ -154,6 +155,17 @@ export interface IndexWriteRequest {
 }
 
 /**
+ * Reverting hunks throws away a pending change. The hunks are the unstaged ones
+ * the viewer drew, in index and working-copy lines; the main process rebuilds
+ * the working copy with the index's lines and writes the file.
+ */
+export interface RevertHunksRequest {
+  readonly repo: string
+  readonly path: string
+  readonly hunks: readonly HunkRange[]
+}
+
+/**
  * Surface the preload script exposes to the renderer on `window.seam`. It grows
  * as the interface needs typed calls: stage, commit, resolve, continue and abort
  * arrive in later phases.
@@ -190,6 +202,13 @@ export interface SeamApi {
    * holds; never throws.
    */
   writeIndex(request: IndexWriteRequest): Promise<IpcResult<null>>
+  /**
+   * Reverts the given pending hunks: the working copy's lines inside each hunk
+   * go back to the index's. The index is left alone, so it is destructive and
+   * the caller confirms first. The new working-copy text comes back, so the
+   * viewer can show it without reading the file again; never throws.
+   */
+  revertHunks(request: RevertHunksRequest): Promise<IpcResult<string>>
   /**
    * Calls the listener when Git changed the given repository on disk, so the
    * interface can refresh without the user doing anything. Returns a function

@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MIT
 
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { LineHunk } from '../src/core/diff'
 import { GitRunner, readFileModel } from '../src/core/git'
@@ -175,5 +177,74 @@ describe('removing a hunk from the index', () => {
     expect((await repo.git(['status', '--porcelain', '--', 'fresh.txt'])).trim()).toBe(
       '?? fresh.txt'
     )
+  })
+})
+
+describe('reverting a hunk in the working copy', () => {
+  it('drops the chosen pending hunk and leaves the index alone', async () => {
+    const repo = await committed()
+    repo.write('f.txt', 'one\nTWO\nthree\nFOUR\nfive\nsix\n')
+    const service = new RepositoryService()
+
+    const model = await readFileModel(runner, repo.path, 'f.txt')
+    const result = await service.revert(repo.path, 'f.txt', [model?.unstaged[0] as LineHunk])
+    expect(result.ok).toBe(true)
+    if (result.ok) expect(result.value).toBe('one\ntwo\nthree\nFOUR\nfive\nsix\n')
+
+    // The chosen hunk is gone and the other stays pending; the index, which was
+    // never touched, still holds what the branch committed.
+    expect(await worktreeDiff(repo)).not.toContain('+TWO')
+    expect(await worktreeDiff(repo)).toContain('+FOUR')
+    expect(await cachedDiff(repo)).toBe('')
+    expect(await indexText(repo)).toBe('one\ntwo\nthree\nfour\nfive\nsix\n')
+  })
+
+  it('brings a file deleted in the working copy back from the index', async () => {
+    const repo = await committed()
+    repo.remove('f.txt')
+    const service = new RepositoryService()
+
+    const model = await readFileModel(runner, repo.path, 'f.txt')
+    const result = await service.revert(repo.path, 'f.txt', model?.unstaged as LineHunk[])
+    expect(result.ok).toBe(true)
+    expect(readFileSync(join(repo.path, 'f.txt'), 'utf8')).toBe(
+      'one\ntwo\nthree\nfour\nfive\nsix\n'
+    )
+    expect(await worktreeDiff(repo)).toBe('')
+  })
+
+  it('refuses a hunk the file no longer has', async () => {
+    const repo = await committed()
+    repo.write('f.txt', 'one\nTWO\nthree\nfour\nfive\nsix\n')
+    const service = new RepositoryService()
+
+    const model = await readFileModel(runner, repo.path, 'f.txt')
+    const hunk = model?.unstaged[0] as LineHunk
+
+    // The working copy goes back between the read and the click.
+    repo.write('f.txt', 'one\ntwo\nthree\nfour\nfive\nsix\n')
+
+    const result = await service.revert(repo.path, 'f.txt', [hunk])
+    expect(result.ok).toBe(false)
+  })
+
+  it('keeps the CRLF of a working copy Git normalises', async () => {
+    const repo = await repository()
+    repo.write('.gitattributes', 'f.txt text eol=crlf\n')
+    repo.write('f.txt', 'one\r\ntwo\r\nthree\r\n')
+    await repo.git(['add', '.gitattributes', 'f.txt'])
+    await repo.git(['commit', '-qm', 'base'])
+
+    repo.write('f.txt', 'one\r\nTWO\r\nthree\r\n')
+    const service = new RepositoryService()
+    const model = await readFileModel(runner, repo.path, 'f.txt')
+    expect(model?.unstaged).toHaveLength(1)
+
+    const result = await service.revert(repo.path, 'f.txt', model?.unstaged as LineHunk[])
+    expect(result.ok).toBe(true)
+
+    // The write kept the file's CRLF, so Git reads it as unchanged.
+    expect(readFileSync(join(repo.path, 'f.txt'), 'utf8')).toBe('one\r\ntwo\r\nthree\r\n')
+    expect(await worktreeDiff(repo)).toBe('')
   })
 })

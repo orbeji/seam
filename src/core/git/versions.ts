@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 
-import { readFile, stat } from 'node:fs/promises'
+import { readFile, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { buildFileModel, type FileModel } from '../diff'
 import type { TextLines } from '../text'
-import { decodeText, isBinary, normaliseLineEndings, splitText } from '../text'
+import { decodeText, encodeText, isBinary, normaliseLineEndings, splitText } from '../text'
 import type { GitRunner } from './runner'
 
 /**
@@ -251,6 +251,42 @@ export async function readComparison(
     binary,
     normalised: normaliseWorktree
   }
+}
+
+/**
+ * Writes `content` as the working copy of `path`, keeping the file's line
+ * endings and byte-order mark. Reverting a hunk rebuilds the working copy from
+ * decoded text, and a `CRLF` checkout over an `LF` index must stay `CRLF`, or
+ * the whole file would read as changed afterwards. The parameters Git decides
+ * from (`core.autocrlf`, the attributes) are read the same way the comparison
+ * reads them, so the write agrees with what the viewer showed.
+ */
+export async function writeWorktreeFile(
+  runner: GitRunner,
+  cwd: string,
+  path: string,
+  content: string
+): Promise<void> {
+  const full = join(cwd, path)
+  let existing: Uint8Array | null
+  try {
+    existing = await readFile(full)
+  } catch {
+    existing = null
+  }
+
+  const eol = await readEol(runner, cwd, path)
+  let text = content
+  if (
+    eol !== null &&
+    hasCarriageReturn(eol.worktree) &&
+    !hasCarriageReturn(eol.index) &&
+    shouldNormaliseWorktree(eol, await readAutocrlf(runner, cwd))
+  ) {
+    text = content.replace(/\n/g, '\r\n')
+  }
+
+  await writeFile(full, encodeText(text, existing))
 }
 
 /**

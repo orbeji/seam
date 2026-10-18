@@ -10,6 +10,7 @@ import {
   type IndexWriteRequest,
   type IpcResult,
   type RepositorySnapshot,
+  type RevertHunksRequest,
   type SeamApi,
   type StagePathsRequest,
   type StagingModel,
@@ -44,6 +45,8 @@ const seamApi: SeamApi = {
     ipcRenderer.invoke(IPC_CHANNELS.writeHunks, request) as Promise<IpcResult<null>>,
   writeIndex: (request: IndexWriteRequest) =>
     ipcRenderer.invoke(IPC_CHANNELS.writeIndex, request) as Promise<IpcResult<null>>,
+  revertHunks: (request: RevertHunksRequest) =>
+    ipcRenderer.invoke(IPC_CHANNELS.revertHunks, request) as Promise<IpcResult<string>>,
   onRepositoryChanged: (listener: (repo: string) => void) => {
     const handler = (_event: IpcRendererEvent, repo: string): void => listener(repo)
     ipcRenderer.on(IPC_CHANNELS.repositoryChanged, handler)

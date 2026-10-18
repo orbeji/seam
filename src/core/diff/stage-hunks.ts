@@ -81,6 +81,32 @@ export function stageSelection(
 }
 
 /**
+ * The new working-copy text after reverting `hunks` to the index's lines.
+ *
+ * Reverting is preparing read the other way: where the working copy's lines
+ * replaced the index's inside an unstaged hunk, the index's lines come back, so
+ * the file matches what is prepared. The hunks point at the index against the
+ * working copy, so they are read reversed, exactly as removing a prepared hunk
+ * reads a HEAD-against-index hunk reversed.
+ *
+ * The final terminator follows the index only when a hunk reaches the end of the
+ * working copy, because that is where the end of the file is part of the change.
+ */
+export function revertHunks(
+  index: TextLines | null,
+  worktree: TextLines | null,
+  hunks: readonly LineHunk[]
+): string {
+  const reversed = reverseHunks(hunks)
+  const lines = applyHunks(worktree?.lines ?? [], index?.lines ?? [], reversed)
+  const reachesEnd = reversed.some((hunk) => hunk.aStart + hunk.aLines >= lineCount(worktree))
+  return joinText({
+    lines,
+    finalNewline: reachesEnd ? (index?.finalNewline ?? false) : (worktree?.finalNewline ?? false)
+  })
+}
+
+/**
  * The index text after removing `hunks`: HEAD's lines return where a prepared
  * change had replaced them.
  *

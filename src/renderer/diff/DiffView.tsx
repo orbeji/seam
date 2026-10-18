@@ -3,7 +3,7 @@
 import { history, defaultKeymap, historyKeymap } from '@codemirror/commands'
 import { bracketMatching } from '@codemirror/language'
 import { Change, MergeView, getChunks, unifiedMergeView } from '@codemirror/merge'
-import { EditorState, type Extension } from '@codemirror/state'
+import { Compartment, EditorState, type Extension } from '@codemirror/state'
 import { oneDark } from '@codemirror/theme-one-dark'
 import { EditorView, drawSelection, keymap, lineNumbers } from '@codemirror/view'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -15,7 +15,6 @@ import type {
   FileVersionSource,
   HunkRange,
   IpcErrorCode,
-  IpcResult,
   StagingModel
 } from '../../shared/ipc'
 import { ERROR_KEYS } from '../errors'
@@ -110,11 +109,17 @@ export default function DiffView({
   onChanged
 }: DiffViewProps) {
   const { t } = useTranslation()
-  const [loaded, setLoaded] = useState<{
+  // The comparison and the staging model are read by two effects. Splitting them
+  // lets a revert read only the model again: the comparison keeps its identity,
+  // so the editors are not rebuilt and their undo history survives.
+  const [fileState, setFileState] = useState<{
     key: string
     comparison: FileComparison | null
-    model: StagingModel | null
     error: string | null
+  } | null>(null)
+  const [stagingState, setStagingState] = useState<{
+    key: string
+    model: StagingModel | null
   } | null>(null)
 
   const [layout, setLayout] = useState<DiffLayout>('side-by-side')
@@ -137,6 +142,15 @@ export default function DiffView({
   // Bumped after a hunk write and when Git changes the repository, so both
   // panes and the staging model are read again without leaving the file.
   const [revision, setRevision] = useState(0)
+  // Bumped after a revert. A revert writes the working copy but not the index,
+  // so only the staging model is read again and the editors are left alone.
+  const [modelRevision, setModelRevision] = useState(0)
+  // The hunks waiting for the revert confirmation, if any.
+  const [confirm, setConfirm] = useState<{ key: string; hunks: readonly HunkRange[] } | null>(null)
+  // The working-copy text the toolbar counts differences on after a revert. The
+  // comparison is not read again, so the count would otherwise show the numbers
+  // from before the revert. Null means "use the comparison that was read".
+  const [countedText, setCountedText] = useState<string | null>(null)
   // A failed hunk write, shown over the viewer without hiding the diff.
   const [writeError, setWriteError] = useState<{
     code: IpcErrorCode
@@ -146,9 +160,21 @@ export default function DiffView({
 
   const containerRef = useRef<HTMLDivElement | null>(null)
   const viewRef = useRef<EditorView | null>(null)
+  // The staging gutter sits in its own compartment, so its markers can be
+  // replaced after a revert without rebuilding the editor and dropping the undo
+  // history that makes the revert undoable.
+  const gutter = useMemo(() => new Compartment(), [])
   const chunkIndexRef = useRef(-1)
   const editableTextRef = useRef('')
   const editKeyRef = useRef('')
+  // The parent re-renders for reasons of its own - a status refresh after a
+  // write, for instance - which would reach the editor through `navigate` and
+  // rebuild it, dropping the undo history. Keeping the edge callback in a ref
+  // keeps `navigate` still, so only the content and the options rebuild.
+  const onEdgeRef = useRef(onEdge)
+  useEffect(() => {
+    onEdgeRef.current = onEdge
+  }, [onEdge])
   // The working-copy lines selected in the editable pane. It is kept in a ref
   // so the menu can still read it when the click that opens the menu moves the
   // editor's selection.
@@ -160,14 +186,15 @@ export default function DiffView({
   // Reads and errors are keyed by the request, so a stale answer for a file the
   // user has already left is ignored rather than shown.
   const requestKey = `${repo}\u0000${path}\u0000${from}\u0000${to}`
-  const comparison = loaded?.key === requestKey ? loaded.comparison : null
-  const model = loaded?.key === requestKey ? loaded.model : null
-  const error = loaded?.key === requestKey ? loaded.error : null
-  const loading = loaded?.key !== requestKey
+  const comparison = fileState?.key === requestKey ? fileState.comparison : null
+  const model = stagingState?.key === requestKey ? stagingState.model : null
+  const error = fileState?.key === requestKey ? fileState.error : null
+  const loading = fileState?.key !== requestKey
   // A menu opened for a file the viewer has since left is dropped. It is keyed
   // to the request and not to the revision, so a refresh that arrives while the
   // menu is open does not unmount it from under the click.
   const openMenu = menu !== null && menu.key === requestKey ? menu : null
+  const openConfirm = confirm !== null && confirm.key === requestKey ? confirm : null
 
   const fromText = useMemo(() => sideText(comparison?.from ?? null), [comparison])
   const toText = useMemo(() => sideText(comparison?.to ?? null), [comparison])
@@ -183,45 +210,53 @@ export default function DiffView({
   const effectiveGranularity: HighlightGranularity = binary || large ? 'lines' : granularity
 
   // The number of changed ranges the engine reports, shown in the toolbar. It is
-  // skipped for large and binary files, where it would only cost time.
+  // skipped for large and binary files, where it would only cost time. A revert
+  // updates the working-copy text directly, since the comparison is not reread.
   const differenceCount = useMemo(
     () =>
       binary || large
         ? null
-        : computeChanges(fromText, toText, { whitespace, granularity: effectiveGranularity })
-            .length,
-    [binary, large, fromText, toText, whitespace, effectiveGranularity]
+        : computeChanges(fromText, countedText ?? toText, {
+            whitespace,
+            granularity: effectiveGranularity
+          }).length,
+    [binary, large, fromText, toText, countedText, whitespace, effectiveGranularity]
   )
 
-  // Load the comparison and the staging model over IPC. The result is stored
-  // with its key, so nothing is set synchronously and a superseded request
-  // leaves no trace. The comparison drives the panes; the model only drives the
-  // margin markers, so a failed model read leaves the diff itself untouched.
+  // Load the comparison over IPC. The result is stored with its key, so nothing
+  // is set synchronously and a superseded request leaves no trace.
   useEffect(() => {
     let active = true
-    const files = window.seam.readFileComparison({ repo, path, from, to })
-    const staging: Promise<IpcResult<StagingModel | null>> =
-      to === 'worktree'
-        ? window.seam.readStagingModel({ repo, path })
-        : Promise.resolve({ ok: true, value: null })
-
-    void Promise.all([files, staging]).then(([fileResult, modelResult]) => {
+    void window.seam.readFileComparison({ repo, path, from, to }).then((result) => {
       if (!active) return
-      setLoaded(
-        fileResult.ok
-          ? {
-              key: requestKey,
-              comparison: fileResult.value,
-              model: modelResult.ok ? modelResult.value : null,
-              error: null
-            }
-          : { key: requestKey, comparison: null, model: null, error: fileResult.message }
+      setFileState(
+        result.ok
+          ? { key: requestKey, comparison: result.value, error: null }
+          : { key: requestKey, comparison: null, error: result.message }
       )
+      // A freshly read comparison is the working-copy text again, so the count a
+      // revert kept up to date is no longer needed.
+      setCountedText(null)
     })
     return () => {
       active = false
     }
   }, [repo, path, from, to, requestKey, revision])
+
+  // Load the staging model, which only the working-copy side uses. It is read on
+  // its own so a revert, which bumps `modelRevision`, refreshes the markers
+  // without rereading the comparison and rebuilding the editors.
+  useEffect(() => {
+    if (to !== 'worktree') return
+    let active = true
+    void window.seam.readStagingModel({ repo, path }).then((result) => {
+      if (!active) return
+      setStagingState({ key: requestKey, model: result.ok ? result.value : null })
+    })
+    return () => {
+      active = false
+    }
+  }, [repo, path, to, requestKey, revision, modelRevision])
 
   // A change Git makes on disk - an `add` from the terminal, a commit, a
   // checkout - re-reads the file, so a hunk prepared elsewhere becomes a hollow
@@ -289,6 +324,40 @@ export default function DiffView({
     [repo, path, onChanged]
   )
 
+  // Throw a pending change away: the working copy's lines inside the hunks go
+  // back to the index's. It is destructive, so the viewer asks first and this
+  // only runs once the user confirms. The new text is applied to the editable
+  // pane as one change, so the editor's undo can bring the lines back while the
+  // viewer is open; only the markers are read again.
+  const revert = useCallback(async () => {
+    if (openConfirm === null) return
+    const hunks = openConfirm.hunks
+    setWriteError(null)
+    setWriting(true)
+    try {
+      const result = await window.seam.revertHunks({ repo, path, hunks })
+      if (!result.ok) {
+        setWriteError({ code: result.code, message: result.message })
+        return
+      }
+      const text = result.value
+      editableTextRef.current = text
+      const view = viewRef.current
+      if (view !== null && to === 'worktree') {
+        const length = view.state.doc.length
+        if (view.state.doc.toString() !== text) {
+          view.dispatch({ changes: { from: 0, to: length, insert: text } })
+        }
+      }
+      setCountedText(text)
+      setModelRevision((value) => value + 1)
+      setConfirm(null)
+      onChanged?.()
+    } finally {
+      setWriting(false)
+    }
+  }, [openConfirm, repo, path, to, onChanged])
+
   // A click outside the gutter and the menu itself closes it, so the popup never
   // lingers over a file the user has moved on from.
   useEffect(() => {
@@ -306,37 +375,34 @@ export default function DiffView({
     }
   }, [openMenu])
 
-  const navigate = useCallback(
-    (direction: 1 | -1) => {
-      const view = viewRef.current
-      const info = view ? getChunks(view.state) : null
-      const chunks = info?.chunks ?? []
-      if (view === null || chunks.length === 0) {
-        onEdge?.(direction)
-        return
-      }
-      let index = chunkIndexRef.current + direction
-      if (index < 0) index = 0
-      if (index >= chunks.length) {
-        onEdge?.(direction)
-        return
-      }
-      chunkIndexRef.current = index
-      const chunk = chunks[index]
-      if (chunk === undefined) {
-        onEdge?.(direction)
-        return
-      }
-      const anchor = info?.side === 'b' ? chunk.fromB : chunk.fromA
-      const end = info?.side === 'b' ? chunk.toB : chunk.toA
-      view.dispatch({
-        selection: { anchor },
-        effects: EditorView.scrollIntoView(end),
-        userEvent: 'select.byChunk'
-      })
-    },
-    [onEdge]
-  )
+  const navigate = useCallback((direction: 1 | -1) => {
+    const view = viewRef.current
+    const info = view ? getChunks(view.state) : null
+    const chunks = info?.chunks ?? []
+    if (view === null || chunks.length === 0) {
+      onEdgeRef.current?.(direction)
+      return
+    }
+    let index = chunkIndexRef.current + direction
+    if (index < 0) index = 0
+    if (index >= chunks.length) {
+      onEdgeRef.current?.(direction)
+      return
+    }
+    chunkIndexRef.current = index
+    const chunk = chunks[index]
+    if (chunk === undefined) {
+      onEdgeRef.current?.(direction)
+      return
+    }
+    const anchor = info?.side === 'b' ? chunk.fromB : chunk.fromA
+    const end = info?.side === 'b' ? chunk.toB : chunk.toA
+    view.dispatch({
+      selection: { anchor },
+      effects: EditorView.scrollIntoView(end),
+      userEvent: 'select.byChunk'
+    })
+  }, [])
 
   // Build or rebuild the merge view whenever the content or the options change.
   useEffect(() => {
@@ -400,6 +466,7 @@ export default function DiffView({
       history(),
       EditorState.readOnly.of(false),
       EditorView.editable.of(true),
+      gutter.of(editable && markers.length > 0 ? stagingGutter(markers, handleMarker) : []),
       EditorView.updateListener.of((update) => {
         if (update.docChanged) editableTextRef.current = update.state.doc.toString()
         if (update.selectionSet || update.docChanged) {
@@ -417,10 +484,6 @@ export default function DiffView({
     if (language) {
       editableExtensions.push(language)
       readOnlyExtensions.push(language)
-    }
-
-    if (editable && markers.length > 0) {
-      editableExtensions.push(stagingGutter(markers, handleMarker))
     }
 
     if (layout === 'unified') {
@@ -463,6 +526,9 @@ export default function DiffView({
       merge.destroy()
       viewRef.current = null
     }
+    // The markers are refreshed in place by the effect below; a change to them
+    // must not rebuild the editor, or the undo history would be thrown away.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     comparison,
     layout,
@@ -476,10 +542,22 @@ export default function DiffView({
     fromText,
     toText,
     requestKey,
-    markers,
-    handleMarker,
+    gutter,
     navigate
   ])
+
+  // Refresh the margin markers in place. A revert changes the staging model but
+  // not the comparison, so the editor is left alone and its undo history, which
+  // holds the revert, survives.
+  useEffect(() => {
+    const view = viewRef.current
+    if (view === null) return
+    view.dispatch({
+      effects: gutter.reconfigure(
+        to === 'worktree' && markers.length > 0 ? stagingGutter(markers, handleMarker) : []
+      )
+    })
+  }, [gutter, to, markers, handleMarker])
 
   const nextDifference = useCallback(() => navigate(1), [navigate])
   const previousDifference = useCallback(() => navigate(-1), [navigate])
@@ -608,6 +686,29 @@ export default function DiffView({
           {t(ERROR_KEYS[writeError.code])} {writeError.message}
         </p>
       )}
+      {openConfirm !== null && (
+        <div className="diff__confirm" role="alertdialog" data-testid="revert-confirm">
+          <span className="diff__confirm-text">{t('diff.hunk.revertConfirm')}</span>
+          <button
+            type="button"
+            className="diff__button diff__button--danger"
+            data-testid="revert-accept"
+            disabled={writing}
+            onClick={() => void revert()}
+          >
+            {t('diff.hunk.revertAccept')}
+          </button>
+          <button
+            type="button"
+            className="diff__button"
+            data-testid="revert-cancel"
+            disabled={writing}
+            onClick={() => setConfirm(null)}
+          >
+            {t('diff.hunk.revertCancel')}
+          </button>
+        </div>
+      )}
       {binary && (
         <p className="diff__notice" data-testid="diff-binary">
           {t('diff.binary', { from: comparison?.fromSize ?? 0, to: comparison?.toSize ?? 0 })}
@@ -662,7 +763,16 @@ export default function DiffView({
               {t('diff.hunk.unstage')}
             </button>
           )}
-          <button type="button" role="menuitem" data-testid="hunk-revert" disabled>
+          <button
+            type="button"
+            role="menuitem"
+            data-testid="hunk-revert"
+            disabled={writing || openMenu.hunks.unstaged.length === 0}
+            onClick={() => {
+              setConfirm({ key: requestKey, hunks: openMenu.hunks.unstaged })
+              setMenu(null)
+            }}
+          >
             {t('diff.hunk.revert')}
           </button>
         </div>

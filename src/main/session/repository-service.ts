@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 import { existsSync, statSync } from 'node:fs'
-import { stageHunks, stageSelection, unstageHunks } from '../../core/diff'
+import { revertHunks, stageHunks, stageSelection, unstageHunks } from '../../core/diff'
 import {
   detectOperation,
   GitCommandError,
@@ -17,6 +17,7 @@ import {
   summarizeChanges,
   unstagePaths,
   writeIndexEntry,
+  writeWorktreeFile,
   type VersionSource
 } from '../../core/git'
 import type {
@@ -209,6 +210,41 @@ export class RepositoryService {
    */
   writeIndex(repo: string, path: string, content: string): Promise<IpcResult<null>> {
     return this.write(repo, () => writeIndexEntry(this.runner, repo, path, content))
+  }
+
+  /**
+   * Reverts the given pending hunks: the working copy's lines inside each hunk
+   * go back to the index's, and the index is left alone, so the change is only
+   * thrown away from the file. It is destructive, so the viewer confirms first.
+   *
+   * The hunks are checked against the unstaged set as it is now, the same way a
+   * stage refuses a hunk that changed since it was read, so a stale click cannot
+   * drop lines the user never saw. The new working-copy text comes back so the
+   * viewer can show exactly what was written.
+   */
+  async revert(
+    repo: string,
+    path: string,
+    hunks: readonly HunkRange[]
+  ): Promise<IpcResult<string>> {
+    const opened = await this.open(repo)
+    if (!opened.ok) return opened
+
+    try {
+      const model = await readFileModel(this.runner, repo, path)
+      if (model === null) {
+        return failure('command-failed', `${path} is binary, so it cannot be reverted by hunk.`)
+      }
+      if (!hunks.every((hunk) => model.unstaged.some((candidate) => sameHunk(candidate, hunk)))) {
+        return failure('command-failed', `${path} changed since it was read. Open it again.`)
+      }
+
+      const content = revertHunks(model.index, model.worktree, hunks)
+      await writeWorktreeFile(this.runner, repo, path, content)
+      return { ok: true, value: content }
+    } catch (error) {
+      return failureFrom(error)
+    }
   }
 
   /** Opens the repository, runs one write and maps any failure to a result. */
