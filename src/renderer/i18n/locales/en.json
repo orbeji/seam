@@ -48,6 +48,9 @@
     "output": "Hook output",
     "timedOut": "The commit was still running after five minutes and was stopped.",
     "history": "History",
+    "committed": "Commit {{id}} created.",
+    "copy": "Copy",
+    "copied": "Copied",
     "author": {
       "label": "Author",
       "placeholder": "Name <email>"

@@ -122,6 +122,40 @@ body {
   background: var(--surface);
 }
 
+/* The id of the commit just made, with the button that copies it. */
+.app__notice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 0 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  font-size: 13px;
+}
+
+.app__notice-copy {
+  margin-left: auto;
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--background);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.app__notice-copy:hover {
+  background: var(--surface-hover);
+}
+
+.app__notice-copy:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
 .changes {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));

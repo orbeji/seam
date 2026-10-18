@@ -115,6 +115,12 @@ export interface CommitOutcome {
   /** Whether the user cancelled the commit. */
   readonly cancelled: boolean
   /**
+   * The abbreviated id of the commit just made, read with `rev-parse
+   * --short HEAD` so it is the same abbreviation a terminal prints. Empty
+   * when there was no commit, for the notification under the box to show.
+   */
+  readonly shortId: string
+  /**
    * The staged files the CRLF warning is about: they would commit CRLF into
    * the index without attributes to justify it, and the commit waits for the
    * dialog's answer. Empty when there is nothing to warn about.

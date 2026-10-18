@@ -15,7 +15,7 @@ import type {
  * interface. Bump it whenever a message shape changes so the three layers can
  * detect a mismatch instead of failing silently.
  */
-export const IPC_CONTRACT_VERSION = 14
+export const IPC_CONTRACT_VERSION = 15
 
 /** Channel names shared by the main process and the preload bridge. */
 export const IPC_CHANNELS = {
@@ -42,7 +42,9 @@ export const IPC_CHANNELS = {
   readIdentity: 'identity:read',
   writeIdentity: 'identity:write',
   readSettings: 'settings:read',
-  writeSettings: 'settings:write'
+  writeSettings: 'settings:write',
+  /** Copies text from the interface through the main process's clipboard. */
+  writeClipboardText: 'clipboard:write-text'
 } as const
 
 /** Why a call failed, so the interface can show a translated message. */
@@ -331,6 +333,12 @@ export interface SeamApi {
   readSettings(): Promise<IpcResult<SettingsData>>
   /** Stores the preferences; never throws. */
   writeSettings(settings: SettingsData): Promise<IpcResult<null>>
+  /**
+   * Copies text to the system clipboard, so the commit notification can offer
+   * the short id without the renderer fighting the browser's clipboard rules;
+   * never throws.
+   */
+  writeClipboardText(text: string): Promise<IpcResult<null>>
   /**
    * Calls the listener when Git changed the given repository on disk, so the
    * interface can refresh without the user doing anything. Returns a function

@@ -76,6 +76,8 @@ const seamApi: SeamApi = {
     ipcRenderer.invoke(IPC_CHANNELS.readSettings) as Promise<IpcResult<SettingsData>>,
   writeSettings: (settings: SettingsData) =>
     ipcRenderer.invoke(IPC_CHANNELS.writeSettings, settings) as Promise<IpcResult<null>>,
+  writeClipboardText: (text: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.writeClipboardText, text) as Promise<IpcResult<null>>,
   onRepositoryChanged: (listener: (repo: string) => void) => {
     const handler = (_event: IpcRendererEvent, repo: string): void => listener(repo)
     ipcRenderer.on(IPC_CHANNELS.repositoryChanged, handler)

@@ -140,6 +140,30 @@ describe('createCommit', () => {
       'Signed-off-by: Seam <seam@example.com>'
     )
   })
+
+  it('comes back with the short id of the commit it made', async () => {
+    const repo = await repository()
+    await identity(repo)
+    repo.write('f.txt', 'one\n')
+    await repo.git(['add', '.'])
+
+    const outcome = await createCommit(new GitRunner(), repo.path, 'with an id')
+    const shortId = (await repo.git(['rev-parse', '--short', 'HEAD'])).trim()
+
+    expect(outcome.created).toBe(true)
+    // The same abbreviation a terminal would print for the new commit.
+    expect(outcome.shortId).toBe(shortId)
+  })
+
+  it('keeps the id empty when Git refuses the commit', async () => {
+    const repo = await repository()
+    await identity(repo)
+
+    const outcome = await createCommit(new GitRunner(), repo.path, 'nothing staged')
+
+    expect(outcome.created).toBe(false)
+    expect(outcome.shortId).toBe('')
+  })
 })
 
 describe('hooks', () => {

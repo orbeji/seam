@@ -100,6 +100,11 @@ export default function App() {
   // The staged files a CRLF warning is about, with the dialog open over them,
   // or null when no warning is due. The commit waits for the dialog's answer.
   const [crlfPrompt, setCrlfPrompt] = useState<readonly string[] | null>(null)
+  // The short id of the commit just made, shown with a copy button until the
+  // next commit or repository replaces it.
+  const [commitNotice, setCommitNotice] = useState<string | null>(null)
+  // Whether the copy button has just copied, so it can say so for a moment.
+  const [copied, setCopied] = useState(false)
   // The identity the dialog is asking for, with whatever Git already has, or
   // null when the dialog is closed. It opens before a commit that lacks one.
   const [identityPrompt, setIdentityPrompt] = useState<{ name: string; email: string } | null>(null)
@@ -118,6 +123,8 @@ export default function App() {
     setCommitOutput(null)
     setCommitHistory([])
     setCrlfPrompt(null)
+    setCommitNotice(null)
+    setCopied(false)
     setIdentityPrompt(null)
     setView({ state: 'loading' })
     const result = await window.seam.readRepositoryStatus(repo)
@@ -352,6 +359,9 @@ export default function App() {
         draftBeforeAmend.current = null
         await window.seam.writeCommitDraft({ repo, message: '' })
         await refresh()
+        // The notification shows the short id Git reports for the new commit.
+        setCommitNotice(outcome.shortId === '' ? null : outcome.shortId)
+        setCopied(false)
         // The message just confirmed is the newest one the history offers.
         const history = await window.seam.readCommitHistory(repo)
         if (history.ok) setCommitHistory(history.value)
@@ -383,6 +393,21 @@ export default function App() {
     },
     [commit]
   )
+
+  // Copies the notification's short id through the main process, which owns
+  // the system clipboard, so the browser's clipboard rules do not apply.
+  const copyShortId = useCallback(() => {
+    if (commitNotice === null) return
+    setCopied(true)
+    void window.seam.writeClipboardText(commitNotice)
+  }, [commitNotice])
+
+  // The button goes back to its plain label once the copy has been seen.
+  useEffect(() => {
+    if (!copied) return
+    const timer = setTimeout(() => setCopied(false), 2000)
+    return () => clearTimeout(timer)
+  }, [copied])
 
   // Remembers whether hooks run, so the choice survives the next window.
   const changeRunHooks = useCallback((next: boolean) => {
@@ -436,29 +461,47 @@ export default function App() {
       </div>
 
       {currentRepo !== null && (
-        <CommitBox
-          value={commitMessage}
-          onChange={writeMessage}
-          amend={amend}
-          onAmendChange={(next) => void changeAmend(next)}
-          canAmend={canAmend}
-          head={head}
-          author={author}
-          onAuthorChange={setAuthor}
-          signoff={signoff}
-          onSignoffChange={setSignoff}
-          runHooks={runHooks}
-          onRunHooksChange={changeRunHooks}
-          staged={staged}
-          conflicts={conflicts}
-          operation={operation}
-          onCommit={() => void commit()}
-          onCancel={cancelCommit}
-          busy={committing}
-          output={commitOutput}
-          history={commitHistory}
-          onPickHistory={writeMessage}
-        />
+        <>
+          <CommitBox
+            value={commitMessage}
+            onChange={writeMessage}
+            amend={amend}
+            onAmendChange={(next) => void changeAmend(next)}
+            canAmend={canAmend}
+            head={head}
+            author={author}
+            onAuthorChange={setAuthor}
+            signoff={signoff}
+            onSignoffChange={setSignoff}
+            runHooks={runHooks}
+            onRunHooksChange={changeRunHooks}
+            staged={staged}
+            conflicts={conflicts}
+            operation={operation}
+            onCommit={() => void commit()}
+            onCancel={cancelCommit}
+            busy={committing}
+            output={commitOutput}
+            history={commitHistory}
+            onPickHistory={writeMessage}
+          />
+
+          {commitNotice !== null && (
+            <p className="app__notice" data-testid="commit-notice">
+              <span className="app__notice-text">
+                {t('commit.committed', { id: commitNotice })}
+              </span>
+              <button
+                type="button"
+                className="app__notice-copy"
+                data-testid="commit-copy"
+                onClick={copyShortId}
+              >
+                {t(copied ? 'commit.copied' : 'commit.copy')}
+              </button>
+            </p>
+          )}
+        </>
       )}
 
       <main className="app__body">{renderBody()}</main>

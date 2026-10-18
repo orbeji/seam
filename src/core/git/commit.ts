@@ -53,6 +53,16 @@ function combine(stdout: string, stderr: string): string {
   return [stdout.trimEnd(), stderr.trimEnd()].filter((part) => part !== '').join('\n')
 }
 
+/** The abbreviated id of `HEAD`, read once the commit exists. Empty when unreadable. */
+async function readShortId(runner: GitRunner, repo: string): Promise<string> {
+  const result = await runner.run(['rev-parse', '--short', 'HEAD'], {
+    cwd: repo,
+    readOnly: true
+  })
+  if (result.code !== 0) return ''
+  return result.stdout.toString('utf8').trim()
+}
+
 /**
  * Recognises, from Git's own wording under `LC_ALL=C`, the refusals the
  * interface does something about: a missing identity opens the identity dialog,
@@ -105,6 +115,7 @@ export async function createCommit(
         reason: null,
         timedOut: false,
         cancelled: false,
+        shortId: '',
         crlf: remaining
       }
     }
@@ -125,9 +136,13 @@ export async function createCommit(
     const created = result.code === 0
     // Git writes most refusals to stderr, but "nothing to commit" to stdout.
     const output = combine(stdout, stderr)
+    // The short id the notification shows is read only once Git reports the
+    // commit; a failed read leaves it empty rather than failing the commit.
+    const shortId = created ? await readShortId(runner, repo) : ''
     return {
       created,
       output,
+      shortId,
       message: created
         ? ''
         : stderr !== ''
@@ -151,6 +166,7 @@ export async function createCommit(
         reason: null,
         timedOut: false,
         cancelled: true,
+        shortId: '',
         crlf: []
       }
     }
@@ -162,6 +178,7 @@ export async function createCommit(
         reason: null,
         timedOut: true,
         cancelled: false,
+        shortId: '',
         crlf: []
       }
     }

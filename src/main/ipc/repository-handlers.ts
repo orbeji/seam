@@ -1,6 +1,13 @@
 // SPDX-License-Identifier: MIT
 
-import { BrowserWindow, dialog, ipcMain, type OpenDialogOptions, type WebContents } from 'electron'
+import {
+  BrowserWindow,
+  clipboard,
+  dialog,
+  ipcMain,
+  type OpenDialogOptions,
+  type WebContents
+} from 'electron'
 import type {
   CommitRequest,
   CrlfChoice,
@@ -402,6 +409,14 @@ export function registerRepositoryHandlers(
         message: error instanceof Error ? error.message : String(error)
       }
     }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.writeClipboardText, (_event, text: unknown) => {
+    if (typeof text !== 'string') {
+      return { ok: false, code: 'unknown', message: 'Invalid clipboard text' }
+    }
+    clipboard.writeText(text)
+    return { ok: true, value: null }
   })
 
   ipcMain.handle(IPC_CHANNELS.readHeadCommit, (_event, repo: unknown) => {

@@ -48,6 +48,9 @@
     "output": "Salida de los hooks",
     "timedOut": "El commit seguía en marcha tras cinco minutos y se ha detenido.",
     "history": "Historial",
+    "committed": "Commit {{id}} creado.",
+    "copy": "Copiar",
+    "copied": "Copiado",
     "author": {
       "label": "Autor",
       "placeholder": "Nombre <correo>"
