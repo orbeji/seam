@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 import type { CommitFailure, CommitOutcome, HeadCommit } from '../../shared/git'
+import { findCrlfProblems, fixCrlf } from './eol'
 import { GitAbortError, GitTimeoutError } from './errors'
 import type { GitRunner } from './runner'
 
@@ -21,6 +22,18 @@ export interface CommitOptions {
   readonly signoff?: boolean
   /** Skips the `pre-commit` and `commit-msg` hooks. */
   readonly noVerify?: boolean
+  /**
+   * Runs the CRLF check before committing: a file that would commit CRLF into
+   * the index without attributes comes back as a warning outcome instead of a
+   * commit, so the interface can ask what to do.
+   */
+  readonly checkCrlf?: boolean
+  /**
+   * Runs the same check but fixes what it finds first, with `core.autocrlf` on
+   * the repository and `add --renormalize`, and commits only when the index
+   * comes back clean. It is the answer "Fix and Commit".
+   */
+  readonly fixCrlf?: boolean
   /** Kills the commit when the caller cancels, for a hook that will not end. */
   readonly signal?: AbortSignal
 }
@@ -75,6 +88,28 @@ export async function createCommit(
   message: string,
   options: CommitOptions = {}
 ): Promise<CommitOutcome> {
+  // The CRLF check is Seam's own and runs before Git does: with nothing to fix
+  // it says nothing, and a warning comes back as an outcome the interface
+  // answers by committing as they are, fixing the endings, or cancelling.
+  if (options.checkCrlf === true || options.fixCrlf === true) {
+    const problems = await findCrlfProblems(runner, repo)
+    const remaining =
+      options.fixCrlf === true && problems.length > 0
+        ? await fixCrlf(runner, repo, problems)
+        : problems
+    if (remaining.length > 0) {
+      return {
+        created: false,
+        output: '',
+        message: '',
+        reason: null,
+        timedOut: false,
+        cancelled: false,
+        crlf: remaining
+      }
+    }
+  }
+
   const runOptions = {
     cwd: repo,
     stdin: Buffer.from(message, 'utf8'),
@@ -102,7 +137,8 @@ export async function createCommit(
             : 'Git refused the commit.',
       reason: created ? null : commitFailure(output),
       timedOut: false,
-      cancelled: false
+      cancelled: false,
+      crlf: []
     }
   } catch (error) {
     // A cancelled or timed-out commit is a plain outcome, not a failure: the
@@ -114,7 +150,8 @@ export async function createCommit(
         message: '',
         reason: null,
         timedOut: false,
-        cancelled: true
+        cancelled: true,
+        crlf: []
       }
     }
     if (error instanceof GitTimeoutError) {
@@ -124,7 +161,8 @@ export async function createCommit(
         message: '',
         reason: null,
         timedOut: true,
-        cancelled: false
+        cancelled: false,
+        crlf: []
       }
     }
     throw error

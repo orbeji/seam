@@ -126,6 +126,17 @@
       "takeWorktreeHunk": "Tomar este cambio de la copia de trabajo"
     }
   },
+  "eol": {
+    "title": "Fin de línea",
+    "explain": "Estos archivos preparados llevan fin de línea CRLF al repositorio y ningún atributo lo evita. Confirmarlos guarda CRLF en el índice, y mezcla los finales con los archivos que ya usan LF.",
+    "asIs": "Confirmar tal cual",
+    "fix": "Corregir y confirmar",
+    "cancel": "Cancelar",
+    "disable": "No volver a avisar sobre CRLF",
+    "scope": "Guardarlo",
+    "scopeRepo": "Solo en este repositorio",
+    "scopeGlobal": "En todos los repositorios"
+  },
   "errors": {
     "gitNotFound": "No se ha encontrado Git. Instala Git 2.30 o posterior y vuelve a abrir Seam.",
     "gitTooOld": "El Git instalado es demasiado antiguo. Se necesita la versión 2.30 o posterior.",

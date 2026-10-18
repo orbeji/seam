@@ -15,7 +15,7 @@ import type {
  * interface. Bump it whenever a message shape changes so the three layers can
  * detect a mismatch instead of failing silently.
  */
-export const IPC_CONTRACT_VERSION = 13
+export const IPC_CONTRACT_VERSION = 14
 
 /** Channel names shared by the main process and the preload bridge. */
 export const IPC_CHANNELS = {
@@ -205,6 +205,23 @@ export interface CommitRequest {
   readonly signoff: boolean
   /** Whether the `pre-commit` and `commit-msg` hooks run; false adds `--no-verify`. */
   readonly runHooks: boolean
+  /**
+   * The answer to a CRLF warning this commit showed. Absent means no answer
+   * yet: the check runs if the preference allows it, and a file that would
+   * commit CRLF comes back as a warning instead of a commit.
+   */
+  readonly crlf?: CrlfChoice
+}
+
+/** How the interface answers the CRLF warning before a commit. */
+export interface CrlfChoice {
+  /** Whether the endings are fixed before committing (Fix and Commit). */
+  readonly fix: boolean
+  /**
+   * Stops the warning from showing, for this repository or for every one of
+   * them. Commit As Is and Fix and Commit can carry it; Cancel cannot.
+   */
+  readonly disable?: 'repo' | 'global'
 }
 
 /** An identity the user typed in the dialog, and where to keep it. */
@@ -276,8 +293,9 @@ export interface SeamApi {
   writeCommitDraft(request: CommitDraftWriteRequest): Promise<IpcResult<null>>
   /**
    * Creates a commit from the index, or reports why Git refused one. The
-   * outcome carries the hooks' output for the panel under the button; only a
-   * failure to reach Git itself is an error.
+   * outcome carries the hooks' output for the panel under the button, and the
+   * staged files behind a CRLF warning when one is due; only a failure to
+   * reach Git itself is an error.
    */
   commit(request: CommitRequest): Promise<IpcResult<CommitOutcome>>
   /**

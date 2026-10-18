@@ -3,9 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { ChangeSummary, HeadCommit, IdentityScope } from '../shared/git'
-import type { FileVersionSource, IpcErrorCode, RepositorySnapshot } from '../shared/ipc'
+import type { CrlfChoice, FileVersionSource, IpcErrorCode, RepositorySnapshot } from '../shared/ipc'
 import ChangesView from './changes/ChangesView'
 import CommitBox from './commit/CommitBox'
+import EolDialog, { type EolAnswer } from './commit/EolDialog'
 import IdentityDialog from './commit/IdentityDialog'
 import DiffView from './diff/DiffView'
 import { ERROR_KEYS } from './errors'
@@ -96,6 +97,9 @@ export default function App() {
   const [commitHistory, setCommitHistory] = useState<readonly string[]>([])
   // Whether a commit is being created, so its button cannot be pressed twice.
   const [committing, setCommitting] = useState(false)
+  // The staged files a CRLF warning is about, with the dialog open over them,
+  // or null when no warning is due. The commit waits for the dialog's answer.
+  const [crlfPrompt, setCrlfPrompt] = useState<readonly string[] | null>(null)
   // The identity the dialog is asking for, with whatever Git already has, or
   // null when the dialog is closed. It opens before a commit that lacks one.
   const [identityPrompt, setIdentityPrompt] = useState<{ name: string; email: string } | null>(null)
@@ -113,6 +117,7 @@ export default function App() {
     setSignoff(false)
     setCommitOutput(null)
     setCommitHistory([])
+    setCrlfPrompt(null)
     setIdentityPrompt(null)
     setView({ state: 'loading' })
     const result = await window.seam.readRepositoryStatus(repo)
@@ -278,71 +283,84 @@ export default function App() {
   // the lists are read again. A failed commit keeps the message for another try.
   //
   // Git refuses to commit without a name and an address, so they are read first;
-  // when either is missing the dialog opens and the commit waits for it.
-  const commit = useCallback(async () => {
-    const repo = repoRef.current
-    if (repo === null) return
-    setWriteError(null)
+  // when either is missing the dialog opens and the commit waits for it. The
+  // same happens for staged files that would commit CRLF: `crlf` carries the
+  // answer to that warning, and without one the main process decides from the
+  // preference whether to check at all.
+  const commit = useCallback(
+    async (crlf?: CrlfChoice) => {
+      const repo = repoRef.current
+      if (repo === null) return
+      setWriteError(null)
 
-    const identity = await window.seam.readIdentity(repo)
-    if (identity.ok && (identity.value.name === null || identity.value.email === null)) {
-      setIdentityPrompt({ name: identity.value.name ?? '', email: identity.value.email ?? '' })
-      return
-    }
-
-    setCommitting(true)
-    try {
-      const result = await window.seam.commit({
-        repo,
-        message: commitMessage,
-        amend,
-        author,
-        signoff,
-        runHooks
-      })
-      if (!result.ok) {
-        setWriteError({ code: result.code, message: result.message })
+      const identity = await window.seam.readIdentity(repo)
+      if (identity.ok && (identity.value.name === null || identity.value.email === null)) {
+        setIdentityPrompt({ name: identity.value.name ?? '', email: identity.value.email ?? '' })
         return
       }
 
-      const outcome = result.value
-      setCommitOutput(outcome.output === '' ? null : outcome.output)
-
-      // A cancelled or timed-out commit keeps the message; the wait is over and
-      // the box goes back to normal.
-      if (outcome.cancelled) return
-      if (outcome.timedOut) {
-        setWriteError({ code: 'command-failed', message: t('commit.timedOut') })
-        return
-      }
-
-      if (!outcome.created) {
-        // Git refused. A missing identity is the one refusal Seam can fix here.
-        if (outcome.reason === 'identity') {
-          const again = await window.seam.readIdentity(repo)
-          setIdentityPrompt({
-            name: again.ok ? (again.value.name ?? '') : '',
-            email: again.ok ? (again.value.email ?? '') : ''
-          })
+      setCommitting(true)
+      try {
+        const result = await window.seam.commit({
+          repo,
+          message: commitMessage,
+          amend,
+          author,
+          signoff,
+          runHooks,
+          ...(crlf === undefined ? {} : { crlf })
+        })
+        if (!result.ok) {
+          setWriteError({ code: result.code, message: result.message })
           return
         }
-        setWriteError({ code: 'command-failed', message: outcome.message })
-        return
-      }
 
-      setCommitMessage('')
-      setAmend(false)
-      setHead(null)
-      draftBeforeAmend.current = null
-      await window.seam.writeCommitDraft({ repo, message: '' })
-      await refresh()
-      // The message just confirmed is the newest one the history offers.
-      const history = await window.seam.readCommitHistory(repo)
-      if (history.ok) setCommitHistory(history.value)
-    } finally {
-      setCommitting(false)
-    }
-  }, [commitMessage, amend, author, signoff, runHooks, refresh, t])
+        const outcome = result.value
+        setCommitOutput(outcome.output === '' ? null : outcome.output)
+
+        // A cancelled or timed-out commit keeps the message; the wait is over and
+        // the box goes back to normal.
+        if (outcome.cancelled) return
+        if (outcome.timedOut) {
+          setWriteError({ code: 'command-failed', message: t('commit.timedOut') })
+          return
+        }
+
+        if (!outcome.created) {
+          // Staged files that would commit CRLF: Seam's own warning, answered by
+          // the dialog with a fix, a commit as they are, or nothing at all.
+          if (outcome.crlf.length > 0) {
+            setCrlfPrompt(outcome.crlf)
+            return
+          }
+          // Git refused. A missing identity is the one refusal Seam can fix here.
+          if (outcome.reason === 'identity') {
+            const again = await window.seam.readIdentity(repo)
+            setIdentityPrompt({
+              name: again.ok ? (again.value.name ?? '') : '',
+              email: again.ok ? (again.value.email ?? '') : ''
+            })
+            return
+          }
+          setWriteError({ code: 'command-failed', message: outcome.message })
+          return
+        }
+
+        setCommitMessage('')
+        setAmend(false)
+        setHead(null)
+        draftBeforeAmend.current = null
+        await window.seam.writeCommitDraft({ repo, message: '' })
+        await refresh()
+        // The message just confirmed is the newest one the history offers.
+        const history = await window.seam.readCommitHistory(repo)
+        if (history.ok) setCommitHistory(history.value)
+      } finally {
+        setCommitting(false)
+      }
+    },
+    [commitMessage, amend, author, signoff, runHooks, refresh, t]
+  )
 
   // Stops a commit a hook is holding up, so the user is not stuck for five
   // minutes. The main process kills the Git command and the message is kept.
@@ -351,6 +369,20 @@ export default function App() {
     if (repo === null) return
     void window.seam.cancelCommit(repo)
   }, [])
+
+  // Answers the CRLF warning: fix the endings and commit, commit as they are,
+  // or leave the commit alone. A "do not warn again" travels with the commit
+  // that follows it, so it is only kept when the commit goes ahead.
+  const answerCrlf = useCallback(
+    async (answer: EolAnswer) => {
+      setCrlfPrompt(null)
+      await commit({
+        fix: answer.fix,
+        ...(answer.disable === null ? {} : { disable: answer.disable })
+      })
+    },
+    [commit]
+  )
 
   // Remembers whether hooks run, so the choice survives the next window.
   const changeRunHooks = useCallback((next: boolean) => {
@@ -472,6 +504,14 @@ export default function App() {
           error={writeError?.message ?? null}
           onSave={(identity) => void saveIdentity(identity)}
           onCancel={() => setIdentityPrompt(null)}
+        />
+      )}
+
+      {crlfPrompt !== null && (
+        <EolDialog
+          files={crlfPrompt}
+          onAnswer={(answer) => void answerCrlf(answer)}
+          onCancel={() => setCrlfPrompt(null)}
         />
       )}
     </div>

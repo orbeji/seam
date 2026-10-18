@@ -3,6 +3,7 @@
 import { BrowserWindow, dialog, ipcMain, type OpenDialogOptions, type WebContents } from 'electron'
 import type {
   CommitRequest,
+  CrlfChoice,
   FileVersionSource,
   HunkRange,
   HunkWriteRequest,
@@ -124,10 +125,44 @@ function parseMessageRequest(value: unknown): { repo: string; message: string } 
 function parseCommitRequest(value: unknown): CommitRequest | null {
   const base = parseMessageRequest(value)
   if (base === null) return null
-  const { amend, author, signoff, runHooks } = value as Record<string, unknown>
+  const { amend, author, signoff, runHooks, crlf } = value as Record<string, unknown>
   if (typeof amend !== 'boolean' || typeof signoff !== 'boolean') return null
   if (typeof author !== 'string' || typeof runHooks !== 'boolean') return null
-  return { repo: base.repo, message: base.message, amend, author, signoff, runHooks }
+  const choice = crlf === undefined ? null : parseCrlfChoice(crlf)
+  if (crlf !== undefined && choice === null) return null
+  return {
+    repo: base.repo,
+    message: base.message,
+    amend,
+    author,
+    signoff,
+    runHooks,
+    ...(choice === null ? {} : { crlf: choice })
+  }
+}
+
+/** Narrows an IPC payload to the answer to a CRLF warning, rejecting anything else. */
+function parseCrlfChoice(value: unknown): CrlfChoice | null {
+  if (typeof value !== 'object' || value === null) return null
+  const { fix, disable } = value as Record<string, unknown>
+  if (typeof fix !== 'boolean') return null
+  if (disable !== undefined && disable !== 'repo' && disable !== 'global') return null
+  return { fix, ...(disable === undefined ? {} : { disable }) }
+}
+
+/**
+ * What the commit does about CRLF endings: an answer to the warning decides,
+ * and before any answer the preference says whether the check runs at all.
+ */
+function crlfOptionsFor(
+  parsed: CommitRequest,
+  settings: Settings
+): { checkCrlf?: true; fixCrlf?: true } {
+  if (parsed.crlf === undefined) {
+    return settings.crlfWarningFor(parsed.repo) ? { checkCrlf: true } : {}
+  }
+  // Commit As Is carries neither flag, so the commit runs without the check.
+  return parsed.crlf.fix ? { fixCrlf: true } : {}
 }
 
 /** Narrows an IPC payload to an identity to store, rejecting anything else. */
@@ -291,11 +326,16 @@ export function registerRepositoryHandlers(
       return { ok: false, code: 'unknown', message: 'Invalid commit request' }
     }
     settings.setRunHooks(parsed.runHooks)
+    // A "do not warn again" travels with the commit that answers the warning.
+    if (parsed.crlf?.disable === 'repo') settings.setCrlfWarningFor(parsed.repo, false)
+    if (parsed.crlf?.disable === 'global') settings.setCrlfWarning(false)
+
     const result = await service.commit(parsed.repo, parsed.message, {
       amend: parsed.amend,
       author: parsed.author,
       signoff: parsed.signoff,
-      noVerify: !parsed.runHooks
+      noVerify: !parsed.runHooks,
+      ...crlfOptionsFor(parsed, settings)
     })
 
     // A message Seam confirmed joins the repository's history, so the box can

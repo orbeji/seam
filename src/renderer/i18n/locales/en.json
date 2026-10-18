@@ -126,6 +126,17 @@
       "takeWorktreeHunk": "Take this change from the working copy"
     }
   },
+  "eol": {
+    "title": "Line endings",
+    "explain": "These staged files carry CRLF line endings into the repository, and no attribute says otherwise. Committing them stores CRLF in the index, which mixes endings with the files that already use LF.",
+    "asIs": "Commit As Is",
+    "fix": "Fix and Commit",
+    "cancel": "Cancel",
+    "disable": "Do not warn me about CRLF again",
+    "scope": "Keep it",
+    "scopeRepo": "Only for this repository",
+    "scopeGlobal": "For all repositories"
+  },
   "errors": {
     "gitNotFound": "Git was not found. Install Git 2.30 or newer and reopen Seam.",
     "gitTooOld": "The installed Git is too old. Version 2.30 or newer is required.",

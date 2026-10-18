@@ -4,6 +4,7 @@
 export type * from '../../shared/git'
 export * from './changes'
 export * from './commit'
+export * from './eol'
 export * from './errors'
 export * from './identity'
 export * from './index-write'

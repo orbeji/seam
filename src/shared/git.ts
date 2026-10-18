@@ -114,6 +114,12 @@ export interface CommitOutcome {
   readonly timedOut: boolean
   /** Whether the user cancelled the commit. */
   readonly cancelled: boolean
+  /**
+   * The staged files the CRLF warning is about: they would commit CRLF into
+   * the index without attributes to justify it, and the commit waits for the
+   * dialog's answer. Empty when there is nothing to warn about.
+   */
+  readonly crlf: readonly string[]
 }
 
 /**
