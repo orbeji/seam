@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { _electron as electron, type ElectronApplication, type Page } from 'playwright-core'
@@ -76,6 +76,11 @@ async function openFile(): Promise<void> {
   await page.waitForSelector(`${FORWARD}, ${BACK}`)
 }
 
+/** The working copy as it is on disk, read straight from the repository. */
+function worktreeText(): string {
+  return readFileSync(join(repository.path, 'f.txt'), 'utf8')
+}
+
 /** Opens the marker menu of the first pending change and asks to revert it. */
 async function openRevertConfirm(): Promise<void> {
   await page.locator(FORWARD).first().click()
@@ -96,14 +101,14 @@ describe('reverting a hunk in the viewer', () => {
     await page.waitForSelector('[data-testid=revert-confirm]')
     await page.locator('[data-testid=revert-accept]').click()
 
-    // The file loses the reverted line and keeps the other pending change.
-    await expect
-      .poll(async () => (await repository.git(['diff', '--', 'f.txt'])).includes('+TWO'), {
-        timeout: WAIT_MS
-      })
-      .toBe(false)
+    // Wait on the finished text, not on the absence of the reverted line: the
+    // working copy is written where it lies, so a reader can catch it empty for
+    // an instant, and moving on then would let a late write leak into the next
+    // test.
+    await expect.poll(worktreeText, { timeout: WAIT_MS }).toBe('one\ntwo\nthree\nFOUR\nfive\nsix\n')
     const pending = await repository.git(['diff', '--', 'f.txt'])
     expect(pending).toContain('+FOUR')
+    expect(pending).not.toContain('+TWO')
     // The index was never touched, so nothing is prepared for the next commit.
     expect(await repository.git(['diff', '--cached', '--', 'f.txt'])).toBe('')
 
