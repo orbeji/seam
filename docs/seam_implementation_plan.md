@@ -115,7 +115,7 @@ En total son unas 14 semanas de trabajo a tiempo completo (estimación aproximad
 - [ ] Detector de operación en curso: merge, rebase, cherry-pick y revert, por los archivos del directorio de git.
 - [ ] Script que crea tres repositorios de ejemplo: limpio, con cambios mezclados y con conflictos.
 - [ ] Comprobar que `git checkout --merge -- <ruta>` restaura un conflicto ya resuelto.
-- [ ] Traducciones: textos en catálogos por idioma (inglés y español), selector de idioma, detección del idioma del sistema y una regla de ESLint que prohíbe textos escritos directamente en los componentes.
+- [ ] Traducciones: textos en catálogos por idioma (inglés y español), selector de idioma, detección del idioma del sistema y una regla de ESLint que prohíbe textos escritos directamente en los componentes. **Regla de estilo:** los términos Git (`push`, `pull`, `merge`, `commit`, `branch`, `checkout`, `rebase`, `stash`, `clone`, `fetch`, `amend`...) se dejan sin traducir en el catálogo en español, porque así se usan en la industria y traducirlos sonaría ajeno a quien trabaja con Git.
 
 ### Fase 1: motor de diff y visor
 
@@ -192,7 +192,7 @@ En total son unas 14 semanas de trabajo a tiempo completo (estimación aproximad
 - [ ] Decidir si el instalador incluye Git o exige tenerlo instalado, y si el instalador de Windows se firma.
 - [ ] Instalador para Windows y AppImage y .deb para Linux con electron-builder.
 - [ ] Prueba de humo de cada instalador en un sistema limpio.
-- [ ] Revisar las traducciones al inglés y al español de todas las pantallas.
+- [ ] Revisar las traducciones al inglés y al español de todas las pantallas, manteniendo los términos Git (`push`, `pull`, `merge`, `commit`...) sin traducir, que es como se usan en la industria.
 - [ ] README con capturas, guía de contribución y licencia.
 - [ ] Etiqueta 0.1.0 y publicación de los binarios.
 

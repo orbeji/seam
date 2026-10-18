@@ -20,7 +20,7 @@
       "staged": "Preparados",
       "unstaged": "Sin preparar",
       "untracked": "Sin seguimiento",
-      "conflicts": "Conflictos de fusión"
+      "conflicts": "Conflictos de merge"
     },
     "actions": {
       "stage": "Preparar",
@@ -29,7 +29,7 @@
       "unstageAll": "Quitar todo"
     },
     "operation": {
-      "merge": "Fusión en curso",
+      "merge": "Merge en curso",
       "cherry-pick": "Cherry-pick en curso",
       "revert": "Revert en curso",
       "rebase": "Rebase en curso"
