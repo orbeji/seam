@@ -4,6 +4,7 @@ import { app, BrowserWindow } from 'electron'
 import { join } from 'node:path'
 import { registerRepositoryHandlers } from './ipc/repository-handlers'
 import { CommitDrafts } from './session/commit-drafts'
+import { CommitHistory } from './session/commit-history'
 import { repositoryFromArgv } from './session/launch-arguments'
 import { RecentRepositories } from './session/recent-repositories'
 import { RepositoryService } from './session/repository-service'
@@ -50,10 +51,18 @@ function createWindow(): BrowserWindow {
 void app.whenReady().then(() => {
   const recent = new RecentRepositories(join(app.getPath('userData'), 'recent-repositories.json'))
   const drafts = new CommitDrafts(join(app.getPath('userData'), 'commit-drafts.json'))
+  const history = new CommitHistory(join(app.getPath('userData'), 'commit-history.json'))
   const settings = new Settings(join(app.getPath('userData'), 'settings.json'))
   const initialRepository = repositoryFromArgv(process.argv)
   if (initialRepository) recent.remember(initialRepository)
-  registerRepositoryHandlers(new RepositoryService(), recent, drafts, settings, initialRepository)
+  registerRepositoryHandlers(
+    new RepositoryService(),
+    recent,
+    drafts,
+    history,
+    settings,
+    initialRepository
+  )
 
   createWindow()
 

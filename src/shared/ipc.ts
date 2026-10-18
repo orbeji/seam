@@ -15,7 +15,7 @@ import type {
  * interface. Bump it whenever a message shape changes so the three layers can
  * detect a mismatch instead of failing silently.
  */
-export const IPC_CONTRACT_VERSION = 12
+export const IPC_CONTRACT_VERSION = 13
 
 /** Channel names shared by the main process and the preload bridge. */
 export const IPC_CHANNELS = {
@@ -37,6 +37,8 @@ export const IPC_CHANNELS = {
   createCommit: 'commit:create',
   cancelCommit: 'commit:cancel',
   readHeadCommit: 'commit:head',
+  readCommitHistory: 'commit:history:read',
+  readCommitTemplate: 'commit:template',
   readIdentity: 'identity:read',
   writeIdentity: 'identity:write',
   readSettings: 'settings:read',
@@ -273,11 +275,6 @@ export interface SeamApi {
   /** Stores or clears a repository's unconfirmed commit message; never throws. */
   writeCommitDraft(request: CommitDraftWriteRequest): Promise<IpcResult<null>>
   /**
-   * Creates a commit from the index with the given message; never throws. A
-   * failed hook or a missing identity comes back as an error result, not a
-   * thrown exception.
-   */
-  /**
    * Creates a commit from the index, or reports why Git refused one. The
    * outcome carries the hooks' output for the panel under the button; only a
    * failure to reach Git itself is an error.
@@ -294,6 +291,17 @@ export interface SeamApi {
    * the repository has no commits yet.
    */
   readHeadCommit(repo: string): Promise<IpcResult<HeadCommit>>
+  /**
+   * The last messages confirmed from Seam in a repository, newest first, so the
+   * box can offer one again; never throws.
+   */
+  readCommitHistory(repo: string): Promise<IpcResult<readonly string[]>>
+  /**
+   * The text of the repository's `commit.template`, or null when none is set;
+   * never throws. It is loaded here because Git would only use it with an
+   * editor, and Seam always passes the message over stdin.
+   */
+  readCommitTemplate(repo: string): Promise<IpcResult<string | null>>
   /**
    * The name and address Git would sign with; never throws. A null field means
    * the configuration does not set it and the commit would fail without help.

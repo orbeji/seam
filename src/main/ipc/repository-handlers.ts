@@ -13,6 +13,7 @@ import type {
 } from '../../shared/ipc'
 import { IPC_CHANNELS } from '../../shared/ipc'
 import type { CommitDrafts } from '../session/commit-drafts'
+import type { CommitHistory } from '../session/commit-history'
 import type { GitWatcher } from '../session/git-watcher'
 import type { RecentRepositories } from '../session/recent-repositories'
 import type { RepositoryService } from '../session/repository-service'
@@ -156,6 +157,7 @@ export function registerRepositoryHandlers(
   service: RepositoryService,
   recent: RecentRepositories,
   drafts: CommitDrafts,
+  history: CommitHistory,
   settings: Settings,
   initialRepository: string | null
 ): void {
@@ -283,18 +285,29 @@ export function registerRepositoryHandlers(
     }
   })
 
-  ipcMain.handle(IPC_CHANNELS.createCommit, (_event, request: unknown) => {
+  ipcMain.handle(IPC_CHANNELS.createCommit, async (_event, request: unknown) => {
     const parsed = parseCommitRequest(request)
     if (parsed === null) {
       return { ok: false, code: 'unknown', message: 'Invalid commit request' }
     }
     settings.setRunHooks(parsed.runHooks)
-    return service.commit(parsed.repo, parsed.message, {
+    const result = await service.commit(parsed.repo, parsed.message, {
       amend: parsed.amend,
       author: parsed.author,
       signoff: parsed.signoff,
       noVerify: !parsed.runHooks
     })
+
+    // A message Seam confirmed joins the repository's history, so the box can
+    // offer it again. A failure to write the history must not lose the commit.
+    if (result.ok && result.value.created) {
+      try {
+        history.remember(parsed.repo, parsed.message)
+      } catch {
+        /* the commit already exists; only remembering it failed */
+      }
+    }
+    return result
   })
 
   ipcMain.handle(IPC_CHANNELS.cancelCommit, (_event, repo: unknown) => {
@@ -302,6 +315,28 @@ export function registerRepositoryHandlers(
       return { ok: false, code: 'unknown', message: 'Invalid cancel request' }
     }
     return service.cancelCommit(repo)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.readCommitHistory, (_event, repo: unknown) => {
+    if (typeof repo !== 'string') {
+      return { ok: false, code: 'unknown', message: 'Invalid history request' }
+    }
+    try {
+      return { ok: true, value: history.read(repo) }
+    } catch (error) {
+      return {
+        ok: false,
+        code: 'unknown',
+        message: error instanceof Error ? error.message : String(error)
+      }
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.readCommitTemplate, (_event, repo: unknown) => {
+    if (typeof repo !== 'string') {
+      return { ok: false, code: 'unknown', message: 'Invalid template request' }
+    }
+    return service.readCommitTemplate(repo)
   })
 
   ipcMain.handle(IPC_CHANNELS.readSettings, () => ({

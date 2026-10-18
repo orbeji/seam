@@ -11,6 +11,7 @@ import {
   GitNotFoundError,
   GitRunner,
   GitVersionError,
+  readCommitTemplate,
   readComparison,
   readFileModel,
   readHeadCommit,
@@ -277,6 +278,18 @@ export class RepositoryService {
 
     try {
       return { ok: true, value: await readHeadCommit(this.runner, repo) }
+    } catch (error) {
+      return failureFrom(error)
+    }
+  }
+
+  /** The text of the repository's `commit.template`, or null when none is set. */
+  async readCommitTemplate(repo: string): Promise<IpcResult<string | null>> {
+    const opened = await this.open(repo)
+    if (!opened.ok) return opened
+
+    try {
+      return { ok: true, value: await readCommitTemplate(this.runner, repo) }
     } catch (error) {
       return failureFrom(error)
     }

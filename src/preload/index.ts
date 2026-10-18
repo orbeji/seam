@@ -62,6 +62,12 @@ const seamApi: SeamApi = {
     ipcRenderer.invoke(IPC_CHANNELS.cancelCommit, repo) as Promise<IpcResult<null>>,
   readHeadCommit: (repo: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.readHeadCommit, repo) as Promise<IpcResult<HeadCommit>>,
+  readCommitHistory: (repo: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.readCommitHistory, repo) as Promise<
+      IpcResult<readonly string[]>
+    >,
+  readCommitTemplate: (repo: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.readCommitTemplate, repo) as Promise<IpcResult<string | null>>,
   readIdentity: (repo: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.readIdentity, repo) as Promise<IpcResult<Identity>>,
   writeIdentity: (request: IdentityWriteRequest) =>
