@@ -42,6 +42,11 @@
     },
     "amend": "Amend",
     "amendPublished": "This commit is already published; amending it will need a force push.",
+    "signoff": "Sign-off",
+    "author": {
+      "label": "Author",
+      "placeholder": "Name <email>"
+    },
     "button": "Commit",
     "reason": {
       "nothing-staged": "Nothing is staged.",

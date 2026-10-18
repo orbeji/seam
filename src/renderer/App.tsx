@@ -80,6 +80,10 @@ export default function App() {
   // before it, so the draft comes back when Amend is unchecked.
   const [head, setHead] = useState<HeadCommit | null>(null)
   const draftBeforeAmend = useRef<string | null>(null)
+  // The author to sign as and whether to add the sign-off trailer. They belong
+  // to the repository, so they stay across commits and reset with it.
+  const [author, setAuthor] = useState('')
+  const [signoff, setSignoff] = useState(false)
   // Whether a commit is being created, so its button cannot be pressed twice.
   const [committing, setCommitting] = useState(false)
   // The identity the dialog is asking for, with whatever Git already has, or
@@ -95,6 +99,8 @@ export default function App() {
     setAmend(false)
     setHead(null)
     draftBeforeAmend.current = null
+    setAuthor('')
+    setSignoff(false)
     setIdentityPrompt(null)
     setView({ state: 'loading' })
     const result = await window.seam.readRepositoryStatus(repo)
@@ -257,7 +263,13 @@ export default function App() {
 
     setCommitting(true)
     try {
-      const result = await window.seam.commit({ repo, message: commitMessage, amend })
+      const result = await window.seam.commit({
+        repo,
+        message: commitMessage,
+        amend,
+        author,
+        signoff
+      })
       if (!result.ok) {
         setWriteError({ code: result.code, message: result.message })
         return
@@ -271,7 +283,7 @@ export default function App() {
     } finally {
       setCommitting(false)
     }
-  }, [commitMessage, amend, refresh])
+  }, [commitMessage, amend, author, signoff, refresh])
 
   // Stores the identity the dialog asked for and, if Git takes it, commits the
   // message that was waiting.
@@ -326,6 +338,10 @@ export default function App() {
           onAmendChange={(next) => void changeAmend(next)}
           canAmend={canAmend}
           head={head}
+          author={author}
+          onAuthorChange={setAuthor}
+          signoff={signoff}
+          onSignoffChange={setSignoff}
           staged={staged}
           conflicts={conflicts}
           operation={operation}

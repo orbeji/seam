@@ -13,6 +13,12 @@ interface CommitBoxProps {
   readonly canAmend: boolean
   /** The commit being amended, once known; null until Amend is read. */
   readonly head: HeadCommit | null
+  /** Signs as someone else, written `Name <email>`; empty uses the configured author. */
+  readonly author: string
+  readonly onAuthorChange: (author: string) => void
+  /** Whether the commit carries Git's `Signed-off-by` trailer. */
+  readonly signoff: boolean
+  readonly onSignoffChange: (signoff: boolean) => void
   /** Files in the index, ready to be committed. */
   readonly staged: number
   /** Files with unresolved conflicts. */
@@ -37,6 +43,10 @@ export default function CommitBox({
   onAmendChange,
   canAmend,
   head,
+  author,
+  onAuthorChange,
+  signoff,
+  onSignoffChange,
   staged,
   conflicts,
   operation,
@@ -61,8 +71,8 @@ export default function CommitBox({
         onChange={(event) => onChange(event.target.value)}
       />
 
-      <div className="commit__actions">
-        <label className="commit__amend">
+      <div className="commit__options">
+        <label className="commit__option">
           <input
             type="checkbox"
             data-testid="commit-amend"
@@ -72,7 +82,29 @@ export default function CommitBox({
           />
           {t('commit.amend')}
         </label>
+        <label className="commit__option">
+          <input
+            type="checkbox"
+            data-testid="commit-signoff"
+            checked={signoff}
+            onChange={(event) => onSignoffChange(event.target.checked)}
+          />
+          {t('commit.signoff')}
+        </label>
+        <label className="commit__author" htmlFor="commit-author">
+          <span className="commit__author-label">{t('commit.author.label')}</span>
+          <input
+            id="commit-author"
+            className="commit__author-input"
+            data-testid="commit-author"
+            placeholder={t('commit.author.placeholder')}
+            value={author}
+            onChange={(event) => onAuthorChange(event.target.value)}
+          />
+        </label>
+      </div>
 
+      <div className="commit__actions">
         {availability.kind === 'replaced' ? (
           <p
             className="commit__reason"

@@ -95,12 +95,37 @@ describe('createCommit', () => {
       await runner.runOrThrow(['add', 'f.txt'], { cwd: repo.path })
     }
 
-    await createCommit(runner, seam.path, MESSAGE)
-    await runner.runOrThrow(['commit', '-F', '-'], { cwd: terminal.path, stdin: MESSAGE })
+    const author = 'Ada Lovelace <ada@example.com>'
+    await createCommit(runner, seam.path, MESSAGE, { author, signoff: true })
+    await runner.runOrThrow(['commit', '-F', '-', `--author=${author}`, '--signoff'], {
+      cwd: terminal.path,
+      stdin: MESSAGE
+    })
 
     const head = async (repo: SampleRepository): Promise<string> =>
       (await runner.runOrThrow(['rev-parse', 'HEAD'], { cwd: repo.path })).stdout.toString('utf8')
     expect(await head(seam)).toBe(await head(terminal))
+  })
+
+  it('signs as another author and adds the sign-off trailer', async () => {
+    const repo = await repository()
+    await identity(repo)
+    repo.write('f.txt', 'one\n')
+    await repo.git(['add', '.'])
+
+    await createCommit(new GitRunner(), repo.path, 'base', {
+      author: 'Ada Lovelace <ada@example.com>',
+      signoff: true
+    })
+
+    expect(await repo.git(['log', '-1', '--format=%an <%ae>'])).toBe(
+      'Ada Lovelace <ada@example.com>\n'
+    )
+    // The sign-off uses the committer, not the author written above.
+    expect(await repo.git(['log', '-1', '--format=%cn <%ce>'])).toBe('Seam <seam@example.com>\n')
+    expect(await repo.git(['log', '-1', '--format=%B'])).toContain(
+      'Signed-off-by: Seam <seam@example.com>'
+    )
   })
 })
 

@@ -122,9 +122,10 @@ function parseMessageRequest(value: unknown): { repo: string; message: string } 
 function parseCommitRequest(value: unknown): CommitRequest | null {
   const base = parseMessageRequest(value)
   if (base === null) return null
-  const amend = (value as Record<string, unknown>)['amend']
-  if (typeof amend !== 'boolean') return null
-  return { repo: base.repo, message: base.message, amend }
+  const { amend, author, signoff } = value as Record<string, unknown>
+  if (typeof amend !== 'boolean' || typeof signoff !== 'boolean') return null
+  if (typeof author !== 'string') return null
+  return { repo: base.repo, message: base.message, amend, author, signoff }
 }
 
 /** Narrows an IPC payload to an identity to store, rejecting anything else. */
@@ -285,7 +286,11 @@ export function registerRepositoryHandlers(
     if (parsed === null) {
       return { ok: false, code: 'unknown', message: 'Invalid commit request' }
     }
-    return service.commit(parsed.repo, parsed.message, { amend: parsed.amend })
+    return service.commit(parsed.repo, parsed.message, {
+      amend: parsed.amend,
+      author: parsed.author,
+      signoff: parsed.signoff
+    })
   })
 
   ipcMain.handle(IPC_CHANNELS.readHeadCommit, (_event, repo: unknown) => {

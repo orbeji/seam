@@ -7,6 +7,20 @@ import type { GitRunner } from './runner'
 export interface CommitOptions {
   /** Rewrite the last commit with the index and the message instead of adding one. */
   readonly amend?: boolean
+  /** Signs the commit as someone else, written `Name <email>`. */
+  readonly author?: string
+  /** Adds Git's `Signed-off-by` trailer with the committer's identity. */
+  readonly signoff?: boolean
+}
+
+/** The flags for a commit, in the order the phase's table lists them. */
+function commitArgs(options: CommitOptions): string[] {
+  const args: string[] = []
+  if (options.amend === true) args.push('--amend')
+  const author = options.author?.trim()
+  if (author !== undefined && author !== '') args.push(`--author=${author}`)
+  if (options.signoff === true) args.push('--signoff')
+  return args
 }
 
 /**
@@ -23,9 +37,7 @@ export async function createCommit(
   message: string,
   options: CommitOptions = {}
 ): Promise<void> {
-  const args = ['commit', '-F', '-']
-  if (options.amend === true) args.push('--amend')
-  await runner.runOrThrow(args, {
+  await runner.runOrThrow(['commit', '-F', '-', ...commitArgs(options)], {
     cwd: repo,
     stdin: Buffer.from(message, 'utf8'),
     noEditor: true

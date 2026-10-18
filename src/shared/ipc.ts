@@ -193,6 +193,10 @@ export interface CommitRequest {
   readonly message: string
   /** Rewrite the last commit instead of making a new one. */
   readonly amend: boolean
+  /** Signs as someone else, written `Name <email>`; empty uses the configured author. */
+  readonly author: string
+  /** Adds Git's `Signed-off-by` trailer. */
+  readonly signoff: boolean
 }
 
 /** An identity the user typed in the dialog, and where to keep it. */

@@ -42,6 +42,11 @@
     },
     "amend": "Enmendar",
     "amendPublished": "Este commit ya está publicado; enmendarlo exigirá un force push.",
+    "signoff": "Firma",
+    "author": {
+      "label": "Autor",
+      "placeholder": "Nombre <correo>"
+    },
     "button": "Confirmar",
     "reason": {
       "nothing-staged": "No hay nada preparado.",
