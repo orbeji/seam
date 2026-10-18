@@ -155,6 +155,48 @@ export async function readEol(
   return null
 }
 
+/**
+ * The clean filter Git applies to a path, or null when it has none. The value
+ * comes from `check-attr`, which resolves the `.gitattributes` patterns the same
+ * way Git does when it stores a file. A path with a filter stores something
+ * other than what the working copy holds, so reading it has to go through the
+ * same filter the write does.
+ */
+async function readFilter(runner: GitRunner, cwd: string, path: string): Promise<string | null> {
+  const result = await runner.run(['check-attr', '-z', 'filter', '--', path], {
+    cwd,
+    readOnly: true
+  })
+  if (result.code !== 0) return null
+
+  // `-z` prints three NUL-terminated fields: the path, the attribute, the value.
+  const value = result.stdout.toString('utf8').split('\0')[2] ?? ''
+  if (value === '' || value === 'unspecified' || value === 'unset') return null
+  return value
+}
+
+/**
+ * The working copy's bytes as Git would store them: the clean filter and the
+ * line-ending conversion of `--path` applied, exactly as `git add` does. The
+ * blob is written to the object database to read it back, which is the only way
+ * Git offers to see the stored form of a working-copy file; it is the blob `git
+ * add` would have written, not new content.
+ */
+async function storedForm(
+  runner: GitRunner,
+  cwd: string,
+  path: string,
+  bytes: Uint8Array
+): Promise<Uint8Array> {
+  const hashed = await runner.runOrThrow(['hash-object', '-w', `--path=${path}`, '--stdin'], {
+    cwd,
+    stdin: bytes
+  })
+  const id = hashed.stdout.toString('utf8').trim()
+  const blob = await runner.runOrThrow(['cat-file', 'blob', id], { cwd, readOnly: true })
+  return blob.stdout
+}
+
 /** Git's `core.autocrlf` setting, `false` when unset. */
 export async function readAutocrlf(runner: GitRunner, cwd: string): Promise<string> {
   const result = await runner.run(['config', '--get', 'core.autocrlf'], { cwd, readOnly: true })
@@ -220,21 +262,34 @@ export async function readComparison(
   from: VersionSource,
   to: VersionSource
 ): Promise<Comparison> {
-  const [fromVersion, toVersion] = await Promise.all([
+  let [fromVersion, toVersion] = await Promise.all([
     readVersion(runner, cwd, path, from),
     readVersion(runner, cwd, path, to)
   ])
+
+  const worktreeIsFrom = from === 'worktree' && to !== 'worktree'
+  const worktreeIsTo = to === 'worktree' && from !== 'worktree'
+
+  // The working copy is read as it lies on disk. When a clean filter applies,
+  // Git stores something else, so the comparison has to run on the stored form:
+  // the raw text against the filtered index would read as changed end to end.
+  let converted = false
+  if (worktreeIsFrom || worktreeIsTo) {
+    const side = worktreeIsFrom ? fromVersion : toVersion
+    if (side.bytes !== null && (await readFilter(runner, cwd, path)) !== null) {
+      const bytes = await storedForm(runner, cwd, path, side.bytes)
+      if (worktreeIsFrom) fromVersion = { ...fromVersion, bytes }
+      else toVersion = { ...toVersion, bytes }
+      converted = true
+    }
+  }
 
   const binary =
     (fromVersion.bytes !== null && isBinary(fromVersion.bytes)) ||
     (toVersion.bytes !== null && isBinary(toVersion.bytes))
 
-  // Only the working-copy side is ever normalised, and only against a Git version.
-  const worktreeIsFrom = from === 'worktree' && to !== 'worktree'
-  const worktreeIsTo = to === 'worktree' && from !== 'worktree'
-
   let normaliseWorktree = false
-  if (!binary && (worktreeIsFrom || worktreeIsTo)) {
+  if (!binary && !converted && (worktreeIsFrom || worktreeIsTo)) {
     const eol = await readEol(runner, cwd, path)
     normaliseWorktree =
       eol !== null &&
@@ -249,17 +304,18 @@ export async function readComparison(
     fromSize: fromVersion.bytes?.length ?? 0,
     toSize: toVersion.bytes?.length ?? 0,
     binary,
-    normalised: normaliseWorktree
+    normalised: normaliseWorktree || converted
   }
 }
 
 /**
- * Writes `content` as the working copy of `path`, keeping the file's line
- * endings and byte-order mark. Reverting a hunk rebuilds the working copy from
- * decoded text, and a `CRLF` checkout over an `LF` index must stay `CRLF`, or
- * the whole file would read as changed afterwards. The parameters Git decides
- * from (`core.autocrlf`, the attributes) are read the same way the comparison
- * reads them, so the write agrees with what the viewer showed.
+ * Writes `content` as the working copy of `path`, undoing the conversion the
+ * comparison did. `content` is in the index's form, so a path with a clean
+ * filter goes back through the smudge filter, and a `CRLF` checkout over an `LF`
+ * index stays `CRLF`; otherwise the whole file would read as changed afterwards.
+ * The parameters Git decides from (`core.autocrlf`, the attributes) are read the
+ * same way the comparison reads them, so the write agrees with what the viewer
+ * showed.
  */
 export async function writeWorktreeFile(
   runner: GitRunner,
@@ -268,6 +324,23 @@ export async function writeWorktreeFile(
   content: string
 ): Promise<void> {
   const full = join(cwd, path)
+
+  // A filtered path stores something else than it checks out, so the text has to
+  // go back through the smudge filter to become the working copy Git would write.
+  if ((await readFilter(runner, cwd, path)) !== null) {
+    const hashed = await runner.runOrThrow(['hash-object', '-w', '--stdin'], {
+      cwd,
+      stdin: content
+    })
+    const id = hashed.stdout.toString('utf8').trim()
+    const smudged = await runner.runOrThrow(['cat-file', '--filters', `--path=${path}`, id], {
+      cwd,
+      readOnly: true
+    })
+    await writeFile(full, smudged.stdout)
+    return
+  }
+
   let existing: Uint8Array | null
   try {
     existing = await readFile(full)

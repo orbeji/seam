@@ -92,13 +92,13 @@ describe('writeIndexEntry', () => {
     expect(await entry(repo, 'run.sh')).toMatch(/^100755 /)
   })
 
-  it('stores the normalised blob under core.autocrlf=true', async () => {
+  it('stores the index form under core.autocrlf=true', async () => {
     const repo = await committed()
     await repo.git(['config', 'core.autocrlf', 'true'])
-    const crlf = 'one\r\ntwo\r\nthree\r\n'
-    repo.write('tracked.txt', crlf)
+    repo.write('tracked.txt', 'one\r\ntwo\r\nthree\r\n')
 
-    await writeIndexEntry(runner, repo.path, 'tracked.txt', crlf)
+    // The comparison hands over the index's form, so the write stores it as is.
+    await writeIndexEntry(runner, repo.path, 'tracked.txt', 'one\ntwo\nthree\n')
     const written = await entry(repo, 'tracked.txt')
 
     // The same entry git add leaves, and the blob is the LF text.
@@ -107,24 +107,24 @@ describe('writeIndexEntry', () => {
     expect(await repo.git(['cat-file', '-p', id])).toBe('one\ntwo\nthree\n')
   })
 
-  it('runs an external clean filter like `git add` does', async () => {
+  it('stores filtered text once, not through the clean filter again', async () => {
     const repo = await committed()
-    // The kind of filter Git LFS installs: the clean side rewrites the working
-    // copy before Git turns it into a blob.
+    // A clean filter that is not its own inverse, the kind a keyword expander
+    // installs: running it twice would show, so this pins that the write stores
+    // the text the comparison already cleaned.
     repo.write('.gitattributes', 'tracked.txt filter=demo\n')
-    await repo.git(['config', 'filter.demo.clean', 'tr a-z A-Z'])
+    await repo.git(['config', 'filter.demo.clean', 'sed s/^/x/'])
     await repo.git(['add', '.gitattributes'])
     await repo.git(['commit', '-qm', 'attributes'])
 
     repo.write('tracked.txt', 'one\ntwo\nthree\n')
-    await writeIndexEntry(runner, repo.path, 'tracked.txt', 'one\ntwo\nthree\n')
+    await writeIndexEntry(runner, repo.path, 'tracked.txt', 'xone\nxtwo\nxthree\n')
     const written = await entry(repo, 'tracked.txt')
 
-    // `--path` ran the filter, so the entry is the one git add leaves and the
-    // blob holds the cleaned text, not what the working copy reads.
+    // The same entry git add leaves of the raw working copy, cleaned once.
     expect(written).toBe(await stageWithGit(repo, 'tracked.txt'))
     const id = written.split(' ')[1] ?? ''
-    expect(await repo.git(['cat-file', '-p', id])).toBe('ONE\nTWO\nTHREE\n')
+    expect(await repo.git(['cat-file', '-p', id])).toBe('xone\nxtwo\nxthree\n')
   })
 
   it('refuses a path with merge conflicts', async () => {

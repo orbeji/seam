@@ -40,10 +40,10 @@ async function readMode(runner: GitRunner, repo: string, path: string): Promise<
 
 /**
  * Writes `content` to the index as the staged version of `path`, without
- * touching the working copy. `hash-object --path` runs the text through the
- * same filters and line-ending conversion as `git add`, so the blob is the one
- * Git would have stored; the mode comes from the index and only the entry's
- * object changes.
+ * touching the working copy. `content` is in the index's form: it comes from
+ * texts the comparison already put through the filters and the line-ending
+ * conversion of `git add` (see `readComparison`), so it is stored as it is. The
+ * mode comes from the index and only the entry's object changes.
  */
 export async function writeIndexEntry(
   runner: GitRunner,
@@ -51,7 +51,7 @@ export async function writeIndexEntry(
   path: string,
   content: string | Uint8Array
 ): Promise<void> {
-  const hashed = await runner.runOrThrow(['hash-object', '-w', `--path=${path}`, '--stdin'], {
+  const hashed = await runner.runOrThrow(['hash-object', '-w', '--stdin'], {
     cwd: repo,
     stdin: content
   })
