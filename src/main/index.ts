@@ -7,6 +7,7 @@ import { CommitDrafts } from './session/commit-drafts'
 import { repositoryFromArgv } from './session/launch-arguments'
 import { RecentRepositories } from './session/recent-repositories'
 import { RepositoryService } from './session/repository-service'
+import { Settings } from './session/settings'
 
 // Lets a portable install, and the end-to-end test, keep its data out of the
 // real user profile. Must run before the app is ready.
@@ -49,9 +50,10 @@ function createWindow(): BrowserWindow {
 void app.whenReady().then(() => {
   const recent = new RecentRepositories(join(app.getPath('userData'), 'recent-repositories.json'))
   const drafts = new CommitDrafts(join(app.getPath('userData'), 'commit-drafts.json'))
+  const settings = new Settings(join(app.getPath('userData'), 'settings.json'))
   const initialRepository = repositoryFromArgv(process.argv)
   if (initialRepository) recent.remember(initialRepository)
-  registerRepositoryHandlers(new RepositoryService(), recent, drafts, initialRepository)
+  registerRepositoryHandlers(new RepositoryService(), recent, drafts, settings, initialRepository)
 
   createWindow()
 

@@ -19,20 +19,28 @@ export class GitNotFoundError extends GitError {
   }
 }
 
-/** A Git command was cancelled by the caller. */
+/** A Git command that the caller cancelled, with whatever it printed first. */
 export class GitAbortError extends GitError {
   override name = 'GitAbortError'
 
-  constructor(options?: ErrorOptions) {
+  constructor(
+    readonly stdout = '',
+    readonly stderr = '',
+    options?: ErrorOptions
+  ) {
     super('Git command aborted', options)
   }
 }
 
-/** A Git command did not finish within its timeout and was killed. */
+/** A Git command that ran past its deadline, with whatever it printed first. */
 export class GitTimeoutError extends GitError {
   override name = 'GitTimeoutError'
 
-  constructor(readonly timeoutMs: number) {
+  constructor(
+    readonly timeoutMs: number,
+    readonly stdout = '',
+    readonly stderr = ''
+  ) {
     super(`Git command timed out after ${timeoutMs} ms`)
   }
 }

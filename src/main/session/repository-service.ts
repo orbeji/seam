@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 import { existsSync, statSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { revertHunks, stageHunks, stageSelection, unstageHunks } from '../../core/diff'
 import {
   createCommit,
@@ -34,7 +35,7 @@ import type {
   RepositorySnapshot,
   StagingModel
 } from '../../shared/ipc'
-import type { Identity, IdentityScope } from '../../shared/git'
+import type { CommitOutcome, Identity, IdentityScope } from '../../shared/git'
 import { GitWatcher } from './git-watcher'
 
 type Failure = { readonly ok: false; readonly code: IpcErrorCode; readonly message: string }
@@ -79,6 +80,9 @@ function isDirectory(path: string): boolean {
  */
 export class RepositoryService {
   private versionChecked: Promise<unknown> | null = null
+  /** The commit running right now, so a hook that will not end can be stopped. */
+  private commitInFlight: { readonly repo: string; readonly controller: AbortController } | null =
+    null
 
   constructor(private readonly runner: GitRunner = new GitRunner()) {}
 
@@ -222,10 +226,45 @@ export class RepositoryService {
   /**
    * Creates a commit from the index with the given message. The message is
    * written over stdin, so Unicode and several lines reach Git untouched, and
-   * `options` decides whether the last commit is rewritten instead.
+   * `options` decides whether the last commit is rewritten instead, who signs
+   * and whether the hooks run.
+   *
+   * A hook can wait for something Seam cannot give, so the commit is tracked
+   * while it runs and `cancelCommit` can stop it. A refusal comes back inside
+   * the outcome rather than as an error, so the interface can show the hooks'
+   * output; only a failure to reach Git itself is an error.
    */
-  commit(repo: string, message: string, options: CommitOptions = {}): Promise<IpcResult<null>> {
-    return this.write(repo, () => createCommit(this.runner, repo, message, options))
+  async commit(
+    repo: string,
+    message: string,
+    options: CommitOptions = {}
+  ): Promise<IpcResult<CommitOutcome>> {
+    const opened = await this.open(repo)
+    if (!opened.ok) return opened
+
+    const controller = new AbortController()
+    this.commitInFlight = { repo: resolve(repo), controller }
+    try {
+      const outcome = await createCommit(this.runner, repo, message, {
+        ...options,
+        signal: controller.signal
+      })
+      return { ok: true, value: outcome }
+    } catch (error) {
+      return failureFrom(error)
+    } finally {
+      if (this.commitInFlight?.controller === controller) this.commitInFlight = null
+    }
+  }
+
+  /** Stops the commit running in a repository, for a hook that will not end. */
+  cancelCommit(repo: string): IpcResult<null> {
+    if (this.commitInFlight?.repo === resolve(repo)) {
+      const controller = this.commitInFlight.controller
+      this.commitInFlight = null
+      controller.abort()
+    }
+    return { ok: true, value: null }
   }
 
   /**

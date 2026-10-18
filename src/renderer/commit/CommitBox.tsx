@@ -19,6 +19,9 @@ interface CommitBoxProps {
   /** Whether the commit carries Git's `Signed-off-by` trailer. */
   readonly signoff: boolean
   readonly onSignoffChange: (signoff: boolean) => void
+  /** Whether Git's `pre-commit` and `commit-msg` hooks run. */
+  readonly runHooks: boolean
+  readonly onRunHooksChange: (runHooks: boolean) => void
   /** Files in the index, ready to be committed. */
   readonly staged: number
   /** Files with unresolved conflicts. */
@@ -27,8 +30,12 @@ interface CommitBoxProps {
   readonly operation: GitOperation | null
   /** Creates a commit from the index and the message. */
   readonly onCommit: () => void
+  /** Stops a commit a hook is holding up. */
+  readonly onCancel: () => void
   /** Whether a commit is in flight, so the button cannot be pressed twice. */
   readonly busy: boolean
+  /** What the last commit's hooks printed, shown under the button. */
+  readonly output: string | null
 }
 
 /**
@@ -47,11 +54,15 @@ export default function CommitBox({
   onAuthorChange,
   signoff,
   onSignoffChange,
+  runHooks,
+  onRunHooksChange,
   staged,
   conflicts,
   operation,
   onCommit,
-  busy
+  onCancel,
+  busy,
+  output
 }: CommitBoxProps) {
   const { t } = useTranslation()
   const availability = commitAvailability({ staged, conflicts, operation, amend })
@@ -90,6 +101,15 @@ export default function CommitBox({
             onChange={(event) => onSignoffChange(event.target.checked)}
           />
           {t('commit.signoff')}
+        </label>
+        <label className="commit__option">
+          <input
+            type="checkbox"
+            data-testid="commit-hooks"
+            checked={runHooks}
+            onChange={(event) => onRunHooksChange(event.target.checked)}
+          />
+          {t('commit.hooks')}
         </label>
         <label className="commit__author" htmlFor="commit-author">
           <span className="commit__author-label">{t('commit.author.label')}</span>
@@ -135,9 +155,26 @@ export default function CommitBox({
             >
               {t('commit.button')}
             </button>
+            {busy && (
+              <button
+                type="button"
+                className="commit__cancel"
+                data-testid="commit-cancel"
+                onClick={onCancel}
+              >
+                {t('commit.cancel')}
+              </button>
+            )}
           </span>
         )}
       </div>
+
+      {output !== null && (
+        <details className="commit__output" data-testid="commit-output" open>
+          <summary className="commit__output-summary">{t('commit.output')}</summary>
+          <pre className="commit__output-text">{output}</pre>
+        </details>
+      )}
 
       {amend && head !== null && (
         <p className="commit__head" data-testid="commit-head">

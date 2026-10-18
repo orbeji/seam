@@ -43,6 +43,10 @@
     "amend": "Enmendar",
     "amendPublished": "Este commit ya está publicado; enmendarlo exigirá un force push.",
     "signoff": "Firma",
+    "hooks": "Ejecutar hooks",
+    "cancel": "Cancelar",
+    "output": "Salida de los hooks",
+    "timedOut": "El commit seguía en marcha tras cinco minutos y se ha detenido.",
     "author": {
       "label": "Autor",
       "placeholder": "Nombre <correo>"

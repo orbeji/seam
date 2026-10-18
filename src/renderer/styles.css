@@ -377,6 +377,44 @@ body {
   color: var(--conflict);
 }
 
+.commit__cancel {
+  background: var(--surface-hover);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 14px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.commit__cancel:hover {
+  background: var(--border);
+}
+
+.commit__output {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--background);
+  font-size: 12px;
+}
+
+.commit__output-summary {
+  padding: 6px 10px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.commit__output-text {
+  margin: 0;
+  padding: 8px 12px;
+  max-height: 220px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+
 .button:disabled {
   background: var(--surface-hover);
   color: var(--text-muted);

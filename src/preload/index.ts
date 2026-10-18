@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
-import type { HeadCommit, Identity } from '../shared/git'
+import type { CommitOutcome, HeadCommit, Identity } from '../shared/git'
 import {
   IPC_CHANNELS,
   IPC_CONTRACT_VERSION,
@@ -16,6 +16,7 @@ import {
   type RepositorySnapshot,
   type RevertHunksRequest,
   type SeamApi,
+  type SettingsData,
   type StagePathsRequest,
   type StagingModel,
   type StagingModelRequest
@@ -56,13 +57,19 @@ const seamApi: SeamApi = {
   writeCommitDraft: (request: CommitDraftWriteRequest) =>
     ipcRenderer.invoke(IPC_CHANNELS.writeCommitDraft, request) as Promise<IpcResult<null>>,
   commit: (request: CommitRequest) =>
-    ipcRenderer.invoke(IPC_CHANNELS.createCommit, request) as Promise<IpcResult<null>>,
+    ipcRenderer.invoke(IPC_CHANNELS.createCommit, request) as Promise<IpcResult<CommitOutcome>>,
+  cancelCommit: (repo: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.cancelCommit, repo) as Promise<IpcResult<null>>,
   readHeadCommit: (repo: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.readHeadCommit, repo) as Promise<IpcResult<HeadCommit>>,
   readIdentity: (repo: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.readIdentity, repo) as Promise<IpcResult<Identity>>,
   writeIdentity: (request: IdentityWriteRequest) =>
     ipcRenderer.invoke(IPC_CHANNELS.writeIdentity, request) as Promise<IpcResult<null>>,
+  readSettings: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.readSettings) as Promise<IpcResult<SettingsData>>,
+  writeSettings: (settings: SettingsData) =>
+    ipcRenderer.invoke(IPC_CHANNELS.writeSettings, settings) as Promise<IpcResult<null>>,
   onRepositoryChanged: (listener: (repo: string) => void) => {
     const handler = (_event: IpcRendererEvent, repo: string): void => listener(repo)
     ipcRenderer.on(IPC_CHANNELS.repositoryChanged, handler)

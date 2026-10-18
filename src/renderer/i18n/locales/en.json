@@ -43,6 +43,10 @@
     "amend": "Amend",
     "amendPublished": "This commit is already published; amending it will need a force push.",
     "signoff": "Sign-off",
+    "hooks": "Run hooks",
+    "cancel": "Cancel",
+    "output": "Hook output",
+    "timedOut": "The commit was still running after five minutes and was stopped.",
     "author": {
       "label": "Author",
       "placeholder": "Name <email>"

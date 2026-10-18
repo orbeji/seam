@@ -84,6 +84,12 @@ export default function App() {
   // to the repository, so they stay across commits and reset with it.
   const [author, setAuthor] = useState('')
   const [signoff, setSignoff] = useState(false)
+  // Whether Git's commit hooks run. It is a preference, read at startup and
+  // stored when the user changes it, so it survives closing Seam.
+  const [runHooks, setRunHooks] = useState(true)
+  // What the last commit's hooks printed, so a failing hook can be read in the
+  // panel under the button; null until a commit has said anything.
+  const [commitOutput, setCommitOutput] = useState<string | null>(null)
   // Whether a commit is being created, so its button cannot be pressed twice.
   const [committing, setCommitting] = useState(false)
   // The identity the dialog is asking for, with whatever Git already has, or
@@ -101,6 +107,7 @@ export default function App() {
     draftBeforeAmend.current = null
     setAuthor('')
     setSignoff(false)
+    setCommitOutput(null)
     setIdentityPrompt(null)
     setView({ state: 'loading' })
     const result = await window.seam.readRepositoryStatus(repo)
@@ -148,6 +155,8 @@ export default function App() {
 
   useEffect(() => {
     void (async () => {
+      const settings = await window.seam.readSettings()
+      if (settings.ok) setRunHooks(settings.value.runHooks)
       setRecent(await window.seam.listRecentRepositories())
       const initial = await window.seam.initialRepository()
       if (initial) await open(initial)
@@ -268,12 +277,39 @@ export default function App() {
         message: commitMessage,
         amend,
         author,
-        signoff
+        signoff,
+        runHooks
       })
       if (!result.ok) {
         setWriteError({ code: result.code, message: result.message })
         return
       }
+
+      const outcome = result.value
+      setCommitOutput(outcome.output === '' ? null : outcome.output)
+
+      // A cancelled or timed-out commit keeps the message; the wait is over and
+      // the box goes back to normal.
+      if (outcome.cancelled) return
+      if (outcome.timedOut) {
+        setWriteError({ code: 'command-failed', message: t('commit.timedOut') })
+        return
+      }
+
+      if (!outcome.created) {
+        // Git refused. A missing identity is the one refusal Seam can fix here.
+        if (outcome.reason === 'identity') {
+          const again = await window.seam.readIdentity(repo)
+          setIdentityPrompt({
+            name: again.ok ? (again.value.name ?? '') : '',
+            email: again.ok ? (again.value.email ?? '') : ''
+          })
+          return
+        }
+        setWriteError({ code: 'command-failed', message: outcome.message })
+        return
+      }
+
       setCommitMessage('')
       setAmend(false)
       setHead(null)
@@ -283,7 +319,21 @@ export default function App() {
     } finally {
       setCommitting(false)
     }
-  }, [commitMessage, amend, author, signoff, refresh])
+  }, [commitMessage, amend, author, signoff, runHooks, refresh, t])
+
+  // Stops a commit a hook is holding up, so the user is not stuck for five
+  // minutes. The main process kills the Git command and the message is kept.
+  const cancelCommit = useCallback(() => {
+    const repo = repoRef.current
+    if (repo === null) return
+    void window.seam.cancelCommit(repo)
+  }, [])
+
+  // Remembers whether hooks run, so the choice survives the next window.
+  const changeRunHooks = useCallback((next: boolean) => {
+    setRunHooks(next)
+    void window.seam.writeSettings({ runHooks: next })
+  }, [])
 
   // Stores the identity the dialog asked for and, if Git takes it, commits the
   // message that was waiting.
@@ -342,11 +392,15 @@ export default function App() {
           onAuthorChange={setAuthor}
           signoff={signoff}
           onSignoffChange={setSignoff}
+          runHooks={runHooks}
+          onRunHooksChange={changeRunHooks}
           staged={staged}
           conflicts={conflicts}
           operation={operation}
           onCommit={() => void commit()}
+          onCancel={cancelCommit}
           busy={committing}
+          output={commitOutput}
         />
       )}
 

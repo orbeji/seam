@@ -2,6 +2,7 @@
 
 import type {
   ChangeSummary,
+  CommitOutcome,
   GitOperation,
   HeadCommit,
   Identity,
@@ -14,7 +15,7 @@ import type {
  * interface. Bump it whenever a message shape changes so the three layers can
  * detect a mismatch instead of failing silently.
  */
-export const IPC_CONTRACT_VERSION = 11
+export const IPC_CONTRACT_VERSION = 12
 
 /** Channel names shared by the main process and the preload bridge. */
 export const IPC_CHANNELS = {
@@ -34,9 +35,12 @@ export const IPC_CHANNELS = {
   readCommitDraft: 'commit:draft:read',
   writeCommitDraft: 'commit:draft:write',
   createCommit: 'commit:create',
+  cancelCommit: 'commit:cancel',
   readHeadCommit: 'commit:head',
   readIdentity: 'identity:read',
-  writeIdentity: 'identity:write'
+  writeIdentity: 'identity:write',
+  readSettings: 'settings:read',
+  writeSettings: 'settings:write'
 } as const
 
 /** Why a call failed, so the interface can show a translated message. */
@@ -197,6 +201,8 @@ export interface CommitRequest {
   readonly author: string
   /** Adds Git's `Signed-off-by` trailer. */
   readonly signoff: boolean
+  /** Whether the `pre-commit` and `commit-msg` hooks run; false adds `--no-verify`. */
+  readonly runHooks: boolean
 }
 
 /** An identity the user typed in the dialog, and where to keep it. */
@@ -206,6 +212,12 @@ export interface IdentityWriteRequest {
   readonly email: string
   /** `local` keeps it to this repository, `global` to every repository. */
   readonly scope: IdentityScope
+}
+
+/** The preferences the interface reads at startup and stores when changed. */
+export interface SettingsData {
+  /** Whether Git's `pre-commit` and `commit-msg` hooks run. */
+  readonly runHooks: boolean
 }
 
 /**
@@ -265,7 +277,17 @@ export interface SeamApi {
    * failed hook or a missing identity comes back as an error result, not a
    * thrown exception.
    */
-  commit(request: CommitRequest): Promise<IpcResult<null>>
+  /**
+   * Creates a commit from the index, or reports why Git refused one. The
+   * outcome carries the hooks' output for the panel under the button; only a
+   * failure to reach Git itself is an error.
+   */
+  commit(request: CommitRequest): Promise<IpcResult<CommitOutcome>>
+  /**
+   * Stops the commit running in a repository, for a hook that will not end;
+   * never throws. Without a commit in flight it does nothing.
+   */
+  cancelCommit(repo: string): Promise<IpcResult<null>>
   /**
    * The last commit of a repository, for the Amend box to fill its message and
    * to warn when the commit is already published; never throws. It fails when
@@ -279,6 +301,10 @@ export interface SeamApi {
   readIdentity(repo: string): Promise<IpcResult<Identity>>
   /** Stores a missing identity for one repository or for all of them; never throws. */
   writeIdentity(request: IdentityWriteRequest): Promise<IpcResult<null>>
+  /** The stored preferences, so the interface starts with what the user chose. */
+  readSettings(): Promise<IpcResult<SettingsData>>
+  /** Stores the preferences; never throws. */
+  writeSettings(settings: SettingsData): Promise<IpcResult<null>>
   /**
    * Calls the listener when Git changed the given repository on disk, so the
    * interface can refresh without the user doing anything. Returns a function

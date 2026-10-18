@@ -119,8 +119,8 @@ export function isAtLeast(version: GitVersion, required: GitVersion): boolean {
   return version.patch >= required.patch
 }
 
-function abortReason(signal: AbortSignal): Error {
-  return new GitAbortError({ cause: signal.reason })
+function abortReason(signal: AbortSignal, stdout: string, stderr: string): Error {
+  return new GitAbortError(stdout, stderr, { cause: signal.reason })
 }
 
 /**
@@ -217,7 +217,11 @@ export class GitRunner {
           ...this.env,
           ...options.env
         },
-        windowsHide: true
+        windowsHide: true,
+        // Its own process group, so a hook that started children can be killed
+        // together with them: a `sleep` left behind would keep our pipes open
+        // and the command would never look finished.
+        detached: process.platform !== 'win32'
       })
 
       const stdoutChunks: Buffer[] = []
@@ -234,14 +238,25 @@ export class GitRunner {
         settle()
       }
 
+      /** Kills the command and any children a hook started, not just the shell. */
+      const kill = (): void => {
+        if (child.pid === undefined) return
+        try {
+          if (process.platform === 'win32') child.kill('SIGKILL')
+          else process.kill(-child.pid, 'SIGKILL')
+        } catch {
+          child.kill('SIGKILL')
+        }
+      }
+
       const onAbort = (): void => {
-        child.kill('SIGKILL')
+        kill()
       }
 
       if (timeoutMs > 0) {
         timer = setTimeout(() => {
           timedOut = true
-          child.kill('SIGKILL')
+          kill()
         }, timeoutMs)
         timer.unref()
       }
@@ -269,17 +284,19 @@ export class GitRunner {
 
       child.on('close', (code) => {
         finish(() => {
+          const stdout = Buffer.concat(stdoutChunks).toString('utf8')
+          const stderr = Buffer.concat(stderrChunks).toString('utf8')
           if (timedOut) {
-            reject(new GitTimeoutError(timeoutMs))
+            reject(new GitTimeoutError(timeoutMs, stdout, stderr))
             return
           }
           if (signal?.aborted) {
-            reject(abortReason(signal))
+            reject(abortReason(signal, stdout, stderr))
             return
           }
           resolve({
             stdout: Buffer.concat(stdoutChunks),
-            stderr: Buffer.concat(stderrChunks).toString('utf8'),
+            stderr,
             code: code ?? -1
           })
         })

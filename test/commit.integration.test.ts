@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: MIT
 
+import { writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { createCommit, GitRunner, readHeadCommit } from '../src/core/git'
+import { commitFailure, createCommit, GitRunner, readHeadCommit } from '../src/core/git'
 import { createRepository, type SampleRepository } from './fixtures/repository'
 
 /**
@@ -37,6 +39,11 @@ async function identity(repo: SampleRepository): Promise<void> {
   await repo.git(['config', 'commit.gpgsign', 'false'])
 }
 
+/** Writes an executable hook into the repository, as a user would by hand. */
+function writeHook(repo: SampleRepository, name: string, body: string): void {
+  writeFileSync(join(repo.path, '.git', 'hooks', name), `#!/bin/sh\n${body}\n`, { mode: 0o755 })
+}
+
 afterEach(() => {
   while (repositories.length > 0) repositories.pop()?.cleanup()
 })
@@ -61,24 +68,30 @@ describe('createCommit', () => {
     expect(await repo.git(['status', '--porcelain'])).toBe('')
   })
 
-  it('fails on an empty message instead of committing', async () => {
+  it('reports a refusal instead of committing when the message is empty', async () => {
     const repo = await repository()
     await identity(repo)
     repo.write('f.txt', 'one\n')
     await repo.git(['add', '.'])
 
-    await expect(createCommit(new GitRunner(), repo.path, '')).rejects.toThrow()
+    const outcome = await createCommit(new GitRunner(), repo.path, '')
+
+    expect(outcome.created).toBe(false)
+    expect(outcome.message).toContain('empty commit message')
     expect((await repo.run(['rev-parse', '--verify', 'HEAD'])).code).not.toBe(0)
   })
 
-  it('fails when there is nothing to commit', async () => {
+  it('recognises a commit with nothing staged', async () => {
     const repo = await repository()
     await identity(repo)
     repo.write('f.txt', 'one\n')
     await repo.git(['add', '.'])
     await repo.git(['commit', '-qm', 'base'])
 
-    await expect(createCommit(new GitRunner(), repo.path, 'again')).rejects.toThrow()
+    const outcome = await createCommit(new GitRunner(), repo.path, 'again')
+
+    expect(outcome.created).toBe(false)
+    expect(outcome.reason).toBe('nothing-staged')
   })
 
   it('builds the same commit as the terminal with the same options', async () => {
@@ -126,6 +139,86 @@ describe('createCommit', () => {
     expect(await repo.git(['log', '-1', '--format=%B'])).toContain(
       'Signed-off-by: Seam <seam@example.com>'
     )
+  })
+})
+
+describe('hooks', () => {
+  /** A repository with one file staged and the identity pinned. */
+  async function staged(): Promise<SampleRepository> {
+    const repo = await repository()
+    await identity(repo)
+    repo.write('f.txt', 'one\n')
+    await repo.git(['add', '.'])
+    return repo
+  }
+
+  it('refuses the commit when a pre-commit hook fails, and keeps its output', async () => {
+    const repo = await staged()
+    writeHook(repo, 'pre-commit', 'echo "the hook says no"\nexit 1')
+
+    const outcome = await createCommit(new GitRunner(), repo.path, 'a message')
+
+    expect(outcome.created).toBe(false)
+    expect(outcome.output).toContain('the hook says no')
+    expect((await repo.run(['rev-parse', '--verify', 'HEAD'])).code).not.toBe(0)
+  })
+
+  it('lets the commit through when the hooks are skipped', async () => {
+    const repo = await staged()
+    writeHook(repo, 'pre-commit', 'exit 1')
+
+    const outcome = await createCommit(new GitRunner(), repo.path, 'a message', { noVerify: true })
+
+    expect(outcome.created).toBe(true)
+    expect((await repo.git(['log', '-1', '--format=%s'])).trim()).toBe('a message')
+  })
+
+  it('keeps what a passing hook printed, for the panel', async () => {
+    const repo = await staged()
+    writeHook(repo, 'pre-commit', 'echo "checked the change"')
+
+    const outcome = await createCommit(new GitRunner(), repo.path, 'a message')
+
+    expect(outcome.created).toBe(true)
+    expect(outcome.output).toContain('checked the change')
+  })
+
+  it('lets a commit-msg hook rewrite the message, as the terminal would', async () => {
+    const repo = await staged()
+    writeHook(repo, 'commit-msg', 'echo "Reviewed-by: hook" >> "$1"')
+
+    const outcome = await createCommit(new GitRunner(), repo.path, 'original subject')
+
+    expect(outcome.created).toBe(true)
+    expect(await repo.git(['log', '-1', '--format=%B'])).toContain('Reviewed-by: hook')
+  })
+
+  it('stops a hook that will not end when the caller cancels', async () => {
+    const repo = await staged()
+    writeHook(repo, 'pre-commit', 'sleep 30')
+    const controller = new AbortController()
+
+    const promise = createCommit(new GitRunner(), repo.path, 'slow', {
+      signal: controller.signal
+    })
+    await new Promise((resolve) => setTimeout(resolve, 150))
+    controller.abort()
+
+    const outcome = await promise
+    expect(outcome.cancelled).toBe(true)
+    expect(outcome.created).toBe(false)
+    expect((await repo.run(['rev-parse', '--verify', 'HEAD'])).code).not.toBe(0)
+  })
+})
+
+describe('commitFailure', () => {
+  it('recognises the refusals the interface reacts to', () => {
+    expect(commitFailure("fatal: unable to auto-detect email address (got 'x@y')")).toBe('identity')
+    expect(commitFailure('nothing to commit, working tree clean')).toBe('nothing-staged')
+    expect(
+      commitFailure('error: Committing is not possible because you have unmerged files.')
+    ).toBe('conflicts')
+    expect(commitFailure('some other failure')).toBeNull()
   })
 })
 

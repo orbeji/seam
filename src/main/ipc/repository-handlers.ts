@@ -16,6 +16,7 @@ import type { CommitDrafts } from '../session/commit-drafts'
 import type { GitWatcher } from '../session/git-watcher'
 import type { RecentRepositories } from '../session/recent-repositories'
 import type { RepositoryService } from '../session/repository-service'
+import type { Settings } from '../session/settings'
 
 const OPEN_DIRECTORY: OpenDialogOptions = { properties: ['openDirectory'] }
 
@@ -122,10 +123,10 @@ function parseMessageRequest(value: unknown): { repo: string; message: string } 
 function parseCommitRequest(value: unknown): CommitRequest | null {
   const base = parseMessageRequest(value)
   if (base === null) return null
-  const { amend, author, signoff } = value as Record<string, unknown>
+  const { amend, author, signoff, runHooks } = value as Record<string, unknown>
   if (typeof amend !== 'boolean' || typeof signoff !== 'boolean') return null
-  if (typeof author !== 'string') return null
-  return { repo: base.repo, message: base.message, amend, author, signoff }
+  if (typeof author !== 'string' || typeof runHooks !== 'boolean') return null
+  return { repo: base.repo, message: base.message, amend, author, signoff, runHooks }
 }
 
 /** Narrows an IPC payload to an identity to store, rejecting anything else. */
@@ -155,6 +156,7 @@ export function registerRepositoryHandlers(
   service: RepositoryService,
   recent: RecentRepositories,
   drafts: CommitDrafts,
+  settings: Settings,
   initialRepository: string | null
 ): void {
   const watches = new Map<number, WatchEntry>()
@@ -286,11 +288,45 @@ export function registerRepositoryHandlers(
     if (parsed === null) {
       return { ok: false, code: 'unknown', message: 'Invalid commit request' }
     }
+    settings.setRunHooks(parsed.runHooks)
     return service.commit(parsed.repo, parsed.message, {
       amend: parsed.amend,
       author: parsed.author,
-      signoff: parsed.signoff
+      signoff: parsed.signoff,
+      noVerify: !parsed.runHooks
     })
+  })
+
+  ipcMain.handle(IPC_CHANNELS.cancelCommit, (_event, repo: unknown) => {
+    if (typeof repo !== 'string') {
+      return { ok: false, code: 'unknown', message: 'Invalid cancel request' }
+    }
+    return service.cancelCommit(repo)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.readSettings, () => ({
+    ok: true,
+    value: { runHooks: settings.runHooks }
+  }))
+
+  ipcMain.handle(IPC_CHANNELS.writeSettings, (_event, value: unknown) => {
+    if (typeof value !== 'object' || value === null) {
+      return { ok: false, code: 'unknown', message: 'Invalid settings' }
+    }
+    const runHooks = (value as Record<string, unknown>)['runHooks']
+    if (typeof runHooks !== 'boolean') {
+      return { ok: false, code: 'unknown', message: 'Invalid settings' }
+    }
+    try {
+      settings.setRunHooks(runHooks)
+      return { ok: true, value: null }
+    } catch (error) {
+      return {
+        ok: false,
+        code: 'unknown',
+        message: error instanceof Error ? error.message : String(error)
+      }
+    }
   })
 
   ipcMain.handle(IPC_CHANNELS.readHeadCommit, (_event, repo: unknown) => {

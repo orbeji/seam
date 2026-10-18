@@ -97,6 +97,25 @@ export interface Identity {
 /** Where a missing identity is written when the user is asked for it. */
 export type IdentityScope = 'local' | 'global'
 
+/** A refusal Git prints that Seam knows how to react to. */
+export type CommitFailure = 'identity' | 'nothing-staged' | 'conflicts'
+
+/** What came of a commit: whether it was made and what was printed meanwhile. */
+export interface CommitOutcome {
+  /** Whether Git created the commit. */
+  readonly created: boolean
+  /** Everything Git and its hooks printed, for the panel under the button. */
+  readonly output: string
+  /** Git's own refusal, when it did not commit; empty otherwise. */
+  readonly message: string
+  /** The refusal Seam recognised, or null when it is an ordinary failure. */
+  readonly reason: CommitFailure | null
+  /** Whether the commit ran past its deadline and was killed. */
+  readonly timedOut: boolean
+  /** Whether the user cancelled the commit. */
+  readonly cancelled: boolean
+}
+
 /**
  * The last commit, as the amend box shows it: enough to fill the message box and
  * to warn when the commit has already been published.

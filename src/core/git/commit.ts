@@ -1,7 +1,15 @@
 // SPDX-License-Identifier: MIT
 
-import type { HeadCommit } from '../../shared/git'
+import type { CommitFailure, CommitOutcome, HeadCommit } from '../../shared/git'
+import { GitAbortError, GitTimeoutError } from './errors'
 import type { GitRunner } from './runner'
+
+/**
+ * A hook that asks for input Seam cannot give will wait forever. Five minutes is
+ * long enough for a slow hook and short enough that nobody waits on it blindly;
+ * the interface also offers to cancel.
+ */
+export const COMMIT_TIMEOUT_MS = 5 * 60 * 1000
 
 /** The options the commit box can pass to `git commit`. */
 export interface CommitOptions {
@@ -11,6 +19,10 @@ export interface CommitOptions {
   readonly author?: string
   /** Adds Git's `Signed-off-by` trailer with the committer's identity. */
   readonly signoff?: boolean
+  /** Skips the `pre-commit` and `commit-msg` hooks. */
+  readonly noVerify?: boolean
+  /** Kills the commit when the caller cancels, for a hook that will not end. */
+  readonly signal?: AbortSignal
 }
 
 /** The flags for a commit, in the order the phase's table lists them. */
@@ -20,7 +32,32 @@ function commitArgs(options: CommitOptions): string[] {
   const author = options.author?.trim()
   if (author !== undefined && author !== '') args.push(`--author=${author}`)
   if (options.signoff === true) args.push('--signoff')
+  if (options.noVerify === true) args.push('--no-verify')
   return args
+}
+
+function combine(stdout: string, stderr: string): string {
+  return [stdout.trimEnd(), stderr.trimEnd()].filter((part) => part !== '').join('\n')
+}
+
+/**
+ * Recognises, from Git's own wording under `LC_ALL=C`, the refusals the
+ * interface does something about: a missing identity opens the identity dialog,
+ * and the other two explain a disabled button that was pressed anyway.
+ */
+export function commitFailure(text: string): CommitFailure | null {
+  if (
+    /Please tell me who you are|unable to auto-detect email address|empty ident name|no email was given|no name was given/i.test(
+      text
+    )
+  ) {
+    return 'identity'
+  }
+  if (/nothing to commit|no changes added to commit|nothing added to commit/i.test(text)) {
+    return 'nothing-staged'
+  }
+  if (/unmerged files|not possible because you have unmerged/i.test(text)) return 'conflicts'
+  return null
 }
 
 /**
@@ -29,19 +66,69 @@ function commitArgs(options: CommitOptions): string[] {
  * The message goes over stdin, encoded as UTF-8, so Unicode survives intact and
  * no command-line limit or shell quoting is involved. `GIT_EDITOR=true` keeps
  * Git from opening an editor for a message it already has; hooks, attributes
- * and configuration still run exactly as they do in a terminal.
+ * and configuration still run exactly as they do in a terminal, and their
+ * output comes back in the outcome so the interface can show it.
  */
 export async function createCommit(
   runner: GitRunner,
   repo: string,
   message: string,
   options: CommitOptions = {}
-): Promise<void> {
-  await runner.runOrThrow(['commit', '-F', '-', ...commitArgs(options)], {
+): Promise<CommitOutcome> {
+  const runOptions = {
     cwd: repo,
     stdin: Buffer.from(message, 'utf8'),
-    noEditor: true
-  })
+    noEditor: true,
+    timeoutMs: COMMIT_TIMEOUT_MS,
+    ...(options.signal === undefined ? {} : { signal: options.signal })
+  }
+
+  try {
+    const result = await runner.run(['commit', '-F', '-', ...commitArgs(options)], runOptions)
+    const stdout = result.stdout.toString('utf8').trimEnd()
+    const stderr = result.stderr.trimEnd()
+    const created = result.code === 0
+    // Git writes most refusals to stderr, but "nothing to commit" to stdout.
+    const output = combine(stdout, stderr)
+    return {
+      created,
+      output,
+      message: created
+        ? ''
+        : stderr !== ''
+          ? stderr
+          : stdout !== ''
+            ? stdout
+            : 'Git refused the commit.',
+      reason: created ? null : commitFailure(output),
+      timedOut: false,
+      cancelled: false
+    }
+  } catch (error) {
+    // A cancelled or timed-out commit is a plain outcome, not a failure: the
+    // message is kept and the interface says what happened.
+    if (error instanceof GitAbortError) {
+      return {
+        created: false,
+        output: combine(error.stdout, error.stderr),
+        message: '',
+        reason: null,
+        timedOut: false,
+        cancelled: true
+      }
+    }
+    if (error instanceof GitTimeoutError) {
+      return {
+        created: false,
+        output: combine(error.stdout, error.stderr),
+        message: '',
+        reason: null,
+        timedOut: true,
+        cancelled: false
+      }
+    }
+    throw error
+  }
 }
 
 /**
