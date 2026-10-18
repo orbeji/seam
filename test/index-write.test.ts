@@ -107,6 +107,26 @@ describe('writeIndexEntry', () => {
     expect(await repo.git(['cat-file', '-p', id])).toBe('one\ntwo\nthree\n')
   })
 
+  it('runs an external clean filter like `git add` does', async () => {
+    const repo = await committed()
+    // The kind of filter Git LFS installs: the clean side rewrites the working
+    // copy before Git turns it into a blob.
+    repo.write('.gitattributes', 'tracked.txt filter=demo\n')
+    await repo.git(['config', 'filter.demo.clean', 'tr a-z A-Z'])
+    await repo.git(['add', '.gitattributes'])
+    await repo.git(['commit', '-qm', 'attributes'])
+
+    repo.write('tracked.txt', 'one\ntwo\nthree\n')
+    await writeIndexEntry(runner, repo.path, 'tracked.txt', 'one\ntwo\nthree\n')
+    const written = await entry(repo, 'tracked.txt')
+
+    // `--path` ran the filter, so the entry is the one git add leaves and the
+    // blob holds the cleaned text, not what the working copy reads.
+    expect(written).toBe(await stageWithGit(repo, 'tracked.txt'))
+    const id = written.split(' ')[1] ?? ''
+    expect(await repo.git(['cat-file', '-p', id])).toBe('ONE\nTWO\nTHREE\n')
+  })
+
   it('refuses a path with merge conflicts', async () => {
     const repo = await committed()
     repo.write('tracked.txt', 'ours\n')
