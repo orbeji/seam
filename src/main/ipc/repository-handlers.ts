@@ -2,7 +2,6 @@
 
 import { BrowserWindow, dialog, ipcMain, type OpenDialogOptions, type WebContents } from 'electron'
 import type {
-  CommitDraftWriteRequest,
   FileVersionSource,
   HunkRange,
   HunkWriteRequest,
@@ -108,8 +107,9 @@ function parsePathRequest(value: unknown): { repo: string; path: string } | null
   return { repo, path }
 }
 
-/** Narrows an IPC payload to a commit draft write, rejecting anything else. */
-function parseDraftWrite(value: unknown): CommitDraftWriteRequest | null {
+/** Narrows an IPC payload to a repository and a message, rejecting anything
+ * else. The draft write and the commit share this shape. */
+function parseMessageRequest(value: unknown): { repo: string; message: string } | null {
   if (typeof value !== 'object' || value === null) return null
   const { repo, message } = value as Record<string, unknown>
   if (typeof repo !== 'string' || typeof message !== 'string') return null
@@ -244,7 +244,7 @@ export function registerRepositoryHandlers(
   })
 
   ipcMain.handle(IPC_CHANNELS.writeCommitDraft, (_event, request: unknown) => {
-    const parsed = parseDraftWrite(request)
+    const parsed = parseMessageRequest(request)
     if (parsed === null) {
       return { ok: false, code: 'unknown', message: 'Invalid commit draft request' }
     }
@@ -258,5 +258,13 @@ export function registerRepositoryHandlers(
         message: error instanceof Error ? error.message : String(error)
       }
     }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.createCommit, (_event, request: unknown) => {
+    const parsed = parseMessageRequest(request)
+    if (parsed === null) {
+      return { ok: false, code: 'unknown', message: 'Invalid commit request' }
+    }
+    return service.commit(parsed.repo, parsed.message)
   })
 }

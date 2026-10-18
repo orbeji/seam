@@ -15,13 +15,16 @@ interface CommitBoxProps {
   readonly conflicts: number
   /** The operation Git has stopped halfway, if any. */
   readonly operation: GitOperation | null
+  /** Creates a commit from the index and the message. */
+  readonly onCommit: () => void
+  /** Whether a commit is in flight, so the button cannot be pressed twice. */
+  readonly busy: boolean
 }
 
 /**
  * The commit message box and its actions. It holds one message per repository
  * and stores it as it is typed, so the draft survives switching files and
- * closing Seam. The commit itself is a later task, so the button here only
- * shows whether confirming is possible, and why it is not.
+ * closing Seam.
  */
 export default function CommitBox({
   value,
@@ -30,7 +33,9 @@ export default function CommitBox({
   onAmendChange,
   staged,
   conflicts,
-  operation
+  operation,
+  onCommit,
+  busy
 }: CommitBoxProps) {
   const { t } = useTranslation()
   const availability = commitAvailability({ staged, conflicts, operation, amend })
@@ -86,7 +91,8 @@ export default function CommitBox({
               type="button"
               className="button"
               data-testid="commit-button"
-              disabled={availability.kind !== 'ready'}
+              disabled={availability.kind !== 'ready' || busy}
+              onClick={onCommit}
             >
               {t('commit.button')}
             </button>

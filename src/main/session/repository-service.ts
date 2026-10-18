@@ -3,6 +3,7 @@
 import { existsSync, statSync } from 'node:fs'
 import { revertHunks, stageHunks, stageSelection, unstageHunks } from '../../core/diff'
 import {
+  createCommit,
   detectOperation,
   GitCommandError,
   GitError,
@@ -210,6 +211,14 @@ export class RepositoryService {
    */
   writeIndex(repo: string, path: string, content: string): Promise<IpcResult<null>> {
     return this.write(repo, () => writeIndexEntry(this.runner, repo, path, content))
+  }
+
+  /**
+   * Creates a commit from the index with the given message. The message is
+   * written over stdin, so Unicode and several lines reach Git untouched.
+   */
+  commit(repo: string, message: string): Promise<IpcResult<null>> {
+    return this.write(repo, () => createCommit(this.runner, repo, message))
   }
 
   /**

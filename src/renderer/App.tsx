@@ -75,6 +75,8 @@ export default function App() {
   // Whether the commit box is amending the last commit. It resets with the
   // repository, like the draft but without being stored anywhere.
   const [amend, setAmend] = useState(false)
+  // Whether a commit is being created, so its button cannot be pressed twice.
+  const [committing, setCommitting] = useState(false)
 
   const open = useCallback(async (repo: string) => {
     setSelected(null)
@@ -181,6 +183,29 @@ export default function App() {
     if (repo !== null) void window.seam.writeCommitDraft({ repo, message })
   }, [])
 
+  // Confirms the index with the typed message. On success the message is spent:
+  // the box and its stored draft go back to empty and Amend is cleared, before
+  // the lists are read again. A failed commit keeps the message for another try.
+  const commit = useCallback(async () => {
+    const repo = repoRef.current
+    if (repo === null) return
+    setWriteError(null)
+    setCommitting(true)
+    try {
+      const result = await window.seam.commit({ repo, message: commitMessage })
+      if (!result.ok) {
+        setWriteError({ code: result.code, message: result.message })
+        return
+      }
+      setCommitMessage('')
+      setAmend(false)
+      await window.seam.writeCommitDraft({ repo, message: '' })
+      await refresh()
+    } finally {
+      setCommitting(false)
+    }
+  }, [commitMessage, refresh])
+
   /** Opens a file, and on navigation past either end moves to the neighbouring file. */
   const move = (summary: ChangeSummary, current: Selection, direction: 1 | -1): void => {
     const files = summaryEntries(summary)
@@ -212,6 +237,8 @@ export default function App() {
           staged={staged}
           conflicts={conflicts}
           operation={operation}
+          onCommit={() => void commit()}
+          busy={committing}
         />
       )}
 

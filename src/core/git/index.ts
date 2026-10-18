@@ -3,6 +3,7 @@
 // The status model itself lives in `shared` so the interface can use it too.
 export type * from '../../shared/git'
 export * from './changes'
+export * from './commit'
 export * from './errors'
 export * from './index-write'
 export * from './operation'

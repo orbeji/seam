@@ -7,7 +7,7 @@ import type { ChangeSummary, GitOperation, RepoStatus } from './git'
  * interface. Bump it whenever a message shape changes so the three layers can
  * detect a mismatch instead of failing silently.
  */
-export const IPC_CONTRACT_VERSION = 8
+export const IPC_CONTRACT_VERSION = 9
 
 /** Channel names shared by the main process and the preload bridge. */
 export const IPC_CHANNELS = {
@@ -25,7 +25,8 @@ export const IPC_CHANNELS = {
   stageFiles: 'repo:stage',
   unstageFiles: 'repo:unstage',
   readCommitDraft: 'commit:draft:read',
-  writeCommitDraft: 'commit:draft:write'
+  writeCommitDraft: 'commit:draft:write',
+  createCommit: 'commit:create'
 } as const
 
 /** Why a call failed, so the interface can show a translated message. */
@@ -176,6 +177,12 @@ export interface CommitDraftWriteRequest {
   readonly message: string
 }
 
+/** The message to create a commit from the index with. */
+export interface CommitRequest {
+  readonly repo: string
+  readonly message: string
+}
+
 /**
  * Surface the preload script exposes to the renderer on `window.seam`. It grows
  * as the interface needs typed calls: stage, commit, resolve, continue and abort
@@ -228,6 +235,12 @@ export interface SeamApi {
   readCommitDraft(repo: string): Promise<IpcResult<string>>
   /** Stores or clears a repository's unconfirmed commit message; never throws. */
   writeCommitDraft(request: CommitDraftWriteRequest): Promise<IpcResult<null>>
+  /**
+   * Creates a commit from the index with the given message; never throws. A
+   * failed hook or a missing identity comes back as an error result, not a
+   * thrown exception.
+   */
+  commit(request: CommitRequest): Promise<IpcResult<null>>
   /**
    * Calls the listener when Git changed the given repository on disk, so the
    * interface can refresh without the user doing anything. Returns a function

@@ -5,6 +5,7 @@ import {
   IPC_CHANNELS,
   IPC_CONTRACT_VERSION,
   type CommitDraftWriteRequest,
+  type CommitRequest,
   type FileComparison,
   type FileComparisonRequest,
   type HunkWriteRequest,
@@ -52,6 +53,8 @@ const seamApi: SeamApi = {
     ipcRenderer.invoke(IPC_CHANNELS.readCommitDraft, repo) as Promise<IpcResult<string>>,
   writeCommitDraft: (request: CommitDraftWriteRequest) =>
     ipcRenderer.invoke(IPC_CHANNELS.writeCommitDraft, request) as Promise<IpcResult<null>>,
+  commit: (request: CommitRequest) =>
+    ipcRenderer.invoke(IPC_CHANNELS.createCommit, request) as Promise<IpcResult<null>>,
   onRepositoryChanged: (listener: (repo: string) => void) => {
     const handler = (_event: IpcRendererEvent, repo: string): void => listener(repo)
     ipcRenderer.on(IPC_CHANNELS.repositoryChanged, handler)
