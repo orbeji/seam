@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 import { useTranslation } from 'react-i18next'
-import type { GitOperation } from '../../shared/git'
+import type { GitOperation, HeadCommit } from '../../shared/git'
 import { commitAvailability } from './activation'
 
 interface CommitBoxProps {
@@ -9,6 +9,10 @@ interface CommitBoxProps {
   readonly onChange: (message: string) => void
   readonly amend: boolean
   readonly onAmendChange: (amend: boolean) => void
+  /** Whether there is a last commit to amend. */
+  readonly canAmend: boolean
+  /** The commit being amended, once known; null until Amend is read. */
+  readonly head: HeadCommit | null
   /** Files in the index, ready to be committed. */
   readonly staged: number
   /** Files with unresolved conflicts. */
@@ -31,6 +35,8 @@ export default function CommitBox({
   onChange,
   amend,
   onAmendChange,
+  canAmend,
+  head,
   staged,
   conflicts,
   operation,
@@ -61,6 +67,7 @@ export default function CommitBox({
             type="checkbox"
             data-testid="commit-amend"
             checked={amend}
+            disabled={!canAmend}
             onChange={(event) => onAmendChange(event.target.checked)}
           />
           {t('commit.amend')}
@@ -99,6 +106,18 @@ export default function CommitBox({
           </span>
         )}
       </div>
+
+      {amend && head !== null && (
+        <p className="commit__head" data-testid="commit-head">
+          <code className="commit__head-id">{head.shortId}</code>
+          <span className="commit__head-subject">{head.subject}</span>
+          {head.published && (
+            <span className="commit__published" data-testid="commit-published">
+              {t('commit.amendPublished')}
+            </span>
+          )}
+        </p>
+      )}
     </section>
   )
 }

@@ -305,6 +305,30 @@ body {
   font-size: 12px;
 }
 
+.commit__head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.commit__head-id {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: var(--accent);
+}
+
+.commit__head-subject {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.commit__published {
+  color: var(--conflict);
+}
+
 .button:disabled {
   background: var(--surface-hover);
   color: var(--text-muted);

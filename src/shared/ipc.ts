@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 
-import type { ChangeSummary, GitOperation, RepoStatus } from './git'
+import type { ChangeSummary, GitOperation, HeadCommit, RepoStatus } from './git'
 
 /**
  * Version of the contract between the main process, the preload bridge and the
  * interface. Bump it whenever a message shape changes so the three layers can
  * detect a mismatch instead of failing silently.
  */
-export const IPC_CONTRACT_VERSION = 9
+export const IPC_CONTRACT_VERSION = 10
 
 /** Channel names shared by the main process and the preload bridge. */
 export const IPC_CHANNELS = {
@@ -26,7 +26,8 @@ export const IPC_CHANNELS = {
   unstageFiles: 'repo:unstage',
   readCommitDraft: 'commit:draft:read',
   writeCommitDraft: 'commit:draft:write',
-  createCommit: 'commit:create'
+  createCommit: 'commit:create',
+  readHeadCommit: 'commit:head'
 } as const
 
 /** Why a call failed, so the interface can show a translated message. */
@@ -181,6 +182,8 @@ export interface CommitDraftWriteRequest {
 export interface CommitRequest {
   readonly repo: string
   readonly message: string
+  /** Rewrite the last commit instead of making a new one. */
+  readonly amend: boolean
 }
 
 /**
@@ -241,6 +244,12 @@ export interface SeamApi {
    * thrown exception.
    */
   commit(request: CommitRequest): Promise<IpcResult<null>>
+  /**
+   * The last commit of a repository, for the Amend box to fill its message and
+   * to warn when the commit is already published; never throws. It fails when
+   * the repository has no commits yet.
+   */
+  readHeadCommit(repo: string): Promise<IpcResult<HeadCommit>>
   /**
    * Calls the listener when Git changed the given repository on disk, so the
    * interface can refresh without the user doing anything. Returns a function

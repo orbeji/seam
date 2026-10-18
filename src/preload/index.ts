@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
+import type { HeadCommit } from '../shared/git'
 import {
   IPC_CHANNELS,
   IPC_CONTRACT_VERSION,
@@ -55,6 +56,8 @@ const seamApi: SeamApi = {
     ipcRenderer.invoke(IPC_CHANNELS.writeCommitDraft, request) as Promise<IpcResult<null>>,
   commit: (request: CommitRequest) =>
     ipcRenderer.invoke(IPC_CHANNELS.createCommit, request) as Promise<IpcResult<null>>,
+  readHeadCommit: (repo: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.readHeadCommit, repo) as Promise<IpcResult<HeadCommit>>,
   onRepositoryChanged: (listener: (repo: string) => void) => {
     const handler = (_event: IpcRendererEvent, repo: string): void => listener(repo)
     ipcRenderer.on(IPC_CHANNELS.repositoryChanged, handler)

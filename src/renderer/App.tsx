@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import type { ChangeSummary } from '../shared/git'
+import type { ChangeSummary, HeadCommit } from '../shared/git'
 import type { FileVersionSource, IpcErrorCode, RepositorySnapshot } from '../shared/ipc'
 import ChangesView from './changes/ChangesView'
 import CommitBox from './commit/CommitBox'
@@ -75,6 +75,10 @@ export default function App() {
   // Whether the commit box is amending the last commit. It resets with the
   // repository, like the draft but without being stored anywhere.
   const [amend, setAmend] = useState(false)
+  // The last commit, shown while Amend is checked, and the text the box held
+  // before it, so the draft comes back when Amend is unchecked.
+  const [head, setHead] = useState<HeadCommit | null>(null)
+  const draftBeforeAmend = useRef<string | null>(null)
   // Whether a commit is being created, so its button cannot be pressed twice.
   const [committing, setCommitting] = useState(false)
 
@@ -83,6 +87,8 @@ export default function App() {
     setWriteError(null)
     setCommitMessage('')
     setAmend(false)
+    setHead(null)
+    draftBeforeAmend.current = null
     setView({ state: 'loading' })
     const result = await window.seam.readRepositoryStatus(repo)
     if (result.ok) {
@@ -96,6 +102,7 @@ export default function App() {
   const staged = view.state === 'ready' ? view.snapshot.summary.staged.length : 0
   const conflicts = view.state === 'ready' ? view.snapshot.summary.conflicts.length : 0
   const operation = view.state === 'ready' ? view.snapshot.operation : null
+  const canAmend = view.state === 'ready' && view.snapshot.status.branch.oid !== null
 
   // The open repository, kept in a ref so the focus and change listeners can be
   // set up once and never resubscribe as the view changes.
@@ -176,12 +183,53 @@ export default function App() {
   )
 
   // The box is stored as it is typed, one draft per repository. An empty
-  // message clears the repository's draft in the main process.
-  const writeMessage = useCallback((message: string) => {
-    setCommitMessage(message)
-    const repo = repoRef.current
-    if (repo !== null) void window.seam.writeCommitDraft({ repo, message })
-  }, [])
+  // message clears the repository's draft in the main process. While Amend is
+  // checked the box holds the previous message, which is not this repository's
+  // draft, so it is left untouched and restored when Amend is unchecked.
+  const writeMessage = useCallback(
+    (message: string) => {
+      setCommitMessage(message)
+      const repo = repoRef.current
+      if (repo !== null && !amend) void window.seam.writeCommitDraft({ repo, message })
+    },
+    [amend]
+  )
+
+  // Turning Amend on reads the last commit and fills the box with its message,
+  // keeping the draft aside. Turning it off puts the draft back.
+  const changeAmend = useCallback(
+    async (next: boolean) => {
+      if (next === amend) return
+      if (!next) {
+        setAmend(false)
+        setHead(null)
+        if (draftBeforeAmend.current !== null) setCommitMessage(draftBeforeAmend.current)
+        return
+      }
+
+      const repo = repoRef.current
+      if (repo === null) return
+      // Toggle at once so the box reacts, then fill it from the last commit.
+      const draft = commitMessage
+      draftBeforeAmend.current = draft
+      setAmend(true)
+      setWriteError(null)
+
+      const result = await window.seam.readHeadCommit(repo)
+      if (!result.ok) {
+        // Nothing to amend: undo the toggle and keep the draft as it was.
+        setAmend(false)
+        setHead(null)
+        draftBeforeAmend.current = null
+        setCommitMessage(draft)
+        setWriteError({ code: result.code, message: result.message })
+        return
+      }
+      setHead(result.value)
+      setCommitMessage(result.value.message)
+    },
+    [amend, commitMessage]
+  )
 
   // Confirms the index with the typed message. On success the message is spent:
   // the box and its stored draft go back to empty and Amend is cleared, before
@@ -192,19 +240,21 @@ export default function App() {
     setWriteError(null)
     setCommitting(true)
     try {
-      const result = await window.seam.commit({ repo, message: commitMessage })
+      const result = await window.seam.commit({ repo, message: commitMessage, amend })
       if (!result.ok) {
         setWriteError({ code: result.code, message: result.message })
         return
       }
       setCommitMessage('')
       setAmend(false)
+      setHead(null)
+      draftBeforeAmend.current = null
       await window.seam.writeCommitDraft({ repo, message: '' })
       await refresh()
     } finally {
       setCommitting(false)
     }
-  }, [commitMessage, refresh])
+  }, [commitMessage, amend, refresh])
 
   /** Opens a file, and on navigation past either end moves to the neighbouring file. */
   const move = (summary: ChangeSummary, current: Selection, direction: 1 | -1): void => {
@@ -233,7 +283,9 @@ export default function App() {
           value={commitMessage}
           onChange={writeMessage}
           amend={amend}
-          onAmendChange={setAmend}
+          onAmendChange={(next) => void changeAmend(next)}
+          canAmend={canAmend}
+          head={head}
           staged={staged}
           conflicts={conflicts}
           operation={operation}

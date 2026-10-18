@@ -41,6 +41,7 @@
       "placeholder": "Describe los cambios preparados"
     },
     "amend": "Enmendar",
+    "amendPublished": "Este commit ya está publicado; enmendarlo exigirá un force push.",
     "button": "Confirmar",
     "reason": {
       "nothing-staged": "No hay nada preparado.",

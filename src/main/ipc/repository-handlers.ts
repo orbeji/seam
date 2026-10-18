@@ -2,6 +2,7 @@
 
 import { BrowserWindow, dialog, ipcMain, type OpenDialogOptions, type WebContents } from 'electron'
 import type {
+  CommitRequest,
   FileVersionSource,
   HunkRange,
   HunkWriteRequest,
@@ -114,6 +115,15 @@ function parseMessageRequest(value: unknown): { repo: string; message: string } 
   const { repo, message } = value as Record<string, unknown>
   if (typeof repo !== 'string' || typeof message !== 'string') return null
   return { repo, message }
+}
+
+/** Narrows an IPC payload to a commit, rejecting anything else. */
+function parseCommitRequest(value: unknown): CommitRequest | null {
+  const base = parseMessageRequest(value)
+  if (base === null) return null
+  const amend = (value as Record<string, unknown>)['amend']
+  if (typeof amend !== 'boolean') return null
+  return { repo: base.repo, message: base.message, amend }
 }
 
 /** One window's watch over the repository it currently shows. */
@@ -261,10 +271,17 @@ export function registerRepositoryHandlers(
   })
 
   ipcMain.handle(IPC_CHANNELS.createCommit, (_event, request: unknown) => {
-    const parsed = parseMessageRequest(request)
+    const parsed = parseCommitRequest(request)
     if (parsed === null) {
       return { ok: false, code: 'unknown', message: 'Invalid commit request' }
     }
-    return service.commit(parsed.repo, parsed.message)
+    return service.commit(parsed.repo, parsed.message, { amend: parsed.amend })
+  })
+
+  ipcMain.handle(IPC_CHANNELS.readHeadCommit, (_event, repo: unknown) => {
+    if (typeof repo !== 'string') {
+      return { ok: false, code: 'unknown', message: 'Invalid head request' }
+    }
+    return service.readHeadCommit(repo)
   })
 }

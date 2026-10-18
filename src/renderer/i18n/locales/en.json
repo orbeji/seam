@@ -41,6 +41,7 @@
       "placeholder": "Describe the staged changes"
     },
     "amend": "Amend",
+    "amendPublished": "This commit is already published; amending it will need a force push.",
     "button": "Commit",
     "reason": {
       "nothing-staged": "Nothing is staged.",

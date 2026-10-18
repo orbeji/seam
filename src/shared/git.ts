@@ -86,6 +86,21 @@ export interface RepoStatus {
 export type GitOperation = 'merge' | 'cherry-pick' | 'revert' | 'rebase'
 
 /**
+ * The last commit, as the amend box shows it: enough to fill the message box and
+ * to warn when the commit has already been published.
+ */
+export interface HeadCommit {
+  /** Abbreviated commit id (`%h`). */
+  shortId: string
+  /** First line of the message (`%s`). */
+  subject: string
+  /** The whole message, without the newline Git stores at the end. */
+  message: string
+  /** Whether a remote branch already contains the commit. */
+  published: boolean
+}
+
+/**
  * The four lists the changes screen shows. An entry can be both staged and
  * unstaged (porcelain `MM`), in which case it appears in both, like the reference client.
  * Unmerged entries are kept apart so the conflict dialog can own them.

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 import { afterEach, describe, expect, it } from 'vitest'
-import { createCommit, GitRunner } from '../src/core/git'
+import { createCommit, GitRunner, readHeadCommit } from '../src/core/git'
 import { createRepository, type SampleRepository } from './fixtures/repository'
 
 /**
@@ -101,5 +101,69 @@ describe('createCommit', () => {
     const head = async (repo: SampleRepository): Promise<string> =>
       (await runner.runOrThrow(['rev-parse', 'HEAD'], { cwd: repo.path })).stdout.toString('utf8')
     expect(await head(seam)).toBe(await head(terminal))
+  })
+})
+
+describe('amending', () => {
+  /** A repository with one commit (`base`) and its file staged. */
+  async function staged(): Promise<SampleRepository> {
+    const repo = await repository()
+    await identity(repo)
+    repo.write('f.txt', 'one\n')
+    await repo.git(['add', '.'])
+    await repo.git(['commit', '-qm', 'base'])
+    repo.write('f.txt', 'one\ntwo\n')
+    await repo.git(['add', '.'])
+    return repo
+  }
+
+  it('rewrites the message and adds the index to the last commit', async () => {
+    const repo = await staged()
+    await createCommit(new GitRunner(), repo.path, 'amended with the change', { amend: true })
+
+    expect(await repo.git(['rev-list', '--count', 'HEAD'])).toBe('1\n')
+    expect(await repo.git(['log', '-1', '--format=%s'])).toBe('amended with the change\n')
+    expect(await repo.git(['show', '-1', '--name-only', '--format='])).toBe('f.txt\n')
+    expect(await repo.git(['cat-file', '-p', 'HEAD:f.txt'])).toBe('one\ntwo\n')
+  })
+
+  it('rewrites only the message when nothing is staged', async () => {
+    const repo = await staged()
+    await createCommit(new GitRunner(), repo.path, 'first pass', { amend: true })
+    const tree = await repo.git(['rev-parse', 'HEAD^{tree}'])
+
+    await createCommit(new GitRunner(), repo.path, 'second pass', { amend: true })
+
+    expect(await repo.git(['rev-list', '--count', 'HEAD'])).toBe('1\n')
+    expect(await repo.git(['log', '-1', '--format=%s'])).toBe('second pass\n')
+    expect(await repo.git(['rev-parse', 'HEAD^{tree}'])).toBe(tree)
+  })
+})
+
+describe('readHeadCommit', () => {
+  it('reads the short id, the subject and the whole message', async () => {
+    const repo = await repository()
+    await identity(repo)
+    repo.write('f.txt', 'one\n')
+    await repo.git(['add', '.'])
+    await repo.git(['commit', '-qm', 'a subject\n\nand a body'])
+
+    const head = await readHeadCommit(new GitRunner(), repo.path)
+
+    expect(head.shortId).toBe((await repo.git(['rev-parse', '--short', 'HEAD'])).trim())
+    expect(head.subject).toBe('a subject')
+    expect(head.message).toBe('a subject\n\nand a body')
+    expect(head.published).toBe(false)
+  })
+
+  it('reports the commit as published when a remote branch contains it', async () => {
+    const repo = await repository()
+    await identity(repo)
+    repo.write('f.txt', 'one\n')
+    await repo.git(['add', '.'])
+    await repo.git(['commit', '-qm', 'base'])
+    await repo.git(['update-ref', 'refs/remotes/origin/main', 'HEAD'])
+
+    expect((await readHeadCommit(new GitRunner(), repo.path)).published).toBe(true)
   })
 })

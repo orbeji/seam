@@ -12,6 +12,7 @@ import {
   GitVersionError,
   readComparison,
   readFileModel,
+  readHeadCommit,
   readStatus,
   removeIndexPaths,
   stagePaths,
@@ -19,6 +20,8 @@ import {
   unstagePaths,
   writeIndexEntry,
   writeWorktreeFile,
+  type CommitOptions,
+  type HeadCommit,
   type VersionSource
 } from '../../core/git'
 import type {
@@ -215,10 +218,26 @@ export class RepositoryService {
 
   /**
    * Creates a commit from the index with the given message. The message is
-   * written over stdin, so Unicode and several lines reach Git untouched.
+   * written over stdin, so Unicode and several lines reach Git untouched, and
+   * `options` decides whether the last commit is rewritten instead.
    */
-  commit(repo: string, message: string): Promise<IpcResult<null>> {
-    return this.write(repo, () => createCommit(this.runner, repo, message))
+  commit(repo: string, message: string, options: CommitOptions = {}): Promise<IpcResult<null>> {
+    return this.write(repo, () => createCommit(this.runner, repo, message, options))
+  }
+
+  /**
+   * Reads the last commit, which is what Amend rewrites: its short id, subject,
+   * message and whether it is already published. Fails when there is no commit.
+   */
+  async readHeadCommit(repo: string): Promise<IpcResult<HeadCommit>> {
+    const opened = await this.open(repo)
+    if (!opened.ok) return opened
+
+    try {
+      return { ok: true, value: await readHeadCommit(this.runner, repo) }
+    } catch (error) {
+      return failureFrom(error)
+    }
   }
 
   /**
