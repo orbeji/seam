@@ -4,6 +4,7 @@ import { existsSync, statSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { revertHunks, stageHunks, stageSelection, unstageHunks } from '../../core/diff'
 import {
+  acceptConflict as acceptConflictSide,
   createCommit,
   detectOperation,
   GitCommandError,
@@ -13,11 +14,14 @@ import {
   GitVersionError,
   readCommitTemplate,
   readComparison,
+  readConflictState,
   readFileModel,
   readHeadCommit,
   readIdentity,
   readStatus,
   removeIndexPaths,
+  resolveSimpleConflicts as resolveSimple,
+  revertConflict as revertConflictResolution,
   stagePaths,
   summarizeChanges,
   unstagePaths,
@@ -36,7 +40,15 @@ import type {
   RepositorySnapshot,
   StagingModel
 } from '../../shared/ipc'
-import type { CommitOutcome, Identity, IdentityScope } from '../../shared/git'
+import type {
+  CommitOutcome,
+  ConflictAcceptOutcome,
+  ConflictSide,
+  ConflictState,
+  Identity,
+  IdentityScope,
+  ResolveSimpleOutcome
+} from '../../shared/git'
 import { GitWatcher } from './git-watcher'
 
 type Failure = { readonly ok: false; readonly code: IpcErrorCode; readonly message: string }
@@ -349,6 +361,63 @@ export class RepositoryService {
     } catch (error) {
       return failureFrom(error)
     }
+  }
+
+  /**
+   * Reads the conflict list and the name of each side, including resolved files
+   * Git can still un-resolve.
+   */
+  async readConflicts(repo: string): Promise<IpcResult<ConflictState>> {
+    const opened = await this.open(repo)
+    if (!opened.ok) return opened
+
+    try {
+      return { ok: true, value: await readConflictState(this.runner, repo) }
+    } catch (error) {
+      return failureFrom(error)
+    }
+  }
+
+  /**
+   * Accepts one side of a conflict. The fingerprint the dialog read guards
+   * against overwriting a file the user edited meanwhile; `force` is the answer
+   * to the confirmation.
+   */
+  async acceptConflict(
+    repo: string,
+    path: string,
+    side: ConflictSide,
+    fingerprint: string | null,
+    force = false
+  ): Promise<IpcResult<ConflictAcceptOutcome>> {
+    const opened = await this.open(repo)
+    if (!opened.ok) return opened
+
+    try {
+      return {
+        ok: true,
+        value: await acceptConflictSide(this.runner, repo, path, side, fingerprint, force)
+      }
+    } catch (error) {
+      return failureFrom(error)
+    }
+  }
+
+  /** Resolves every text conflict the word-level merge settles, in one write. */
+  async resolveSimpleConflicts(repo: string): Promise<IpcResult<ResolveSimpleOutcome>> {
+    const opened = await this.open(repo)
+    if (!opened.ok) return opened
+
+    try {
+      return { ok: true, value: await resolveSimple(this.runner, repo) }
+    } catch (error) {
+      return failureFrom(error)
+    }
+  }
+
+  /** Puts a resolved file back into conflict, restoring its stages. */
+  revertConflict(repo: string, path: string): Promise<IpcResult<null>> {
+    return this.write(repo, () => revertConflictResolution(this.runner, repo, path))
   }
 
   /** Opens the repository, runs one write and maps any failure to a result. */

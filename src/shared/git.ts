@@ -14,6 +14,12 @@
  */
 export type ConflictCode = 'DD' | 'AU' | 'UD' | 'UA' | 'DU' | 'AA' | 'UU'
 
+/** Which of the two sides of a merge or rebase a Git command works on. */
+export type GitSide = 'ours' | 'theirs'
+
+/** The side the dialog calls Yours or Theirs. */
+export type ConflictSide = 'yours' | 'theirs'
+
 /**
  * File modes of an entry. For an ordinary or renamed entry they are the modes
  * in HEAD, the index and the working tree. For an unmerged entry the three
@@ -153,4 +159,62 @@ export interface ChangeSummary {
   unstaged: StatusEntry[]
   untracked: UntrackedEntry[]
   conflicts: UnmergedEntry[]
+}
+
+/**
+ * One file in the conflicts dialog. It is either unmerged right now, or it was
+ * unmerged and Seam can still undo the resolution because Git kept the three
+ * versions in its resolve-undo data. `modes` holds the modes of stages 1, 2 and
+ * 3 in `head`, `index` and `worktree`; `000000` marks a side that deleted the
+ * file.
+ */
+export interface ConflictEntry {
+  readonly path: string
+  readonly code: ConflictCode
+  /** Whether the conflict has already been resolved (and can be reverted). */
+  readonly resolved: boolean
+  readonly modes: Modes
+  /** Whether either side is binary, which rules out the text merge. */
+  readonly binary: boolean
+  /**
+   * A fingerprint of the working copy when the dialog read it, or null when the
+   * file did not exist. Accepting a side only overwrites the file when it still
+   * matches, unless the user confirms.
+   */
+  readonly fingerprint: string | null
+}
+
+/**
+ * How the dialog names the two sides for the operation in progress. In a
+ * rebase the side Git calls `ours` is the new base, so Seam calls your commits
+ * Yours (`theirs` in Git) and the base Theirs (`ours` in Git).
+ */
+export interface ConflictSides {
+  /** The operation in progress, or null for a stash pop or a bare conflict. */
+  readonly operation: GitOperation | null
+  /** The branch or commit Seam calls Yours. */
+  readonly yoursLabel: string
+  /** The branch or commit Seam calls Theirs. */
+  readonly theirsLabel: string
+  /** The Git side behind Yours. */
+  readonly yours: GitSide
+  /** The Git side behind Theirs. */
+  readonly theirs: GitSide
+}
+
+/** Everything the conflicts dialog shows: the files and the name of each side. */
+export interface ConflictState {
+  readonly entries: readonly ConflictEntry[]
+  readonly sides: ConflictSides
+}
+
+/** The result of accepting a side: whether the user must confirm an overwrite. */
+export interface ConflictAcceptOutcome {
+  readonly needsConfirmation: boolean
+}
+
+/** How many files a bulk resolution changed, and how many it left alone. */
+export interface ResolveSimpleOutcome {
+  readonly resolved: number
+  readonly remaining: number
 }

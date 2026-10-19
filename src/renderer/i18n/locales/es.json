@@ -35,6 +35,45 @@
       "rebase": "Rebase en curso"
     }
   },
+  "conflicts": {
+    "title": "Conflictos de merge",
+    "loading": "Leyendo los conflictos…",
+    "sides": "Tuyos: {{yours}} · Suyos: {{theirs}}",
+    "status": {
+      "unresolved": "Sin resolver",
+      "resolved": "Resuelto"
+    },
+    "kind": {
+      "UU": "Modificado en ambos",
+      "AA": "Añadido en ambos",
+      "DU": "Borrado por nosotros",
+      "UD": "Borrado por ellos",
+      "AU": "Añadido por nosotros",
+      "UA": "Añadido por ellos",
+      "DD": "Borrado en ambos"
+    },
+    "binary": "Binario",
+    "acceptYours": "Aceptar los tuyos ({{label}})",
+    "acceptTheirs": "Aceptar los suyos ({{label}})",
+    "keep": "Conservar archivo",
+    "delete": "Borrar archivo",
+    "resolveManually": "Resolver a mano",
+    "resolveSimple": "Resolver todos los conflictos simples",
+    "resolvedCount": "Resueltos {{resolved}}; quedan {{remaining}}.",
+    "nothingSimple": "No hay conflictos simples pendientes.",
+    "revert": "Deshacer la resolución",
+    "overwrite": "Sobrescribir",
+    "overwriteTitle": "El archivo ha cambiado",
+    "overwriteExplain": "«{{path}}» ha cambiado desde que se leyó el conflicto. Si aceptas este lado, se sobrescribirá.",
+    "overwriteCancel": "Cancelar",
+    "acceptAndFinish": "Aceptar y terminar",
+    "abort": "Abortar",
+    "close": "Cerrar",
+    "laterPhase": "Disponible en una fase posterior.",
+    "resolve": "Resolver",
+    "resolveConflicts": "Resolver conflictos",
+    "noUnresolved": "No quedan conflictos sin resolver."
+  },
   "commit": {
     "message": {
       "label": "Mensaje del commit",

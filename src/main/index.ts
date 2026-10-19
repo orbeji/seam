@@ -17,6 +17,13 @@ if (userData !== undefined && userData !== '') {
   app.setPath('userData', userData)
 }
 
+/**
+ * End-to-end runs set this so the window is never shown: the tests drive the
+ * renderer through Playwright while nothing appears under the pointer or takes
+ * the desktop's focus.
+ */
+const HIDDEN_WINDOW = process.env['SEAM_HIDDEN_WINDOW'] === '1'
+
 function createWindow(): BrowserWindow {
   const window = new BrowserWindow({
     width: 1200,
@@ -29,13 +36,17 @@ function createWindow(): BrowserWindow {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true
+      sandbox: true,
+      // A hidden window would otherwise throttle its animation frames.
+      backgroundThrottling: !HIDDEN_WINDOW
     }
   })
 
-  window.on('ready-to-show', () => {
-    window.show()
-  })
+  if (!HIDDEN_WINDOW) {
+    window.on('ready-to-show', () => {
+      window.show()
+    })
+  }
 
   // electron-vite exposes the dev server URL while running `npm run dev`.
   const devServerUrl = process.env['ELECTRON_RENDERER_URL']

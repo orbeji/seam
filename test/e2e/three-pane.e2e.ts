@@ -44,7 +44,10 @@ beforeAll(async () => {
       '--repo',
       repository.path
     ],
-    env: { ...process.env, SEAM_USER_DATA: userData } as Record<string, string>
+    env: { ...process.env, SEAM_USER_DATA: userData, SEAM_HIDDEN_WINDOW: '1' } as Record<
+      string,
+      string
+    >
   })
   page = await application.firstWindow()
   await page.waitForSelector('[data-testid=unstaged]')

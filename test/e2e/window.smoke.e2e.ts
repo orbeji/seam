@@ -32,7 +32,10 @@ beforeAll(async () => {
 
   application = await electron.launch({
     args: ['--no-sandbox', join(process.cwd(), 'out', 'main', 'index.js'), '--repo', samples.mixed],
-    env: { ...process.env, SEAM_USER_DATA: userData } as Record<string, string>
+    env: { ...process.env, SEAM_USER_DATA: userData, SEAM_HIDDEN_WINDOW: '1' } as Record<
+      string,
+      string
+    >
   })
   page = await application.firstWindow()
   await page.waitForSelector('[data-testid=staged]')

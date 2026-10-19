@@ -3,11 +3,15 @@
 import type {
   ChangeSummary,
   CommitOutcome,
+  ConflictAcceptOutcome,
+  ConflictSide,
+  ConflictState,
   GitOperation,
   HeadCommit,
   Identity,
   IdentityScope,
-  RepoStatus
+  RepoStatus,
+  ResolveSimpleOutcome
 } from './git'
 
 /**
@@ -15,7 +19,7 @@ import type {
  * interface. Bump it whenever a message shape changes so the three layers can
  * detect a mismatch instead of failing silently.
  */
-export const IPC_CONTRACT_VERSION = 15
+export const IPC_CONTRACT_VERSION = 16
 
 /** Channel names shared by the main process and the preload bridge. */
 export const IPC_CHANNELS = {
@@ -43,6 +47,10 @@ export const IPC_CHANNELS = {
   writeIdentity: 'identity:write',
   readSettings: 'settings:read',
   writeSettings: 'settings:write',
+  readConflicts: 'conflicts:read',
+  acceptConflict: 'conflicts:accept',
+  resolveSimpleConflicts: 'conflicts:resolve-simple',
+  revertConflict: 'conflicts:revert',
   /** Copies text from the interface through the main process's clipboard. */
   writeClipboardText: 'clipboard:write-text'
 } as const
@@ -241,6 +249,23 @@ export interface SettingsData {
   readonly runHooks: boolean
 }
 
+/** One side of a conflict to accept, with the working copy the dialog saw. */
+export interface ConflictAcceptRequest {
+  readonly repo: string
+  readonly path: string
+  readonly side: ConflictSide
+  /** The fingerprint from the entry, or null when the file did not exist. */
+  readonly fingerprint: string | null
+  /** Whether to overwrite even when the file changed since it was read. */
+  readonly force?: boolean
+}
+
+/** A resolved conflict whose resolution should be undone. */
+export interface ConflictRevertRequest {
+  readonly repo: string
+  readonly path: string
+}
+
 /**
  * Surface the preload script exposes to the renderer on `window.seam`. It grows
  * as the interface needs typed calls: stage, commit, resolve, continue and abort
@@ -333,6 +358,24 @@ export interface SeamApi {
   readSettings(): Promise<IpcResult<SettingsData>>
   /** Stores the preferences; never throws. */
   writeSettings(settings: SettingsData): Promise<IpcResult<null>>
+  /**
+   * The conflict list and the name of each side, including the files Git can
+   * still un-resolve; never throws.
+   */
+  readConflicts(repo: string): Promise<IpcResult<ConflictState>>
+  /**
+   * Accepts one side of an unresolved file, or deletes it when that side has no
+   * file. Returns `needsConfirmation` when the working copy changed since the
+   * dialog read it; sending it again with `force` overwrites it; never throws.
+   */
+  acceptConflict(request: ConflictAcceptRequest): Promise<IpcResult<ConflictAcceptOutcome>>
+  /**
+   * Resolves every text conflict the word-level merge settles and leaves the
+   * rest; never throws. The outcome counts what changed.
+   */
+  resolveSimpleConflicts(repo: string): Promise<IpcResult<ResolveSimpleOutcome>>
+  /** Puts a resolved file back into conflict; never throws. */
+  revertConflict(request: ConflictRevertRequest): Promise<IpcResult<null>>
   /**
    * Copies text to the system clipboard, so the commit notification can offer
    * the short id without the renderer fighting the browser's clipboard rules;

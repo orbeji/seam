@@ -45,8 +45,15 @@ function listing(name: string, status: RepoStatus): string {
 }
 
 describe('createSampleRepositories', () => {
-  it('creates the three repositories', async () => {
-    expect(Object.keys(samples).sort()).toEqual(['clean', 'conflicts', 'mixed'])
+  it('creates every sample repository', async () => {
+    expect(Object.keys(samples).sort()).toEqual([
+      'cherryPick',
+      'clean',
+      'conflicts',
+      'mixed',
+      'rebase',
+      'stash'
+    ])
   })
 
   it('leaves the clean repository with no entries', async () => {
@@ -101,18 +108,37 @@ describe('createSampleRepositories', () => {
       ['binary.dat', 'UU'],
       ['both.txt', 'UU'],
       ['deleted-by-them.txt', 'UD'],
-      ['deleted-by-us.txt', 'DU']
+      ['deleted-by-us.txt', 'DU'],
+      ['simple.txt', 'UU']
     ])
     expect(await detectOperation(runner, samples.conflicts)).toBe('merge')
   })
 
+  it('stops a rebase on the commit being replayed', async () => {
+    expect(await detectOperation(runner, samples.rebase)).toBe('rebase')
+    const status = await readStatus(runner, samples.rebase)
+    expect(status.entries.map((entry) => entry.path)).toEqual(['f.txt'])
+  })
+
+  it('stops a cherry-pick and leaves the picked commit named', async () => {
+    expect(await detectOperation(runner, samples.cherryPick)).toBe('cherry-pick')
+    const status = await readStatus(runner, samples.cherryPick)
+    expect(status.entries.map((entry) => entry.path)).toEqual(['f.txt'])
+  })
+
+  it('leaves a conflicting stash pop with unmerged entries and no operation', async () => {
+    expect(await detectOperation(runner, samples.stash)).toBeNull()
+    const status = await readStatus(runner, samples.stash)
+    expect(status.entries.map((entry) => entry.path)).toEqual(['f.txt'])
+  })
+
   it('prints the four lists of each repository', async () => {
     const blocks: string[] = []
-    for (const name of ['clean', 'mixed', 'conflicts'] as const) {
+    for (const name of ['clean', 'mixed', 'conflicts', 'rebase', 'cherryPick', 'stash'] as const) {
       blocks.push(listing(name, await readStatus(runner, samples[name])))
     }
     // Not an assertion: this is the listing the phase 0 criterion asks for.
     console.log(`\n${blocks.join('\n\n')}\n`)
-    expect(blocks).toHaveLength(3)
+    expect(blocks).toHaveLength(6)
   })
 })

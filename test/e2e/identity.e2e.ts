@@ -56,6 +56,7 @@ async function launch(repo: string, home: string): Promise<void> {
     env: {
       ...process.env,
       SEAM_USER_DATA: userData,
+      SEAM_HIDDEN_WINDOW: '1',
       HOME: home,
       XDG_CONFIG_HOME: join(home, '.config'),
       GIT_CONFIG_NOSYSTEM: '1'

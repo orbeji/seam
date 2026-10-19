@@ -1,12 +1,21 @@
 // SPDX-License-Identifier: MIT
 
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
-import type { CommitOutcome, HeadCommit, Identity } from '../shared/git'
+import type {
+  CommitOutcome,
+  ConflictAcceptOutcome,
+  ConflictState,
+  HeadCommit,
+  Identity,
+  ResolveSimpleOutcome
+} from '../shared/git'
 import {
   IPC_CHANNELS,
   IPC_CONTRACT_VERSION,
   type CommitDraftWriteRequest,
   type CommitRequest,
+  type ConflictAcceptRequest,
+  type ConflictRevertRequest,
   type FileComparison,
   type FileComparisonRequest,
   type HunkWriteRequest,
@@ -76,6 +85,18 @@ const seamApi: SeamApi = {
     ipcRenderer.invoke(IPC_CHANNELS.readSettings) as Promise<IpcResult<SettingsData>>,
   writeSettings: (settings: SettingsData) =>
     ipcRenderer.invoke(IPC_CHANNELS.writeSettings, settings) as Promise<IpcResult<null>>,
+  readConflicts: (repo: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.readConflicts, repo) as Promise<IpcResult<ConflictState>>,
+  acceptConflict: (request: ConflictAcceptRequest) =>
+    ipcRenderer.invoke(IPC_CHANNELS.acceptConflict, request) as Promise<
+      IpcResult<ConflictAcceptOutcome>
+    >,
+  resolveSimpleConflicts: (repo: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.resolveSimpleConflicts, repo) as Promise<
+      IpcResult<ResolveSimpleOutcome>
+    >,
+  revertConflict: (request: ConflictRevertRequest) =>
+    ipcRenderer.invoke(IPC_CHANNELS.revertConflict, request) as Promise<IpcResult<null>>,
   writeClipboardText: (text: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.writeClipboardText, text) as Promise<IpcResult<null>>,
   onRepositoryChanged: (listener: (repo: string) => void) => {

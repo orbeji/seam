@@ -14,6 +14,12 @@ export interface SampleRepositories {
   mixed: string
   /** A merge stopped on one file of each conflict kind, plus a binary. */
   conflicts: string
+  /** A rebase stopped on the commit being replayed. */
+  rebase: string
+  /** A cherry-pick stopped on the picked commit. */
+  cherryPick: string
+  /** A stash pop that conflicted with the working copy. */
+  stash: string
 }
 
 /** Identity and dates are pinned so the fixtures never depend on the machine. */
@@ -143,6 +149,7 @@ async function makeConflicts(runner: GitRunner, repo: string): Promise<void> {
   write(repo, 'both.txt', 'base\n')
   write(repo, 'deleted-by-us.txt', 'base\n')
   write(repo, 'deleted-by-them.txt', 'base\n')
+  write(repo, 'simple.txt', 'alpha beta gamma\n')
   write(repo, 'binary.dat', new Uint8Array([0, 1, 2, 3]))
   await git(runner, repo, ['add', '.'])
   await git(runner, repo, ['commit', '-qm', 'Base'])
@@ -152,6 +159,7 @@ async function makeConflicts(runner: GitRunner, repo: string): Promise<void> {
   write(repo, 'added-by-both.txt', 'added by them\n')
   write(repo, 'deleted-by-us.txt', 'modified by them\n')
   rmSync(join(repo, 'deleted-by-them.txt'))
+  write(repo, 'simple.txt', 'alpha beta GAMMA\n')
   write(repo, 'binary.dat', new Uint8Array([0, 1, 2, 3, 4, 5]))
   await git(runner, repo, ['add', '-A'])
   await git(runner, repo, ['commit', '-qm', 'Side'])
@@ -161,6 +169,7 @@ async function makeConflicts(runner: GitRunner, repo: string): Promise<void> {
   write(repo, 'added-by-both.txt', 'added by us\n')
   rmSync(join(repo, 'deleted-by-us.txt'))
   write(repo, 'deleted-by-them.txt', 'modified by us\n')
+  write(repo, 'simple.txt', 'ALPHA beta gamma\n')
   write(repo, 'binary.dat', new Uint8Array([0, 1, 2, 3, 9, 9]))
   await git(runner, repo, ['add', '-A'])
   await git(runner, repo, ['commit', '-qm', 'Main'])
@@ -169,22 +178,74 @@ async function makeConflicts(runner: GitRunner, repo: string): Promise<void> {
   await git(runner, repo, ['merge', '--no-edit', 'side']).catch(() => undefined)
 }
 
+/** Commits a base and two branches that change the same line. */
+async function competingBranches(runner: GitRunner, repo: string): Promise<void> {
+  await git(runner, repo, ['init', '-q'])
+  write(repo, 'f.txt', 'base\n')
+  await git(runner, repo, ['add', '.'])
+  await git(runner, repo, ['commit', '-qm', 'Base'])
+
+  await git(runner, repo, ['checkout', '-q', '-b', 'side'])
+  write(repo, 'f.txt', 'side\n')
+  await git(runner, repo, ['add', '.'])
+  await git(runner, repo, ['commit', '-qm', 'Side change'])
+
+  await git(runner, repo, ['checkout', '-q', 'main'])
+  write(repo, 'f.txt', 'main\n')
+  await git(runner, repo, ['add', '.'])
+  await git(runner, repo, ['commit', '-qm', 'Main change'])
+}
+
+async function makeRebase(runner: GitRunner, repo: string): Promise<void> {
+  await competingBranches(runner, repo)
+  await git(runner, repo, ['checkout', '-q', 'side'])
+  // Expected to exit non-zero: the point is the stopped rebase.
+  await git(runner, repo, ['rebase', 'main']).catch(() => undefined)
+}
+
+async function makeCherryPick(runner: GitRunner, repo: string): Promise<void> {
+  await competingBranches(runner, repo)
+  const picked = (await git(runner, repo, ['rev-parse', 'side'])).trim()
+  // Expected to exit non-zero: the point is the stopped cherry-pick.
+  await git(runner, repo, ['cherry-pick', picked]).catch(() => undefined)
+}
+
+async function makeStash(runner: GitRunner, repo: string): Promise<void> {
+  await git(runner, repo, ['init', '-q'])
+  write(repo, 'f.txt', 'base\n')
+  await git(runner, repo, ['add', '.'])
+  await git(runner, repo, ['commit', '-qm', 'Base'])
+  write(repo, 'f.txt', 'stashed\n')
+  await git(runner, repo, ['stash', 'push', '-m', 'Stashed change'])
+  write(repo, 'f.txt', 'current\n')
+  await git(runner, repo, ['add', '.'])
+  await git(runner, repo, ['commit', '-qm', 'Current change'])
+  // Expected to exit non-zero: the point is the stopped stash pop.
+  await git(runner, repo, ['stash', 'pop']).catch(() => undefined)
+}
+
 /**
- * Creates the three sample repositories under `baseDir`, which should be a
- * fresh temporary directory. Returns their paths.
+ * Creates the sample repositories under `baseDir`, which should be a fresh
+ * temporary directory. Returns their paths.
  */
 export async function createSampleRepositories(baseDir: string): Promise<SampleRepositories> {
   const runner = sampleRunner()
   const clean = join(baseDir, 'clean')
   const mixed = join(baseDir, 'mixed')
   const conflicts = join(baseDir, 'conflicts')
-  mkdirSync(clean, { recursive: true })
-  mkdirSync(mixed, { recursive: true })
-  mkdirSync(conflicts, { recursive: true })
+  const rebase = join(baseDir, 'rebase')
+  const cherryPick = join(baseDir, 'cherry-pick')
+  const stash = join(baseDir, 'stash')
+  for (const directory of [clean, mixed, conflicts, rebase, cherryPick, stash]) {
+    mkdirSync(directory, { recursive: true })
+  }
 
   await makeClean(runner, clean)
   await makeMixed(runner, mixed)
   await makeConflicts(runner, conflicts)
+  await makeRebase(runner, rebase)
+  await makeCherryPick(runner, cherryPick)
+  await makeStash(runner, stash)
 
-  return { clean, mixed, conflicts }
+  return { clean, mixed, conflicts, rebase, cherryPick, stash }
 }

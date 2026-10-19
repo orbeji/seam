@@ -31,7 +31,10 @@ async function launch(repo: string): Promise<void> {
   if (application !== null) await application.close()
   application = await electron.launch({
     args: ['--no-sandbox', join(process.cwd(), 'out', 'main', 'index.js'), '--repo', repo],
-    env: { ...process.env, SEAM_USER_DATA: userData } as Record<string, string>
+    env: { ...process.env, SEAM_USER_DATA: userData, SEAM_HIDDEN_WINDOW: '1' } as Record<
+      string,
+      string
+    >
   })
   page = await application.firstWindow()
   await page.waitForSelector('[data-testid=commit-message]')

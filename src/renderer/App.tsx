@@ -2,12 +2,20 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import type { ChangeSummary, HeadCommit, IdentityScope } from '../shared/git'
+import type {
+  ChangeSummary,
+  ConflictEntry,
+  ConflictSide,
+  ConflictState,
+  HeadCommit,
+  IdentityScope
+} from '../shared/git'
 import type { CrlfChoice, FileVersionSource, IpcErrorCode, RepositorySnapshot } from '../shared/ipc'
 import ChangesView from './changes/ChangesView'
 import CommitBox from './commit/CommitBox'
 import EolDialog, { type EolAnswer } from './commit/EolDialog'
 import IdentityDialog from './commit/IdentityDialog'
+import ConflictsDialog, { type ConflictOverwrite } from './conflicts/ConflictsDialog'
 import DiffView from './diff/DiffView'
 import { ERROR_KEYS } from './errors'
 import { SUPPORTED_LANGUAGES, type SupportedLanguage } from './i18n'
@@ -17,6 +25,9 @@ type View =
   | { state: 'loading' }
   | { state: 'ready'; snapshot: RepositorySnapshot }
   | { state: 'error'; code: IpcErrorCode; message: string }
+
+/** The conflicts dialog's contents: loading, or the list and the side names. */
+type ConflictsView = { state: 'loading' } | { state: 'ready'; data: ConflictState }
 
 /** The file the viewer shows and the two versions it compares. */
 interface Selection {
@@ -110,6 +121,21 @@ export default function App() {
   const [identityPrompt, setIdentityPrompt] = useState<{ name: string; email: string } | null>(null)
   // Whether the typed identity is being stored, so its buttons wait.
   const [savingIdentity, setSavingIdentity] = useState(false)
+  // The conflicts dialog: null when closed, loading while the main process
+  // reads the list, and ready with the files and the name of each side.
+  const [conflictsView, setConflictsView] = useState<ConflictsView | null>(null)
+  // Whether a conflict action is running, so its buttons cannot be pressed twice.
+  const [conflictsBusy, setConflictsBusy] = useState(false)
+  // A failed conflict action, shown inside the dialog without closing it.
+  const [conflictsError, setConflictsError] = useState<string | null>(null)
+  // What the last bulk resolution did, under the list.
+  const [conflictsNotice, setConflictsNotice] = useState<string | null>(null)
+  // The file and side waiting for the user to confirm an overwrite.
+  const [overwrite, setOverwrite] = useState<ConflictOverwrite | null>(null)
+  // The operation the dialog was last opened for. Conflicts open the dialog
+  // once per operation, not on every refresh; when none are left the key is
+  // cleared so the next operation opens it again.
+  const conflictsOpenedFor = useRef<string | null>(null)
 
   const open = useCallback(async (repo: string) => {
     setSelected(null)
@@ -126,6 +152,11 @@ export default function App() {
     setCommitNotice(null)
     setCopied(false)
     setIdentityPrompt(null)
+    setConflictsView(null)
+    setConflictsError(null)
+    setConflictsNotice(null)
+    setOverwrite(null)
+    conflictsOpenedFor.current = null
     setView({ state: 'loading' })
     const result = await window.seam.readRepositoryStatus(repo)
     if (result.ok) {
@@ -184,6 +215,152 @@ export default function App() {
       setView({ state: 'ready', snapshot: result.value })
     }
   }, [])
+
+  /** Rereads the dialog's list without making it flash "loading". */
+  const reloadConflicts = useCallback(async () => {
+    const repo = repoRef.current
+    if (repo === null) return
+    const result = await window.seam.readConflicts(repo)
+    if (result.ok) setConflictsView({ state: 'ready', data: result.value })
+    else setConflictsError(result.message)
+  }, [])
+
+  /** Opens the dialog and reads the conflicts, including the resolved ones. */
+  const openConflicts = useCallback(async () => {
+    const repo = repoRef.current
+    if (repo === null) return
+    setConflictsView({ state: 'loading' })
+    setConflictsError(null)
+    setConflictsNotice(null)
+    setOverwrite(null)
+    const result = await window.seam.readConflicts(repo)
+    if (result.ok) {
+      setConflictsView({ state: 'ready', data: result.value })
+    } else {
+      setConflictsView(null)
+      setWriteError({ code: result.code, message: result.message })
+    }
+  }, [])
+
+  /**
+   * Accepts one side of a file. When the working copy changed since the dialog
+   * read it, the main process asks first; the second call is forced.
+   */
+  const acceptSide = useCallback(
+    async (path: string, side: ConflictSide, fingerprint: string | null, force: boolean) => {
+      const repo = repoRef.current
+      if (repo === null) return
+      setConflictsBusy(true)
+      setConflictsError(null)
+      setConflictsNotice(null)
+      try {
+        const result = await window.seam.acceptConflict({
+          repo,
+          path,
+          side,
+          fingerprint,
+          ...(force ? { force: true } : {})
+        })
+        if (!result.ok) {
+          setConflictsError(result.message)
+          return
+        }
+        if (result.value.needsConfirmation) {
+          setOverwrite({ path, side })
+          return
+        }
+        setOverwrite(null)
+        await refresh()
+        await reloadConflicts()
+      } finally {
+        setConflictsBusy(false)
+      }
+    },
+    [refresh, reloadConflicts]
+  )
+
+  const acceptConflict = useCallback(
+    (entry: ConflictEntry, side: ConflictSide) =>
+      void acceptSide(entry.path, side, entry.fingerprint, false),
+    [acceptSide]
+  )
+
+  const confirmOverwrite = useCallback(() => {
+    if (overwrite === null) return
+    void acceptSide(overwrite.path, overwrite.side, null, true)
+  }, [acceptSide, overwrite])
+
+  /** Resolves every simple text conflict and reports what was left. */
+  const resolveSimple = useCallback(async () => {
+    const repo = repoRef.current
+    if (repo === null) return
+    setConflictsBusy(true)
+    setConflictsError(null)
+    setConflictsNotice(null)
+    try {
+      const result = await window.seam.resolveSimpleConflicts(repo)
+      if (!result.ok) {
+        setConflictsError(result.message)
+        return
+      }
+      setConflictsNotice(
+        t('conflicts.resolvedCount', {
+          resolved: result.value.resolved,
+          remaining: result.value.remaining
+        })
+      )
+      await refresh()
+      await reloadConflicts()
+    } finally {
+      setConflictsBusy(false)
+    }
+  }, [refresh, reloadConflicts, t])
+
+  /** Puts a resolved file back into conflict. */
+  const revertConflict = useCallback(
+    async (entry: ConflictEntry) => {
+      const repo = repoRef.current
+      if (repo === null) return
+      setConflictsBusy(true)
+      setConflictsError(null)
+      setConflictsNotice(null)
+      try {
+        const result = await window.seam.revertConflict({ repo, path: entry.path })
+        if (!result.ok) {
+          setConflictsError(result.message)
+          return
+        }
+        await refresh()
+        await reloadConflicts()
+      } finally {
+        setConflictsBusy(false)
+      }
+    },
+    [refresh, reloadConflicts]
+  )
+
+  const closeConflicts = useCallback(() => {
+    setConflictsView(null)
+    setConflictsError(null)
+    setConflictsNotice(null)
+    setOverwrite(null)
+  }, [])
+
+  // Conflicts open the dialog once per operation, not on every refresh: the
+  // key is the operation and the commit it started from. A closed dialog stays
+  // closed until the next operation, and the list's Resolve link reopens it.
+  useEffect(() => {
+    if (view.state !== 'ready' || conflictsView !== null) return
+    const count = view.snapshot.summary.conflicts.length
+    if (count === 0) {
+      conflictsOpenedFor.current = null
+      return
+    }
+    const key = `${view.snapshot.operation ?? 'conflict'}:${view.snapshot.status.branch.oid ?? ''}`
+    if (conflictsOpenedFor.current === key) return
+    conflictsOpenedFor.current = key
+    void openConflicts()
+  }, [view, conflictsView, openConflicts])
 
   useEffect(() => {
     void (async () => {
@@ -557,6 +734,22 @@ export default function App() {
           onCancel={() => setCrlfPrompt(null)}
         />
       )}
+
+      {conflictsView !== null && (
+        <ConflictsDialog
+          state={conflictsView.state === 'ready' ? conflictsView.data : null}
+          busy={conflictsBusy}
+          error={conflictsError}
+          notice={conflictsNotice}
+          overwrite={overwrite}
+          onAccept={acceptConflict}
+          onResolveSimple={() => void resolveSimple()}
+          onRevert={(entry) => void revertConflict(entry)}
+          onOverwrite={confirmOverwrite}
+          onCancelOverwrite={() => setOverwrite(null)}
+          onClose={closeConflicts}
+        />
+      )}
     </div>
   )
 
@@ -590,9 +783,11 @@ export default function App() {
             {selected === null ? (
               <ChangesView
                 summary={view.snapshot.summary}
+                operation={view.snapshot.operation}
                 onOpen={(path, from, to) => setSelected({ path, from, to })}
                 onStage={(paths) => void writeStaging(paths, false)}
                 onUnstage={(paths) => void writeStaging(paths, true)}
+                onResolve={() => void openConflicts()}
               />
             ) : (
               <DiffView

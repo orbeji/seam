@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { GitRunner, type GitRunnerOptions, type GitRunResult } from '../../src/core/git'
@@ -44,6 +44,11 @@ export class SampleRepository {
 
   write(relativePath: string, contents: string): void {
     writeFileSync(join(this.path, relativePath), contents)
+  }
+
+  /** Reads a working-copy file as text, for assertions. */
+  read(relativePath: string): string {
+    return readFileSync(join(this.path, relativePath), 'utf8')
   }
 
   remove(relativePath: string): void {

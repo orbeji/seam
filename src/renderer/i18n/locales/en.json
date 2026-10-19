@@ -35,6 +35,45 @@
       "rebase": "Rebase in progress"
     }
   },
+  "conflicts": {
+    "title": "Merge conflicts",
+    "loading": "Reading the conflicts…",
+    "sides": "Yours: {{yours}} · Theirs: {{theirs}}",
+    "status": {
+      "unresolved": "Unresolved",
+      "resolved": "Resolved"
+    },
+    "kind": {
+      "UU": "Both modified",
+      "AA": "Both added",
+      "DU": "Deleted by us",
+      "UD": "Deleted by them",
+      "AU": "Added by us",
+      "UA": "Added by them",
+      "DD": "Deleted by both"
+    },
+    "binary": "Binary",
+    "acceptYours": "Accept yours ({{label}})",
+    "acceptTheirs": "Accept theirs ({{label}})",
+    "keep": "Keep file",
+    "delete": "Delete file",
+    "resolveManually": "Resolve manually",
+    "resolveSimple": "Resolve all simple conflicts",
+    "resolvedCount": "Resolved {{resolved}}; {{remaining}} still to go.",
+    "nothingSimple": "No simple conflicts are waiting.",
+    "revert": "Revert conflict resolution",
+    "overwrite": "Overwrite",
+    "overwriteTitle": "The file changed",
+    "overwriteExplain": "“{{path}}” changed since the conflict was read. Accepting this side overwrites it.",
+    "overwriteCancel": "Cancel",
+    "acceptAndFinish": "Accept and finish",
+    "abort": "Abort",
+    "close": "Close",
+    "laterPhase": "Available in a later phase.",
+    "resolve": "Resolve",
+    "resolveConflicts": "Resolve conflicts",
+    "noUnresolved": "No unresolved conflicts."
+  },
   "commit": {
     "message": {
       "label": "Commit message",

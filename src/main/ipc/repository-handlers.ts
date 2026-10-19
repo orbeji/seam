@@ -10,6 +10,8 @@ import {
 } from 'electron'
 import type {
   CommitRequest,
+  ConflictAcceptRequest,
+  ConflictRevertRequest,
   CrlfChoice,
   FileVersionSource,
   HunkRange,
@@ -117,6 +119,28 @@ function parsePathRequest(value: unknown): { repo: string; path: string } | null
   const { repo, path } = value as Record<string, unknown>
   if (typeof repo !== 'string' || typeof path !== 'string') return null
   return { repo, path }
+}
+
+/** Narrows an IPC payload to accepting one side of a conflict. */
+function parseConflictAccept(value: unknown): ConflictAcceptRequest | null {
+  if (typeof value !== 'object' || value === null) return null
+  const { repo, path, side, fingerprint, force } = value as Record<string, unknown>
+  if (typeof repo !== 'string' || typeof path !== 'string') return null
+  if (side !== 'yours' && side !== 'theirs') return null
+  if (fingerprint !== null && typeof fingerprint !== 'string') return null
+  if (force !== undefined && typeof force !== 'boolean') return null
+  return {
+    repo,
+    path,
+    side,
+    fingerprint,
+    ...(force === undefined ? {} : { force })
+  }
+}
+
+/** Narrows an IPC payload to undoing one conflict resolution. */
+function parseConflictRevert(value: unknown): ConflictRevertRequest | null {
+  return parsePathRequest(value)
 }
 
 /** Narrows an IPC payload to a repository and a message, rejecting anything
@@ -409,6 +433,42 @@ export function registerRepositoryHandlers(
         message: error instanceof Error ? error.message : String(error)
       }
     }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.readConflicts, (_event, repo: unknown) => {
+    if (typeof repo !== 'string') {
+      return { ok: false, code: 'unknown', message: 'Invalid conflict request' }
+    }
+    return service.readConflicts(repo)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.acceptConflict, (_event, request: unknown) => {
+    const parsed = parseConflictAccept(request)
+    if (parsed === null) {
+      return { ok: false, code: 'unknown', message: 'Invalid conflict request' }
+    }
+    return service.acceptConflict(
+      parsed.repo,
+      parsed.path,
+      parsed.side,
+      parsed.fingerprint,
+      parsed.force === true
+    )
+  })
+
+  ipcMain.handle(IPC_CHANNELS.resolveSimpleConflicts, (_event, repo: unknown) => {
+    if (typeof repo !== 'string') {
+      return { ok: false, code: 'unknown', message: 'Invalid conflict request' }
+    }
+    return service.resolveSimpleConflicts(repo)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.revertConflict, (_event, request: unknown) => {
+    const parsed = parseConflictRevert(request)
+    if (parsed === null) {
+      return { ok: false, code: 'unknown', message: 'Invalid conflict request' }
+    }
+    return service.revertConflict(parsed.repo, parsed.path)
   })
 
   ipcMain.handle(IPC_CHANNELS.writeClipboardText, (_event, text: unknown) => {

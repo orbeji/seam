@@ -41,7 +41,10 @@ beforeAll(async () => {
       '--repo',
       repository.path
     ],
-    env: { ...process.env, SEAM_USER_DATA: userData } as Record<string, string>
+    env: { ...process.env, SEAM_USER_DATA: userData, SEAM_HIDDEN_WINDOW: '1' } as Record<
+      string,
+      string
+    >
   })
   page = await application.firstWindow()
   await page.waitForSelector('[data-testid=staged]')
@@ -70,6 +73,24 @@ async function openFile(): Promise<void> {
   await page.waitForSelector('.staging-marker--staged')
 }
 
+/**
+ * The end-to-end window is hidden, which delays CodeMirror's own correction of
+ * its gutter line height. Wait until the gutter cell is as tall as a rendered
+ * code line before comparing their centres.
+ */
+async function waitForGutterLayout(): Promise<void> {
+  const lineHeight = (await page.locator('.cm-merge-b .cm-line').first().boundingBox())?.height
+  if (lineHeight === undefined) return
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    const gutter = await page
+      .locator('.cm-gutterElement')
+      .filter({ has: page.locator('.staging-marker--staged') })
+      .boundingBox()
+    if (gutter !== null && Math.abs(gutter.height - lineHeight) < 0.5) return
+    await page.waitForTimeout(50)
+  }
+}
+
 /** The vertical centre of an element, so a marker can be lined up with a line. */
 async function centre(selector: string, text?: string): Promise<number> {
   const locator =
@@ -82,7 +103,7 @@ async function centre(selector: string, text?: string): Promise<number> {
 describe('the staging margin over a real file', () => {
   it('draws one hollow marker and one solid marker, each on its line', async () => {
     await openFile()
-
+    await waitForGutterLayout()
     expect(await page.locator('.staging-gutter').count()).toBe(1)
     expect(await page.locator('.staging-marker--staged').count()).toBe(1)
     expect(await page.locator('.staging-marker--unstaged').count()).toBe(1)
