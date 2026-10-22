@@ -241,9 +241,22 @@ export class GitRunner {
       /** Kills the command and any children a hook started, not just the shell. */
       const kill = (): void => {
         if (child.pid === undefined) return
+        if (process.platform === 'win32') {
+          // `child.kill` ends only Git; a hook keeps its own children (sh,
+          // sleep, a compiler) holding our pipes open. `taskkill /T` ends the
+          // whole tree, which is what lets `close` fire and releases the files.
+          const killer = spawn('taskkill', ['/pid', String(child.pid), '/t', '/f'], {
+            windowsHide: true,
+            stdio: 'ignore'
+          })
+          killer.on('error', () => child.kill('SIGKILL'))
+          killer.on('exit', (code) => {
+            if (code !== 0) child.kill('SIGKILL')
+          })
+          return
+        }
         try {
-          if (process.platform === 'win32') child.kill('SIGKILL')
-          else process.kill(-child.pid, 'SIGKILL')
+          process.kill(-child.pid, 'SIGKILL')
         } catch {
           child.kill('SIGKILL')
         }
