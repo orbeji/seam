@@ -220,3 +220,9 @@ export async function loadLanguage(id: string | null): Promise<LanguageSupport |
   const entry = ENTRIES.find((candidate) => candidate.id === id)
   return entry ? entry.description.load() : null
 }
+
+/** The display name of a detected language, or null when nothing matched. */
+export function languageName(id: string | null): string | null {
+  if (id === null) return null
+  return ENTRIES.find((candidate) => candidate.id === id)?.description.name ?? null
+}

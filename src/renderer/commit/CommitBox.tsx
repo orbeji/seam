@@ -78,21 +78,11 @@ export default function CommitBox({
 
   return (
     <section className="commit">
-      <label className="commit__label" htmlFor="commit-message">
-        {t('commit.message.label')}
-      </label>
-      <textarea
-        id="commit-message"
-        className="commit__input"
-        data-testid="commit-message"
-        placeholder={t('commit.message.placeholder')}
-        value={value}
-        rows={3}
-        onChange={(event) => onChange(event.target.value)}
-      />
-
-      {history.length > 0 && (
-        <div className="commit__history">
+      <div className="commit__heading">
+        <label className="commit__label" htmlFor="commit-message">
+          {t('commit.message.label')}
+        </label>
+        {history.length > 0 && (
           <button
             type="button"
             className="commit__history-summary"
@@ -100,30 +90,54 @@ export default function CommitBox({
             aria-expanded={historyOpen}
             onClick={() => setHistoryOpen((open) => !open)}
           >
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 12 12"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.4"
+              strokeLinecap="round"
+              aria-hidden="true"
+            >
+              <circle cx="6" cy="6" r="4.5" />
+              <path d="M6 3.5V6l1.8 1.1" />
+            </svg>
             {t('commit.history')}
           </button>
-          {historyOpen && (
-            <ul className="commit__history-list">
-              {history.map((message, index) => (
-                <li key={`${index}-${message}`}>
-                  <button
-                    type="button"
-                    className="commit__history-item"
-                    data-testid="commit-history-item"
-                    title={message}
-                    onClick={() => {
-                      onPickHistory(message)
-                      setHistoryOpen(false)
-                    }}
-                  >
-                    {message.split('\n')[0]}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+        )}
+      </div>
+
+      {historyOpen && (
+        <ul className="commit__history-list">
+          {history.map((message, index) => (
+            <li key={`${index}-${message}`}>
+              <button
+                type="button"
+                className="commit__history-item"
+                data-testid="commit-history-item"
+                title={message}
+                onClick={() => {
+                  onPickHistory(message)
+                  setHistoryOpen(false)
+                }}
+              >
+                {message.split('\n')[0]}
+              </button>
+            </li>
+          ))}
+        </ul>
       )}
+
+      <textarea
+        id="commit-message"
+        className="commit__input"
+        data-testid="commit-message"
+        placeholder={t('commit.message.placeholder')}
+        value={value}
+        rows={4}
+        onChange={(event) => onChange(event.target.value)}
+      />
 
       <div className="commit__options">
         <label className="commit__option">
@@ -154,18 +168,19 @@ export default function CommitBox({
           />
           {t('commit.hooks')}
         </label>
-        <label className="commit__author" htmlFor="commit-author">
-          <span className="commit__author-label">{t('commit.author.label')}</span>
-          <input
-            id="commit-author"
-            className="commit__author-input"
-            data-testid="commit-author"
-            placeholder={t('commit.author.placeholder')}
-            value={author}
-            onChange={(event) => onAuthorChange(event.target.value)}
-          />
-        </label>
       </div>
+
+      <label className="commit__author" htmlFor="commit-author">
+        <span className="commit__author-label">{t('commit.author.label')}</span>
+        <input
+          id="commit-author"
+          className="commit__author-input"
+          data-testid="commit-author"
+          placeholder={t('commit.author.placeholder')}
+          value={author}
+          onChange={(event) => onAuthorChange(event.target.value)}
+        />
+      </label>
 
       <div className="commit__actions">
         {availability.kind === 'replaced' ? (
@@ -191,12 +206,12 @@ export default function CommitBox({
             )}
             <button
               type="button"
-              className="button"
+              className="button commit__submit"
               data-testid="commit-button"
               disabled={availability.kind !== 'ready' || busy}
               onClick={onCommit}
             >
-              {t('commit.button')}
+              {staged > 0 ? t('commit.buttonCount', { count: staged }) : t('commit.button')}
             </button>
             {busy && (
               <button
@@ -211,6 +226,8 @@ export default function CommitBox({
           </span>
         )}
       </div>
+
+      <p className="commit__help">{t('commit.help')}</p>
 
       {output !== null && (
         <details className="commit__output" data-testid="commit-output" open>

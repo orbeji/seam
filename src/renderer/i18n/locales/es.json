@@ -3,6 +3,24 @@
     "name": "Seam",
     "tagline": "Un cliente de Git para preparar cambios, ver diferencias y resolver conflictos."
   },
+  "topbar": {
+    "refresh": "Actualizar estado"
+  },
+  "status": {
+    "ready": "Listo",
+    "staged": "{{count}} preparados",
+    "unstaged": "{{count}} sin preparar",
+    "untracked": "{{count}} sin seguimiento",
+    "conflicts": "{{count}} conflictos",
+    "fileHunks_one": "{{count}} hunk en este archivo: {{staged}} preparados, {{unstaged}} sin preparar",
+    "fileHunks_other": "{{count}} hunks en este archivo: {{staged}} preparados, {{unstaged}} sin preparar",
+    "noHunks": "No hay hunks en este archivo",
+    "languageDetected": "{{language}} (detectado)"
+  },
+  "workarea": {
+    "selectFile": "Selecciona un archivo para ver sus diferencias.",
+    "closeTab": "Cerrar pestaña"
+  },
   "language": {
     "label": "Idioma",
     "names": {
@@ -11,6 +29,9 @@
     }
   },
   "changes": {
+    "title": "Cambios",
+    "files_one": "{{count}} archivo",
+    "files_other": "{{count}} archivos",
     "empty": "Abre un repositorio para ver sus cambios preparados, sin preparar y sin seguimiento.",
     "open": "Abrir repositorio…",
     "recent": "Repositorios recientes",
@@ -39,6 +60,12 @@
     "title": "Conflictos de merge",
     "loading": "Leyendo los conflictos…",
     "sides": "Tuyos: {{yours}} · Suyos: {{theirs}}",
+    "columns": {
+      "file": "Archivo",
+      "kind": "Tipo",
+      "status": "Estado",
+      "resolve": "Resolver"
+    },
     "status": {
       "unresolved": "Sin resolver",
       "resolved": "Resuelto"
@@ -53,26 +80,94 @@
       "DD": "Borrado en ambos"
     },
     "binary": "Binario",
-    "acceptYours": "Aceptar los tuyos ({{label}})",
-    "acceptTheirs": "Aceptar los suyos ({{label}})",
+    "acceptYours": "Aceptar tuyos",
+    "acceptYoursFull": "Aceptar tuyos ({{label}})",
+    "acceptTheirs": "Aceptar suyos",
+    "acceptTheirsFull": "Aceptar suyos ({{label}})",
+    "sideLabel": " ({{label}})",
     "keep": "Conservar archivo",
     "delete": "Borrar archivo",
     "resolveManually": "Resolver a mano",
+    "resolveManuallyHint": "Abre el editor de merge de tres paneles.",
     "resolveSimple": "Resolver todos los conflictos simples",
     "resolvedCount": "Resueltos {{resolved}}; quedan {{remaining}}.",
     "nothingSimple": "No hay conflictos simples pendientes.",
+    "summary": "{{unresolved}} sin resolver, {{resolved}} resueltos",
+    "showResult": "Ver resultado",
+    "showDiff": "Ver diferencias",
+    "moreActions": "Más acciones",
+    "menuLabel": "Acciones del archivo resuelto",
     "revert": "Deshacer la resolución",
+    "help": {
+      "unresolved": "{{name}}: {{kind}}. Resolver a mano abre el editor de tres paneles.",
+      "deletion": "{{name}}: {{kind}}. Conservar o borrar el archivo lo resuelve sin editor.",
+      "binary": "{{name}}: {{kind}}. Elige el archivo completo de uno de los lados.",
+      "resolved": "{{name}}: resuelto. Ver resultado abre las diferencias y el menú permite deshacer la resolución."
+    },
+    "legend": {
+      "modified": "Modificado",
+      "deleted": "Borrado",
+      "added": "Añadido",
+      "conflicting": "En conflicto"
+    },
     "overwrite": "Sobrescribir",
     "overwriteTitle": "El archivo ha cambiado",
     "overwriteExplain": "«{{path}}» ha cambiado desde que se leyó el conflicto. Si aceptas este lado, se sobrescribirá.",
     "overwriteCancel": "Cancelar",
     "acceptAndFinish": "Aceptar y terminar",
-    "abort": "Abortar",
+    "abort": "Abortar merge",
     "close": "Cerrar",
     "laterPhase": "Disponible en una fase posterior.",
     "resolve": "Resolver",
     "resolveConflicts": "Resolver conflictos",
     "noUnresolved": "No quedan conflictos sin resolver."
+  },
+  "merge": {
+    "yours": "Tuyos",
+    "result": "Resultado",
+    "theirs": "Suyos",
+    "readOnly": "solo lectura",
+    "editable": "editable",
+    "conflictOf": "Conflicto {{current}} de {{total}}",
+    "noConflicts": "Sin conflictos",
+    "previousConflict": "Conflicto anterior (Mayús+F7)",
+    "nextConflict": "Conflicto siguiente (F7)",
+    "save": "Guardar y cerrar",
+    "apply": "Aplicar cambios",
+    "close": "Cerrar sin aplicar",
+    "applyAll": "Aplicar todo lo no conflictivo",
+    "fromLeft": "Desde la izquierda",
+    "fromRight": "Desde la derecha",
+    "resolveSimple": "Resolver conflictos simples",
+    "compare": "Comparar",
+    "compareYours": "Tuyos frente al resultado",
+    "compareTheirs": "Suyos frente al resultado",
+    "closeCompare": "Cerrar comparación",
+    "takeLeft": "Aceptar el cambio de Tuyos",
+    "ignoreLeft": "Ignorar el cambio de Tuyos",
+    "takeRight": "Aceptar el cambio de Suyos",
+    "ignoreRight": "Ignorar el cambio de Suyos",
+    "resolveLeft": "Resolver con Tuyos",
+    "resolveRight": "Resolver con Suyos",
+    "revert": "Deshacer el cambio",
+    "contextMenu": "Acciones del cambio",
+    "stats": "{{changes}} cambios: {{conflicts}} conflictos, {{nonConflicting}} no conflictivos, {{resolved}} resueltos",
+    "legend": {
+      "modified": "Modificado",
+      "deleted": "Borrado",
+      "added": "Añadido",
+      "conflicting": "En conflicto"
+    },
+    "statusResult": "El resultado parte del ancestro común",
+    "binary": "Es un conflicto binario. Elige un lado en la lista de conflictos.",
+    "readOnlyFile": "Este archivo no tiene stages separados que fusionar. Se abre en solo lectura.",
+    "large": "El archivo es grande, así que se reducen el resaltado en línea y las marcas de unión.",
+    "resolveAllFirst": "Resuelve todos los cambios antes de aplicar.",
+    "discardTitle": "¿Descartar el resultado?",
+    "discardBody": "Los cambios hechos en este editor no se han escrito. Si cierras ahora, el archivo queda como estaba.",
+    "discard": "Descartar y cerrar",
+    "cancel": "Seguir editando",
+    "loading": "Leyendo las tres versiones…"
   },
   "commit": {
     "message": {
@@ -95,6 +190,9 @@
       "placeholder": "Nombre <correo>"
     },
     "button": "Confirmar",
+    "buttonCount_one": "Confirmar {{count}} archivo preparado",
+    "buttonCount_other": "Confirmar {{count}} archivos preparados",
+    "help": "Solo se confirman los cambios preparados. Se desactiva cuando no hay nada preparado.",
     "reason": {
       "nothing-staged": "No hay nada preparado.",
       "conflicts": "Hay conflictos sin resolver."
@@ -118,7 +216,8 @@
     "loading": "Leyendo ambas versiones…",
     "binary": "Es un archivo binario: {{from}} bytes frente a {{to}} bytes.",
     "large": "El archivo es grande, así que el resaltado dentro de la línea está desactivado y la diferencia se lee línea a línea.",
-    "collapse": "Plegar lo que no cambia",
+    "collapse": "Plegar",
+    "collapseHint": "Plegar las líneas sin cambios",
     "context": "Contexto",
     "layout": {
       "label": "Disposición",
@@ -130,22 +229,34 @@
       "label": "Resaltado",
       "words": "Palabras",
       "lines": "Líneas",
-      "split": "Cambios divididos",
+      "split": "Divididos",
       "characters": "Caracteres",
       "none": "Ninguno"
     },
     "whitespace": {
       "label": "Espacios",
-      "none": "Mostrar todo",
+      "none": "Ninguno",
       "trim": "Ignorar en los extremos",
       "ignore": "Ignorar todos",
       "ignore-and-blank": "Ignorar todos y las líneas en blanco"
+    },
+    "differenceOf": "Diferencia {{current}} de {{total}}",
+    "columns": {
+      "head": "HEAD (solo lectura)",
+      "index": "Índice (solo lectura)",
+      "worktree": "Copia de trabajo (editable)",
+      "stage1": "Base (solo lectura)",
+      "stage2": "Tu versión (solo lectura)",
+      "stage3": "Su versión (solo lectura)"
     },
     "navigation": {
       "previous": "Diferencia anterior",
       "next": "Diferencia siguiente"
     },
     "hunk": {
+      "staged": "Cambio preparado",
+      "pending": "Cambio sin preparar",
+      "both": "Cambio preparado y sin preparar",
       "stage": "Preparar hunk",
       "stageSelection": "Preparar líneas seleccionadas",
       "unstage": "Quitar hunk",
@@ -156,11 +267,29 @@
     },
     "count": "Diferencias: {{count}}",
     "three": {
+      "title": "Preparar cambios línea a línea",
       "head": "HEAD",
       "index": "Índice",
       "worktree": "Copia de trabajo",
+      "indexNote": "próxima confirmación",
+      "readOnly": "solo lectura",
+      "editable": "editable",
       "done": "Hecho",
       "close": "Cerrar",
+      "stageAll": "Preparar todos los cambios pendientes",
+      "resetIndex": "Restablecer el índice a HEAD",
+      "statsStaged_one": "El índice difiere de HEAD en {{count}} línea.",
+      "statsStaged_other": "El índice difiere de HEAD en {{count}} líneas.",
+      "statsWorktree_one": "La copia de trabajo difiere del índice en {{count}} línea.",
+      "statsWorktree_other": "La copia de trabajo difiere del índice en {{count}} líneas.",
+      "staged": "preparada",
+      "helpStageTitle": "Flecha derecha: preparar",
+      "helpStageBody": "La flecha entre el índice y la copia de trabajo lleva esa línea al índice. Una línea, un hunk o el archivo entero, tú eliges.",
+      "helpUnstageTitle": "Flecha izquierda: quitar",
+      "helpUnstageBody": "La flecha entre HEAD y el índice devuelve la versión de HEAD de esa línea, así que sale de la próxima confirmación.",
+      "helpEditTitle": "Edita el centro",
+      "helpEditBody": "El panel central es un editor normal. Escribe en él para preparar algo más fino, como una palabra de una línea. Su texto es exactamente lo que guarda Git.",
+      "status": "Las líneas preparadas llevan la etiqueta «preparada». Las líneas pendientes conservan una flecha.",
       "binary": "Este archivo es binario, así que no se puede preparar por línea.",
       "takeHead": "Tomar esta línea de HEAD",
       "takeHeadHunk": "Tomar este cambio de HEAD",

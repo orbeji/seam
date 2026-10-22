@@ -26,11 +26,13 @@ const HIDDEN_WINDOW = process.env['SEAM_HIDDEN_WINDOW'] === '1'
 
 function createWindow(): BrowserWindow {
   const window = new BrowserWindow({
-    width: 1200,
+    width: 1280,
     height: 800,
+    minWidth: 960,
+    minHeight: 600,
     show: false,
     autoHideMenuBar: true,
-    backgroundColor: '#1e1f22',
+    backgroundColor: '#17181b',
     title: 'Seam',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),

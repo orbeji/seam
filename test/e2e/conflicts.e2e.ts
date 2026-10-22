@@ -157,7 +157,8 @@ describe('the conflicts dialog', () => {
   })
 
   it('undoes a resolution and asks before overwriting an edited file', async () => {
-    await row('both.txt').locator('[data-testid=revert]').click()
+    await row('both.txt').locator('[data-testid=conflict-menu]').click()
+    await page.locator('[data-testid=revert]').click()
     await waitFor(async () => !(await resolved('both.txt')), 'both.txt to be a conflict again')
     expect(workingCopy('both.txt')).toContain('<<<<<<<')
     expect(unmerged('both.txt')).toBeGreaterThan(0)
@@ -174,5 +175,21 @@ describe('the conflicts dialog', () => {
     await page.locator('[data-testid=overwrite-confirm]').click()
     await waitFor(() => resolved('both.txt'), 'the confirmed overwrite')
     expect(workingCopy('both.txt')).toBe('ours\n')
+  })
+
+  it('shows a resolved result and the actions of its context menu', async () => {
+    await row('both.txt').locator('[data-testid=conflict-menu]').click()
+    await page.waitForSelector('[data-testid=conflict-menu-popup]')
+    expect(await page.locator('[data-testid=show-diff]').textContent()).toBe('Show diff')
+    expect(await page.locator('[data-testid=revert]').textContent()).toBe(
+      'Revert conflict resolution'
+    )
+    await page.keyboard.press('Escape')
+    await page.waitForSelector('[data-testid=conflict-menu-popup]', { state: 'detached' })
+
+    await row('both.txt').locator('[data-testid=show-result]').click()
+    await page.waitForSelector('[data-testid=diff-path]')
+    expect(await page.locator('[data-testid=diff-path]').textContent()).toBe('both.txt')
+    expect(await page.locator('[data-testid=conflicts-dialog]').count()).toBe(0)
   })
 })

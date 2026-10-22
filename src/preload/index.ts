@@ -22,6 +22,9 @@ import {
   type IdentityWriteRequest,
   type IndexWriteRequest,
   type IpcResult,
+  type MergeApplyRequest,
+  type MergeEditorModel,
+  type MergeEditorRequest,
   type RepositorySnapshot,
   type RevertHunksRequest,
   type SeamApi,
@@ -97,6 +100,12 @@ const seamApi: SeamApi = {
     >,
   revertConflict: (request: ConflictRevertRequest) =>
     ipcRenderer.invoke(IPC_CHANNELS.revertConflict, request) as Promise<IpcResult<null>>,
+  readMergeEditor: (request: MergeEditorRequest) =>
+    ipcRenderer.invoke(IPC_CHANNELS.readMergeEditor, request) as Promise<
+      IpcResult<MergeEditorModel>
+    >,
+  applyMerge: (request: MergeApplyRequest) =>
+    ipcRenderer.invoke(IPC_CHANNELS.applyMerge, request) as Promise<IpcResult<null>>,
   writeClipboardText: (text: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.writeClipboardText, text) as Promise<IpcResult<null>>,
   onRepositoryChanged: (listener: (repo: string) => void) => {

@@ -20,7 +20,7 @@ import type {
 import { ERROR_KEYS } from '../errors'
 import { computeChanges, type HighlightGranularity } from './changes'
 import { selectedLines } from './line-selection'
-import { detectLanguageId, loadLanguage } from './languages'
+import { detectLanguageId, languageName, loadLanguage } from './languages'
 import {
   hunksAt,
   markerLines,
@@ -46,16 +46,24 @@ const GRANULARITIES: readonly HighlightGranularity[] = [
 
 export type DiffLayout = 'side-by-side' | 'unified' | 'three-pane'
 
+/** What the window's status bar shows about the file that is open. */
+export interface DiffInfo {
+  readonly language: string | null
+  readonly stagedHunks: number
+  readonly unstagedHunks: number
+}
+
 interface DiffViewProps {
   readonly repo: string
   readonly path: string
   readonly from: FileVersionSource
   readonly to: FileVersionSource
-  readonly onClose: () => void
   /** Called when navigation runs off the end, so the caller can open the next file. */
   readonly onEdge?: (direction: 1 | -1) => void
   /** Called after a hunk write, so the caller can refresh the lists. */
   readonly onChanged?: () => void
+  /** Pushes the open file's language and hunk counts to the window's status bar. */
+  readonly onInfoChange?: (info: DiffInfo | null) => void
 }
 
 /** Rebuilds the document text of one side the way the viewer's editors hold it. */
@@ -69,6 +77,60 @@ function firstLine(side: DiffSide | null): string {
   return side?.lines[0] ?? ''
 }
 
+/** The small chevron that marks a native select as a toolbar dropdown. */
+function ToolbarChevron() {
+  return (
+    <svg
+      width="10"
+      height="10"
+      viewBox="0 0 10 10"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      aria-hidden="true"
+    >
+      <path d="M2 3.5l3 3 3-3" />
+    </svg>
+  )
+}
+
+/** The check mark inside the Collapse unchanged control. */
+function CheckMark() {
+  return (
+    <svg
+      width="10"
+      height="10"
+      viewBox="0 0 10 10"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M1.5 5.2 4 7.5l4.5-5" />
+    </svg>
+  )
+}
+
+/** The up and down arrows that move between differences. */
+function NavArrow({ direction }: { direction: 'previous' | 'next' }) {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 14 14"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      aria-hidden="true"
+    >
+      {direction === 'previous' ? <path d="M3 9l4-4 4 4" /> : <path d="M3 5l4 4 4-4" />}
+    </svg>
+  )
+}
+
 /**
  * Change colours: the side that only has the old text reads as grey, the side
  * that only has the new text as green, and the words that changed inside a line
@@ -76,16 +138,34 @@ function firstLine(side: DiffSide | null): string {
  * extension rather than plain CSS so it outranks CodeMirror's own base theme.
  */
 const changeTheme = EditorView.theme({
+  '&': { backgroundColor: '#17181b', color: '#e6e7ea' },
+  '.cm-content': { caretColor: '#e8a33d' },
+  '.cm-gutters': {
+    backgroundColor: '#17181b',
+    color: '#8b909a',
+    borderRight: '1px solid #2a2c32'
+  },
+  '.cm-activeLine': { backgroundColor: 'rgba(255, 255, 255, 0.025)' },
+  '.cm-activeLineGutter': { backgroundColor: 'transparent', color: '#e6e7ea' },
+  '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection': {
+    backgroundColor: 'rgba(91, 156, 240, 0.25)'
+  },
   '&.cm-merge-a .cm-changedLine, &.cm-merge-a .cm-changedLineGutter': {
-    backgroundColor: 'rgba(150, 150, 150, 0.28)'
+    backgroundColor: 'rgba(139, 144, 154, 0.22)'
   },
   '&.cm-merge-b .cm-changedLine, &.cm-merge-b .cm-changedLineGutter, .cm-inlineChangedLine': {
-    backgroundColor: 'rgba(88, 166, 87, 0.28)'
+    backgroundColor: 'rgba(91, 156, 240, 0.18)'
   },
-  '.cm-insertedLine': { backgroundColor: 'rgba(88, 166, 87, 0.42)', borderRadius: '2px' },
-  '.cm-deletedLine': { backgroundColor: 'rgba(150, 150, 150, 0.42)', borderRadius: '2px' },
-  '.cm-changedText': { background: 'rgba(86, 132, 219, 0.55)', borderRadius: '2px' },
-  '.cm-deletedText': { background: 'rgba(120, 120, 120, 0.55)', borderRadius: '2px' }
+  '&.cm-merge-b .cm-insertedLine, .cm-insertedLine': {
+    backgroundColor: 'rgba(63, 178, 127, 0.3)',
+    borderRadius: '2px'
+  },
+  '&.cm-merge-a .cm-deletedLine, .cm-deletedLine': {
+    backgroundColor: 'rgba(139, 144, 154, 0.36)',
+    borderRadius: '2px'
+  },
+  '.cm-changedText': { background: 'rgba(91, 156, 240, 0.5)', borderRadius: '2px' },
+  '.cm-deletedText': { background: 'rgba(139, 144, 154, 0.5)', borderRadius: '2px' }
 })
 
 function isLarge(comparison: FileComparison): boolean {
@@ -104,9 +184,9 @@ export default function DiffView({
   path,
   from,
   to,
-  onClose,
   onEdge,
-  onChanged
+  onChanged,
+  onInfoChange
 }: DiffViewProps) {
   const { t } = useTranslation()
   // The comparison and the staging model are read by two effects. Splitting them
@@ -123,6 +203,8 @@ export default function DiffView({
   } | null>(null)
 
   const [layout, setLayout] = useState<DiffLayout>('side-by-side')
+  // The difference the viewer last moved to, 0 until navigation is used.
+  const [currentDifference, setCurrentDifference] = useState(0)
   const [granularity, setGranularity] = useState<HighlightGranularity>('words')
   const [whitespace, setWhitespace] = useState<WhitespaceMode>('none')
   const [collapse, setCollapse] = useState(false)
@@ -222,6 +304,25 @@ export default function DiffView({
           }).length,
     [binary, large, fromText, toText, countedText, whitespace, effectiveGranularity]
   )
+
+  const totalDifferences = differenceCount ?? 0
+  // Before navigation the first difference is the one in view, so the counter
+  // reads "Difference 1 of 6" rather than "0 of 6".
+  const shownDifference =
+    totalDifferences === 0 ? 0 : Math.min(Math.max(currentDifference, 1), totalDifferences)
+  const threePaneAvailable = !from.startsWith('stage') && !to.startsWith('stage')
+
+  // The shell's status bar follows the open file: its language and the hunks
+  // in either direction. Clearing on unmount keeps the previous file's data
+  // from lingering after the tab is closed.
+  useEffect(() => {
+    onInfoChange?.({
+      language: languageName(languageId),
+      stagedHunks: model?.staged.length ?? 0,
+      unstagedHunks: model?.unstaged.length ?? 0
+    })
+    return () => onInfoChange?.(null)
+  }, [onInfoChange, languageId, model])
 
   // Load the comparison over IPC. The result is stored with its key, so nothing
   // is set synchronously and a superseded request leaves no trace.
@@ -390,6 +491,7 @@ export default function DiffView({
       return
     }
     chunkIndexRef.current = index
+    setCurrentDifference(index + 1)
     const chunk = chunks[index]
     if (chunk === undefined) {
       onEdgeRef.current?.(direction)
@@ -410,6 +512,7 @@ export default function DiffView({
     if (container === null || comparison === null) return
     container.replaceChildren()
     chunkIndexRef.current = -1
+    setCurrentDifference(0)
     if (comparison.binary) return
 
     // A new file starts from the version read from Git; a rebuild after an
@@ -457,8 +560,8 @@ export default function DiffView({
       ]),
       EditorView.lineWrapping,
       bracketMatching(),
-      changeTheme,
-      oneDark
+      oneDark,
+      changeTheme
     ]
 
     const editableExtensions: Extension[] = [
@@ -561,45 +664,89 @@ export default function DiffView({
 
   const nextDifference = useCallback(() => navigate(1), [navigate])
   const previousDifference = useCallback(() => navigate(-1), [navigate])
+  const menuTitle =
+    openMenu === null
+      ? ''
+      : openMenu.marker.unstaged && openMenu.marker.staged
+        ? t('diff.hunk.both')
+        : openMenu.marker.unstaged
+          ? t('diff.hunk.pending')
+          : t('diff.hunk.staged')
 
   return (
-    <div className="diff" data-testid="diff" data-language={languageId ?? ''}>
+    <div
+      className={`diff${layout === 'three-pane' ? ' diff--three-pane' : ''}`}
+      data-testid="diff"
+      data-language={languageId ?? ''}
+    >
       <div className="diff__toolbar" data-testid="diff-toolbar">
-        <span className="diff__path" data-testid="diff-path">
-          {path}
-        </span>
-
-        {differenceCount !== null && (
-          <span className="diff__count" data-testid="diff-count">
-            {t('diff.count', { count: differenceCount })}
-          </span>
-        )}
-
-        <label className="diff__label">
-          {t('diff.layout.label')}
+        <div className="diff__layout" role="group" aria-label={t('diff.layout.label')}>
+          <button
+            type="button"
+            className={`diff__layout-button${layout === 'side-by-side' ? ' is-active' : ''}`}
+            aria-pressed={layout === 'side-by-side'}
+            onClick={() => setLayout('side-by-side')}
+          >
+            {t('diff.layout.side-by-side')}
+          </button>
+          <button
+            type="button"
+            className={`diff__layout-button${layout === 'unified' ? ' is-active' : ''}`}
+            aria-pressed={layout === 'unified'}
+            onClick={() => setLayout('unified')}
+          >
+            {t('diff.layout.unified')}
+          </button>
+          <button
+            type="button"
+            className={`diff__layout-button diff__layout-button--icon${
+              layout === 'three-pane' ? ' is-active' : ''
+            }`}
+            data-testid="diff-layout-three"
+            aria-label={t('diff.layout.three-pane')}
+            aria-pressed={layout === 'three-pane'}
+            title={t('diff.layout.three-pane')}
+            disabled={!threePaneAvailable}
+            onClick={() => setLayout('three-pane')}
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 14 14"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.2"
+              aria-hidden="true"
+            >
+              <rect x="2" y="2" width="3" height="10" rx="0.5" />
+              <rect x="5.5" y="2" width="3" height="10" rx="0.5" />
+              <rect x="9" y="2" width="3" height="10" rx="0.5" />
+            </svg>
+          </button>
+          {/* The tests and assistive tech keep the native control; the visible
+              segment buttons are the pointer's way into the same state. */}
           <select
-            className="diff__select"
+            className="diff__compat-select"
             data-testid="diff-layout"
+            aria-hidden="true"
+            tabIndex={-1}
             value={layout}
             onChange={(event) => setLayout(event.target.value as DiffLayout)}
           >
             <option value="side-by-side">{t('diff.layout.side-by-side')}</option>
             <option value="unified">{t('diff.layout.unified')}</option>
-            <option
-              value="three-pane"
-              disabled={from.startsWith('stage') || to.startsWith('stage')}
-            >
+            <option value="three-pane" disabled={!threePaneAvailable}>
               {t('diff.layout.three-pane')}
             </option>
           </select>
-        </label>
+        </div>
 
         {layout !== 'three-pane' && (
           <>
-            <label className="diff__label">
-              {t('diff.granularity.label')}
+            <label className="diff__control diff__control--granularity">
+              <span className="diff__control-label">{t('diff.granularity.label')}:</span>
               <select
-                className="diff__select"
+                className="diff__control-select"
                 data-testid="diff-granularity"
                 value={effectiveGranularity}
                 disabled={binary || large}
@@ -611,12 +758,13 @@ export default function DiffView({
                   </option>
                 ))}
               </select>
+              <ToolbarChevron />
             </label>
 
-            <label className="diff__label">
-              {t('diff.whitespace.label')}
+            <label className="diff__control diff__control--whitespace">
+              <span className="diff__control-label">{t('diff.whitespace.label')}:</span>
               <select
-                className="diff__select"
+                className="diff__control-select"
                 data-testid="diff-whitespace"
                 value={whitespace}
                 onChange={(event) => setWhitespace(event.target.value as WhitespaceMode)}
@@ -627,53 +775,82 @@ export default function DiffView({
                   </option>
                 ))}
               </select>
+              <ToolbarChevron />
             </label>
 
-            <label className="diff__label diff__label--check">
+            <label className="diff__control diff__control--check" title={t('diff.collapseHint')}>
               <input
+                className="diff__check-input"
                 type="checkbox"
                 data-testid="diff-collapse"
                 checked={collapse}
                 onChange={(event) => setCollapse(event.target.checked)}
               />
-              {t('diff.collapse')}
+              <span className="diff__check-box" aria-hidden="true">
+                <CheckMark />
+              </span>
+              <span>{t('diff.collapse')}</span>
             </label>
 
-            <label className="diff__label">
-              {t('diff.context')}
-              <input
-                className="diff__number"
-                data-testid="diff-context"
-                type="number"
-                min={0}
-                max={50}
-                value={context}
-                onChange={(event) => setContext(Math.max(0, Number(event.target.value) || 0))}
-              />
-            </label>
+            {collapse && (
+              <label className="diff__control diff__control--context">
+                <input
+                  className="diff__number"
+                  data-testid="diff-context"
+                  type="number"
+                  min={0}
+                  max={50}
+                  value={context}
+                  aria-label={t('diff.context')}
+                  title={t('diff.context')}
+                  onChange={(event) => setContext(Math.max(0, Number(event.target.value) || 0))}
+                />
+              </label>
+            )}
 
+            <div className="diff__toolbar-spacer" />
+
+            {differenceCount !== null && (
+              <span className="diff__difference" aria-live="polite">
+                {t('diff.differenceOf', {
+                  current: shownDifference,
+                  total: differenceCount
+                })}
+              </span>
+            )}
+            <span className="sr-only" data-testid="diff-count" aria-hidden="true">
+              {totalDifferences}
+            </span>
             <button
               type="button"
-              className="diff__button"
+              className="icon-button"
               data-testid="diff-previous"
+              aria-label={t('diff.navigation.previous')}
+              title={t('diff.navigation.previous')}
               onClick={previousDifference}
             >
-              {t('diff.navigation.previous')}
+              <NavArrow direction="previous" />
             </button>
             <button
               type="button"
-              className="diff__button"
+              className="icon-button"
               data-testid="diff-next"
+              aria-label={t('diff.navigation.next')}
+              title={t('diff.navigation.next')}
               onClick={nextDifference}
             >
-              {t('diff.navigation.next')}
+              <NavArrow direction="next" />
             </button>
           </>
         )}
-        <button type="button" className="diff__button" data-testid="diff-close" onClick={onClose}>
-          {t('diff.close')}
-        </button>
       </div>
+
+      {layout === 'side-by-side' && comparison !== null && !comparison.binary && (
+        <div className="diff__columns" data-testid="diff-columns">
+          <span>{t(`diff.columns.${from}`)}</span>
+          <span>{t(`diff.columns.${to}`)}</span>
+        </div>
+      )}
 
       {loading && <p className="diff__notice">{t('diff.loading')}</p>}
       {error !== null && (
@@ -725,56 +902,64 @@ export default function DiffView({
           className="diff__hunk-menu"
           data-testid="diff-hunk-menu"
           role="menu"
+          aria-label={menuTitle}
           style={{ left: openMenu.x, top: openMenu.y }}
         >
-          {openMenu.marker.unstaged && (
+          <p className="diff__hunk-title">{menuTitle}</p>
+          <div className="diff__hunk-actions">
+            {openMenu.marker.unstaged && (
+              <button
+                type="button"
+                role="menuitem"
+                className="diff__hunk-action diff__hunk-action--primary"
+                data-testid="hunk-stage"
+                disabled={writing || openMenu.hunks.unstaged.length === 0}
+                onClick={() => void writeHunk('stage', openMenu.hunks.unstaged)}
+              >
+                {t('diff.hunk.stage')}
+              </button>
+            )}
+            {openMenu.marker.unstaged && (
+              <button
+                type="button"
+                role="menuitem"
+                className="diff__hunk-action"
+                data-testid="hunk-stage-selection"
+                disabled={writing || openMenu.selection === null}
+                onClick={() => {
+                  const selection = openMenu.selection
+                  if (selection !== null) void writeHunk('stage', [selection.hunk], selection.lines)
+                }}
+              >
+                {t('diff.hunk.stageSelection')}
+              </button>
+            )}
+            {openMenu.marker.staged && (
+              <button
+                type="button"
+                role="menuitem"
+                className="diff__hunk-action diff__hunk-action--primary"
+                data-testid="hunk-unstage"
+                disabled={writing || openMenu.hunks.staged.length === 0}
+                onClick={() => void writeHunk('unstage', openMenu.hunks.staged)}
+              >
+                {t('diff.hunk.unstage')}
+              </button>
+            )}
             <button
               type="button"
               role="menuitem"
-              data-testid="hunk-stage"
+              className="diff__hunk-action"
+              data-testid="hunk-revert"
               disabled={writing || openMenu.hunks.unstaged.length === 0}
-              onClick={() => void writeHunk('stage', openMenu.hunks.unstaged)}
-            >
-              {t('diff.hunk.stage')}
-            </button>
-          )}
-          {openMenu.marker.unstaged && (
-            <button
-              type="button"
-              role="menuitem"
-              data-testid="hunk-stage-selection"
-              disabled={writing || openMenu.selection === null}
               onClick={() => {
-                const selection = openMenu.selection
-                if (selection !== null) void writeHunk('stage', [selection.hunk], selection.lines)
+                setConfirm({ key: requestKey, hunks: openMenu.hunks.unstaged })
+                setMenu(null)
               }}
             >
-              {t('diff.hunk.stageSelection')}
+              {t('diff.hunk.revert')}
             </button>
-          )}
-          {openMenu.marker.staged && (
-            <button
-              type="button"
-              role="menuitem"
-              data-testid="hunk-unstage"
-              disabled={writing || openMenu.hunks.staged.length === 0}
-              onClick={() => void writeHunk('unstage', openMenu.hunks.staged)}
-            >
-              {t('diff.hunk.unstage')}
-            </button>
-          )}
-          <button
-            type="button"
-            role="menuitem"
-            data-testid="hunk-revert"
-            disabled={writing || openMenu.hunks.unstaged.length === 0}
-            onClick={() => {
-              setConfirm({ key: requestKey, hunks: openMenu.hunks.unstaged })
-              setMenu(null)
-            }}
-          >
-            {t('diff.hunk.revert')}
-          </button>
+          </div>
         </div>
       )}
 
@@ -782,6 +967,7 @@ export default function DiffView({
         <ThreePaneView
           repo={repo}
           path={path}
+          language={languageName(languageId)}
           {...(onChanged === undefined ? {} : { onChanged })}
           onExit={() => setLayout('side-by-side')}
         />

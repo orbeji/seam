@@ -40,6 +40,7 @@ beforeAll(async () => {
   application = await electron.launch({
     args: [
       '--no-sandbox',
+      '--lang=en-US',
       join(process.cwd(), 'out', 'main', 'index.js'),
       '--repo',
       repository.path
@@ -70,6 +71,11 @@ async function pending(): Promise<void> {
 beforeEach(pending)
 
 afterEach(async () => {
+  const exit = page.locator('[data-testid=three-close]')
+  if ((await exit.count()) > 0) {
+    await exit.click()
+    await page.waitForSelector('[data-testid=three-pane]', { state: 'detached' })
+  }
   const close = page.locator('[data-testid=diff-close]')
   if ((await close.count()) > 0) await close.click()
   await page.waitForSelector('[data-testid=staged]')
@@ -90,6 +96,60 @@ function changedRow(): { row: Locator; centre: Locator } {
 }
 
 describe('the three-pane view', () => {
+  it('presents the dedicated staging screen', async () => {
+    await openThreePane()
+
+    expect(await page.locator('[data-testid=three-title]').textContent()).toBe(
+      'Stage changes line by line'
+    )
+    const columns = await page.locator('[data-testid=three-columns]').textContent()
+    expect(columns).toContain('HEAD')
+    expect(columns).toContain('Index')
+    expect(columns).toContain('Working copy')
+    expect(columns).toContain('read-only')
+    expect(columns).toContain('editable')
+    expect(await page.locator('[data-testid=three-help] > div').count()).toBe(3)
+    expect(await page.locator('[data-testid=diff-close]').isVisible()).toBe(false)
+    expect(await page.locator('[data-testid=three-status]').textContent()).toContain(
+      'Staged lines get a "staged" label'
+    )
+  })
+
+  it('stages all remaining changes and resets the index to HEAD', async () => {
+    await openThreePane()
+    const { row, centre } = changedRow()
+
+    expect(await page.locator('[data-testid=three-reset-index]').isDisabled()).toBe(true)
+    expect(await page.locator('[data-testid=three-stage-all]').isDisabled()).toBe(false)
+    expect(await page.locator('[data-testid=three-stats]').textContent()).toContain(
+      'Index differs from HEAD by 0 lines'
+    )
+
+    await page.locator('[data-testid=three-stage-all]').click()
+    await expect.poll(() => centre.inputValue(), { timeout: WAIT_MS }).toBe('TWO')
+    await expect
+      .poll(async () => (await page.locator('[data-testid=three-stats]').textContent()) ?? '', {
+        timeout: WAIT_MS
+      })
+      .toContain('Index differs from HEAD by 1 line')
+    expect(await page.locator('[data-testid=three-stage-all]').isDisabled()).toBe(true)
+    expect(await page.locator('[data-testid=three-reset-index]').isDisabled()).toBe(false)
+    expect(await row.locator('[data-testid=three-staged]').textContent()).toBe('staged')
+    expect(await row.locator('[data-testid=three-take-worktree]').count()).toBe(0)
+
+    await page.locator('[data-testid=three-reset-index]').click()
+    await expect.poll(() => centre.inputValue(), { timeout: WAIT_MS }).toBe('two')
+    await expect
+      .poll(async () => (await page.locator('[data-testid=three-stats]').textContent()) ?? '', {
+        timeout: WAIT_MS
+      })
+      .toContain('Index differs from HEAD by 0 lines')
+    expect(await page.locator('[data-testid=three-stage-all]').isDisabled()).toBe(false)
+    expect(await page.locator('[data-testid=three-reset-index]').isDisabled()).toBe(true)
+    expect(await row.locator('[data-testid=three-take-worktree]').count()).toBe(1)
+    expect(await row.locator('[data-testid=three-staged]').count()).toBe(0)
+  })
+
   it('stores what the centre holds when Done is clicked', async () => {
     await openThreePane()
     const { row, centre } = changedRow()

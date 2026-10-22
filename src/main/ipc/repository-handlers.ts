@@ -18,6 +18,7 @@ import type {
   HunkWriteRequest,
   IdentityWriteRequest,
   IndexWriteRequest,
+  MergeApplyRequest,
   RevertHunksRequest,
   StagePathsRequest
 } from '../../shared/ipc'
@@ -141,6 +142,17 @@ function parseConflictAccept(value: unknown): ConflictAcceptRequest | null {
 /** Narrows an IPC payload to undoing one conflict resolution. */
 function parseConflictRevert(value: unknown): ConflictRevertRequest | null {
   return parsePathRequest(value)
+}
+
+/** Narrows an IPC payload to writing the merge editor's result. */
+function parseMergeApply(value: unknown): MergeApplyRequest | null {
+  if (typeof value !== 'object' || value === null) return null
+  const { repo, path, content, stage } = value as Record<string, unknown>
+  if (typeof repo !== 'string' || typeof path !== 'string' || typeof content !== 'string') {
+    return null
+  }
+  if (typeof stage !== 'boolean') return null
+  return { repo, path, content, stage }
 }
 
 /** Narrows an IPC payload to a repository and a message, rejecting anything
@@ -469,6 +481,22 @@ export function registerRepositoryHandlers(
       return { ok: false, code: 'unknown', message: 'Invalid conflict request' }
     }
     return service.revertConflict(parsed.repo, parsed.path)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.readMergeEditor, (_event, request: unknown) => {
+    const parsed = parsePathRequest(request)
+    if (parsed === null) {
+      return { ok: false, code: 'unknown', message: 'Invalid merge editor request' }
+    }
+    return service.readMergeEditor(parsed.repo, parsed.path)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.applyMerge, (_event, request: unknown) => {
+    const parsed = parseMergeApply(request)
+    if (parsed === null) {
+      return { ok: false, code: 'unknown', message: 'Invalid merge write request' }
+    }
+    return service.applyMerge(parsed)
   })
 
   ipcMain.handle(IPC_CHANNELS.writeClipboardText, (_event, text: unknown) => {

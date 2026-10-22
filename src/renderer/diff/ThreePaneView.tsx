@@ -4,10 +4,12 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { IpcErrorCode } from '../../shared/ipc'
 import { ERROR_KEYS } from '../errors'
+import { splitPath } from '../paths'
 import {
   buildThreePane,
   editLine,
   middleText,
+  takeAll,
   takeHunk,
   takeLine,
   type ThreeMiddle,
@@ -28,6 +30,8 @@ import {
 interface ThreePaneViewProps {
   readonly repo: string
   readonly path: string
+  /** The language the viewer detected for the file, shown in the status bar. */
+  readonly language?: string | null
   /** Called after Done wrote the index, so the caller can refresh the lists. */
   readonly onChanged?: () => void
   /** Called to leave the three-pane view, whether it wrote or was closed. */
@@ -41,10 +45,35 @@ interface Loaded {
   readonly binary: boolean
 }
 
+type Tone = 'add' | 'mod' | 'del'
+
 // The arrow glyphs, kept out of the JSX so the translated text stays the only
-// literal the interface shows.
-const TAKE_LINE = { head: '\u2192', worktree: '\u2190' } as const
-const TAKE_HUNK = { head: '\u21c9', worktree: '\u21c7' } as const
+// literal the interface shows. A single angle takes one line, a double one the
+// whole change.
+const TAKE_LINE = { head: '\u203a', worktree: '\u2039' } as const
+const TAKE_HUNK = { head: '\u00bb', worktree: '\u00ab' } as const
+
+/** The colour of a HEAD line: removed from the index, or rewritten by it. */
+function headTone(row: ThreeRow): Tone | null {
+  if (!row.staged || row.headText === null) return null
+  return row.indexText === null ? 'del' : 'mod'
+}
+
+/** The colour of the centre line: new against HEAD, or rewritten by it. */
+function indexTone(row: ThreeRow, middle: ThreeMiddle): Tone | null {
+  if (!row.staged || !middle.present) return null
+  return row.headText === null ? 'add' : 'mod'
+}
+
+/** The colour of a working-copy line: new against HEAD, or rewritten by it. */
+function worktreeTone(row: ThreeRow): Tone | null {
+  if (row.worktreeText === null || (!row.staged && !row.unstaged)) return null
+  return row.headText === null ? 'add' : 'mod'
+}
+
+function toneClass(tone: Tone | null): string {
+  return tone === null ? '' : ` three__cell--${tone}`
+}
 
 /**
  * For every row, the number of rows in the change run it starts, or null when
@@ -67,7 +96,13 @@ function runStarts(rows: readonly ThreeRow[], flag: 'staged' | 'unstaged'): (num
   return starts
 }
 
-export default function ThreePaneView({ repo, path, onChanged, onExit }: ThreePaneViewProps) {
+export default function ThreePaneView({
+  repo,
+  path,
+  language = null,
+  onChanged,
+  onExit
+}: ThreePaneViewProps) {
   const { t } = useTranslation()
   const [loaded, setLoaded] = useState<Loaded | null>(null)
   const [writing, setWriting] = useState(false)
@@ -78,6 +113,7 @@ export default function ThreePaneView({ repo, path, onChanged, onExit }: ThreePa
   } | null>(null)
 
   const requestKey = `${repo}\u0000${path}`
+  const file = splitPath(path)
 
   useEffect(() => {
     let active = true
@@ -135,6 +171,29 @@ export default function ThreePaneView({ repo, path, onChanged, onExit }: ThreePa
     }
   }, [state])
 
+  const stats = useMemo(() => {
+    if (state === null) return { staged: 0, unstaged: 0 }
+    let staged = 0
+    let unstaged = 0
+    for (const row of state.rows) {
+      if (row.staged) staged += 1
+      if (row.unstaged) unstaged += 1
+    }
+    return { staged, unstaged }
+  }, [state])
+
+  // The centre line numbers follow the pending index, so a line taken into a
+  // gap gets the number it will have when Done writes the text.
+  const middleNumbers = useMemo(() => {
+    if (state === null) return []
+    let line = 0
+    return state.middle.map((entry): number | null => {
+      if (!entry.present) return null
+      line += 1
+      return line
+    })
+  }, [state])
+
   const done = useCallback(async () => {
     if (state === null) {
       onExit()
@@ -162,21 +221,31 @@ export default function ThreePaneView({ repo, path, onChanged, onExit }: ThreePa
 
   return (
     <div className="three" data-testid="three-pane">
-      <div className="three__toolbar">
-        <span className="diff__path" data-testid="three-path">
-          {path}
+      <div className="three__topbar">
+        <span className="three__title" data-testid="three-title">
+          {t('diff.three.title')}
         </span>
+        <span className="three__file">
+          <span className="three__file-name" title={path}>
+            {file.name}
+          </span>
+          {file.dir !== '' && <span className="three__file-dir">{file.dir}</span>}
+          <span className="sr-only" data-testid="three-path">
+            {path}
+          </span>
+        </span>
+        <div className="three__spacer" />
+        <button type="button" className="three__button" data-testid="three-close" onClick={onExit}>
+          {t('diff.three.close')}
+        </button>
         <button
           type="button"
-          className="diff__button"
+          className="three__button three__button--primary"
           data-testid="three-done"
           disabled={writing || state === null}
           onClick={() => void done()}
         >
           {t('diff.three.done')}
-        </button>
-        <button type="button" className="diff__button" data-testid="three-close" onClick={onExit}>
-          {t('diff.three.close')}
         </button>
       </div>
 
@@ -196,119 +265,191 @@ export default function ThreePaneView({ repo, path, onChanged, onExit }: ThreePa
         </p>
       )}
 
+      <div className="three__actions">
+        <button
+          type="button"
+          className="three__button"
+          data-testid="three-stage-all"
+          disabled={writing || state === null || stats.unstaged === 0}
+          onClick={() => update((current) => takeAll(current, 'worktree'))}
+        >
+          {t('diff.three.stageAll')}
+        </button>
+        <button
+          type="button"
+          className="three__button"
+          data-testid="three-reset-index"
+          disabled={writing || state === null || stats.staged === 0}
+          onClick={() => update((current) => takeAll(current, 'head'))}
+        >
+          {t('diff.three.resetIndex')}
+        </button>
+        <div className="three__spacer" />
+        <span className="three__stats" data-testid="three-stats" aria-live="polite">
+          {t('diff.three.statsStaged', { count: stats.staged })}{' '}
+          {t('diff.three.statsWorktree', { count: stats.unstaged })}
+        </span>
+      </div>
+
       {state !== null && (
-        <div className="three__grid" data-testid="three-grid">
-          <div className="three__row three__row--heading">
-            <div className="three__cell three__heading">{t('diff.three.head')}</div>
-            <div className="three__arrow" />
-            <div className="three__cell three__heading">{t('diff.three.index')}</div>
-            <div className="three__arrow" />
-            <div className="three__cell three__heading">{t('diff.three.worktree')}</div>
+        <>
+          <div className="three__columns" data-testid="three-columns">
+            <div className="three__column">
+              <strong>{t('diff.three.head')}</strong>
+              <span className="three__tag">{t('diff.three.readOnly')}</span>
+            </div>
+            <div />
+            <div className="three__column">
+              <strong>{t('diff.three.index')}</strong>
+              <span className="three__column-note">· {t('diff.three.indexNote')}</span>
+              <span className="three__tag">{t('diff.three.editable')}</span>
+            </div>
+            <div />
+            <div className="three__column">
+              <strong>{t('diff.three.worktree')}</strong>
+              <span className="three__tag">{t('diff.three.readOnly')}</span>
+            </div>
           </div>
 
-          {state.rows.map((row, at) => {
-            const middle = state.middle[at] as ThreeMiddle
-            const headRun = starts.head[at] ?? null
-            const workRun = starts.worktree[at] ?? null
-            return (
-              <div className="three__row" data-testid="three-row" key={at}>
-                <div
-                  className={`three__cell${row.staged ? ' three__cell--changed' : ''}${
-                    row.headText === null ? ' three__cell--empty' : ''
-                  }`}
-                >
-                  {row.headText ?? ''}
-                </div>
+          <div className="three__grid" data-testid="three-grid">
+            {state.rows.map((row, at) => {
+              const middle = state.middle[at] as ThreeMiddle
+              const headRun = starts.head[at] ?? null
+              const workRun = starts.worktree[at] ?? null
+              return (
+                <div className="three__row" data-testid="three-row" key={at}>
+                  <div
+                    className={`three__cell${toneClass(headTone(row))}${
+                      row.headText === null ? ' three__cell--empty' : ''
+                    }`}
+                  >
+                    <span className="three__line-number">
+                      {row.aligned.head === null ? '' : row.aligned.head + 1}
+                    </span>
+                    <span className="three__text">{row.headText ?? ''}</span>
+                  </div>
 
-                <div
-                  className={`three__arrow${row.staged ? ' three__arrow--changed' : ''}`}
-                  data-testid="three-arrow-head"
-                >
-                  {row.staged && (
-                    <button
-                      type="button"
-                      className="three__take"
-                      data-testid="three-take-head"
-                      title={t('diff.three.takeHead')}
-                      aria-label={t('diff.three.takeHead')}
-                      onClick={() => update((current) => takeLine(current, at, 'head'))}
-                    >
-                      {TAKE_LINE.head}
-                    </button>
-                  )}
-                  {headRun !== null && headRun > 1 && (
-                    <button
-                      type="button"
-                      className="three__take"
-                      data-testid="three-take-head-hunk"
-                      title={t('diff.three.takeHeadHunk')}
-                      aria-label={t('diff.three.takeHeadHunk')}
-                      onClick={() => update((current) => takeHunk(current, at, 'head'))}
-                    >
-                      {TAKE_HUNK.head}
-                    </button>
-                  )}
-                </div>
+                  <div className="three__arrow" data-testid="three-arrow-head">
+                    {row.staged && (
+                      <button
+                        type="button"
+                        className="three__take"
+                        data-testid="three-take-head"
+                        title={t('diff.three.takeHead')}
+                        aria-label={t('diff.three.takeHead')}
+                        onClick={() => update((current) => takeLine(current, at, 'head'))}
+                      >
+                        {TAKE_LINE.head}
+                      </button>
+                    )}
+                    {headRun !== null && headRun > 1 && (
+                      <button
+                        type="button"
+                        className="three__take"
+                        data-testid="three-take-head-hunk"
+                        title={t('diff.three.takeHeadHunk')}
+                        aria-label={t('diff.three.takeHeadHunk')}
+                        onClick={() => update((current) => takeHunk(current, at, 'head'))}
+                      >
+                        {TAKE_HUNK.head}
+                      </button>
+                    )}
+                  </div>
 
-                <textarea
-                  className={`three__cell three__input${
-                    middle.present ? '' : ' three__input--padding'
-                  }`}
-                  data-testid="three-index-line"
-                  value={middle.text}
-                  rows={1}
-                  wrap="off"
-                  spellCheck={false}
-                  aria-label={t('diff.three.index')}
-                  onChange={(event) =>
-                    update((current) => editLine(current, at, event.target.value))
-                  }
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') event.preventDefault()
-                  }}
-                />
+                  <div
+                    className={`three__cell three__index-cell${toneClass(indexTone(row, middle))}${
+                      middle.present ? '' : ' three__cell--empty'
+                    }`}
+                  >
+                    <span className="three__line-number">{middleNumbers[at] ?? ''}</span>
+                    <textarea
+                      className="three__input"
+                      data-testid="three-index-line"
+                      value={middle.text}
+                      rows={1}
+                      wrap="off"
+                      spellCheck={false}
+                      aria-label={t('diff.three.index')}
+                      onChange={(event) =>
+                        update((current) => editLine(current, at, event.target.value))
+                      }
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') event.preventDefault()
+                      }}
+                    />
+                  </div>
 
-                <div
-                  className={`three__arrow${row.unstaged ? ' three__arrow--changed' : ''}`}
-                  data-testid="three-arrow-worktree"
-                >
-                  {row.unstaged && (
-                    <button
-                      type="button"
-                      className="three__take"
-                      data-testid="three-take-worktree"
-                      title={t('diff.three.takeWorktree')}
-                      aria-label={t('diff.three.takeWorktree')}
-                      onClick={() => update((current) => takeLine(current, at, 'worktree'))}
-                    >
-                      {TAKE_LINE.worktree}
-                    </button>
-                  )}
-                  {workRun !== null && workRun > 1 && (
-                    <button
-                      type="button"
-                      className="three__take"
-                      data-testid="three-take-worktree-hunk"
-                      title={t('diff.three.takeWorktreeHunk')}
-                      aria-label={t('diff.three.takeWorktreeHunk')}
-                      onClick={() => update((current) => takeHunk(current, at, 'worktree'))}
-                    >
-                      {TAKE_HUNK.worktree}
-                    </button>
-                  )}
-                </div>
+                  <div className="three__arrow" data-testid="three-arrow-worktree">
+                    {row.unstaged && (
+                      <button
+                        type="button"
+                        className="three__take"
+                        data-testid="three-take-worktree"
+                        title={t('diff.three.takeWorktree')}
+                        aria-label={t('diff.three.takeWorktree')}
+                        onClick={() => update((current) => takeLine(current, at, 'worktree'))}
+                      >
+                        {TAKE_LINE.worktree}
+                      </button>
+                    )}
+                    {workRun !== null && workRun > 1 && (
+                      <button
+                        type="button"
+                        className="three__take"
+                        data-testid="three-take-worktree-hunk"
+                        title={t('diff.three.takeWorktreeHunk')}
+                        aria-label={t('diff.three.takeWorktreeHunk')}
+                        onClick={() => update((current) => takeHunk(current, at, 'worktree'))}
+                      >
+                        {TAKE_HUNK.worktree}
+                      </button>
+                    )}
+                    {!row.unstaged && row.staged && (
+                      <span className="three__staged" data-testid="three-staged">
+                        {t('diff.three.staged')}
+                      </span>
+                    )}
+                  </div>
 
-                <div
-                  className={`three__cell${row.unstaged ? ' three__cell--changed' : ''}${
-                    row.worktreeText === null ? ' three__cell--empty' : ''
-                  }`}
-                >
-                  {row.worktreeText ?? ''}
+                  <div
+                    className={`three__cell${toneClass(worktreeTone(row))}${
+                      row.worktreeText === null ? ' three__cell--empty' : ''
+                    }`}
+                  >
+                    <span className="three__line-number">
+                      {row.aligned.worktree === null ? '' : row.aligned.worktree + 1}
+                    </span>
+                    <span className="three__text">{row.worktreeText ?? ''}</span>
+                  </div>
                 </div>
-              </div>
-            )
-          })}
-        </div>
+              )
+            })}
+          </div>
+
+          <div className="three__help" data-testid="three-help">
+            <div className="three__card">
+              <p className="three__card-title">{t('diff.three.helpStageTitle')}</p>
+              <p className="three__card-body">{t('diff.three.helpStageBody')}</p>
+            </div>
+            <div className="three__card">
+              <p className="three__card-title">{t('diff.three.helpUnstageTitle')}</p>
+              <p className="three__card-body">{t('diff.three.helpUnstageBody')}</p>
+            </div>
+            <div className="three__card">
+              <p className="three__card-title">{t('diff.three.helpEditTitle')}</p>
+              <p className="three__card-body">{t('diff.three.helpEditBody')}</p>
+            </div>
+          </div>
+
+          <div className="three__status" data-testid="three-status">
+            <span>{t('diff.three.status')}</span>
+            {language !== null && (
+              <span className="three__status-meta">
+                {t('status.languageDetected', { language })}
+              </span>
+            )}
+          </div>
+        </>
       )}
     </div>
   )

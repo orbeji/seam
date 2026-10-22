@@ -26,7 +26,7 @@ La operación en curso se detecta con los marcadores de la fase 0. Todos los com
 
 ### Mensaje del commit
 
-En un merge, «Accept and finish» usa el mensaje que Git ya dejó en `MERGE_MSG`. En una pantalla previa opcional se puede editar, con la misma caja de mensaje de la fase 4. En un rebase se conserva el mensaje del commit que se repite; si el usuario quiere cambiarlo, lo hace después con amend.
+En un merge, «Accept and finish» abre la caja de mensaje de la fase 4 con el texto que Git ya dejó en `MERGE_MSG`, para que el usuario pueda editarlo antes de crear el commit. En un rebase se conserva el mensaje del commit que se repite; si el usuario quiere cambiarlo, lo hace después con amend.
 
 ### Progreso del rebase
 
@@ -80,6 +80,6 @@ El observador de la fase 3 detecta que desapareció `MERGE_HEAD` o el directorio
 - La diferencia entre `rebase-merge` y `rebase-apply` en versiones antiguas de Git. Mitigación: probar con Git 2.30 y con la última versión en integración continua.
 - El stash sin comando de aborto puede dejar el árbol a medias. Mitigación: no ofrecer «Abort» en ese caso hasta que el experimento 7.1 lo valide.
 
-## Decisión a confirmar
+## Decisión tomada
 
-- [ ] ¿El resultado de «Accept and finish» en un merge crea el commit directamente con el mensaje por defecto, o se abre antes la caja de mensaje de la fase 4? La propuesta es abrirla, para que el usuario pueda editar el mensaje, con el texto por defecto ya rellenado.
+- [x] «Accept and finish» en un merge abre antes la caja de mensaje de la fase 4, con el texto de `MERGE_MSG` ya rellenado. El usuario puede editarlo y el commit se crea al confirmar la caja.

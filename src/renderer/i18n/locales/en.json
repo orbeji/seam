@@ -3,6 +3,24 @@
     "name": "Seam",
     "tagline": "A Git client for staging, diffs and conflicts."
   },
+  "topbar": {
+    "refresh": "Refresh status"
+  },
+  "status": {
+    "ready": "Ready",
+    "staged": "{{count}} staged",
+    "unstaged": "{{count}} unstaged",
+    "untracked": "{{count}} untracked",
+    "conflicts": "{{count}} conflicts",
+    "fileHunks_one": "{{count}} hunk in this file: {{staged}} staged, {{unstaged}} unstaged",
+    "fileHunks_other": "{{count}} hunks in this file: {{staged}} staged, {{unstaged}} unstaged",
+    "noHunks": "No hunks in this file",
+    "languageDetected": "{{language}} (detected)"
+  },
+  "workarea": {
+    "selectFile": "Select a file to see its diff.",
+    "closeTab": "Close tab"
+  },
   "language": {
     "label": "Language",
     "names": {
@@ -11,6 +29,9 @@
     }
   },
   "changes": {
+    "title": "Changes",
+    "files_one": "{{count}} file",
+    "files_other": "{{count}} files",
     "empty": "Open a repository to see its staged, unstaged and untracked changes.",
     "open": "Open repository…",
     "recent": "Recent repositories",
@@ -39,6 +60,12 @@
     "title": "Merge conflicts",
     "loading": "Reading the conflicts…",
     "sides": "Yours: {{yours}} · Theirs: {{theirs}}",
+    "columns": {
+      "file": "File",
+      "kind": "Kind",
+      "status": "Status",
+      "resolve": "Resolve"
+    },
     "status": {
       "unresolved": "Unresolved",
       "resolved": "Resolved"
@@ -53,26 +80,94 @@
       "DD": "Deleted by both"
     },
     "binary": "Binary",
-    "acceptYours": "Accept yours ({{label}})",
-    "acceptTheirs": "Accept theirs ({{label}})",
+    "acceptYours": "Accept Yours",
+    "acceptYoursFull": "Accept Yours ({{label}})",
+    "acceptTheirs": "Accept Theirs",
+    "acceptTheirsFull": "Accept Theirs ({{label}})",
+    "sideLabel": " ({{label}})",
     "keep": "Keep file",
     "delete": "Delete file",
     "resolveManually": "Resolve manually",
+    "resolveManuallyHint": "Open the three-pane merge editor.",
     "resolveSimple": "Resolve all simple conflicts",
     "resolvedCount": "Resolved {{resolved}}; {{remaining}} still to go.",
     "nothingSimple": "No simple conflicts are waiting.",
+    "summary": "{{unresolved}} unresolved, {{resolved}} resolved",
+    "showResult": "Show result",
+    "showDiff": "Show diff",
+    "moreActions": "More actions",
+    "menuLabel": "Resolved file actions",
     "revert": "Revert conflict resolution",
+    "help": {
+      "unresolved": "{{name}}: {{kind}}. Resolve manually opens the three-pane editor.",
+      "deletion": "{{name}}: {{kind}}. Keep file or delete file settles it without an editor.",
+      "binary": "{{name}}: {{kind}}. Choose the whole file from one side.",
+      "resolved": "{{name}}: resolved. Show result opens the diff, and the menu can undo the resolution."
+    },
+    "legend": {
+      "modified": "Modified",
+      "deleted": "Deleted",
+      "added": "Added",
+      "conflicting": "Conflicting"
+    },
     "overwrite": "Overwrite",
     "overwriteTitle": "The file changed",
     "overwriteExplain": "“{{path}}” changed since the conflict was read. Accepting this side overwrites it.",
     "overwriteCancel": "Cancel",
     "acceptAndFinish": "Accept and finish",
-    "abort": "Abort",
+    "abort": "Abort merge",
     "close": "Close",
     "laterPhase": "Available in a later phase.",
     "resolve": "Resolve",
     "resolveConflicts": "Resolve conflicts",
     "noUnresolved": "No unresolved conflicts."
+  },
+  "merge": {
+    "yours": "Yours",
+    "result": "Result",
+    "theirs": "Theirs",
+    "readOnly": "read-only",
+    "editable": "editable",
+    "conflictOf": "Conflict {{current}} of {{total}}",
+    "noConflicts": "No conflicts",
+    "previousConflict": "Previous conflict (Shift+F7)",
+    "nextConflict": "Next conflict (F7)",
+    "save": "Save and close",
+    "apply": "Apply changes",
+    "close": "Close without applying",
+    "applyAll": "Apply all non-conflicting",
+    "fromLeft": "From left",
+    "fromRight": "From right",
+    "resolveSimple": "Resolve simple conflicts",
+    "compare": "Compare",
+    "compareYours": "Yours vs Result",
+    "compareTheirs": "Theirs vs Result",
+    "closeCompare": "Close compare",
+    "takeLeft": "Accept the Yours change",
+    "ignoreLeft": "Ignore the Yours change",
+    "takeRight": "Accept the Theirs change",
+    "ignoreRight": "Ignore the Theirs change",
+    "resolveLeft": "Resolve using Yours",
+    "resolveRight": "Resolve using Theirs",
+    "revert": "Revert change",
+    "contextMenu": "Change actions",
+    "stats": "{{changes}} changes: {{conflicts}} conflicts, {{nonConflicting}} non-conflicting, {{resolved}} resolved",
+    "legend": {
+      "modified": "Modified",
+      "deleted": "Deleted",
+      "added": "Added",
+      "conflicting": "Conflicting"
+    },
+    "statusResult": "The result starts from the common ancestor",
+    "binary": "This is a binary conflict. Choose a side in the conflicts list.",
+    "readOnlyFile": "This file has no separate stages to merge. It opens read-only.",
+    "large": "This file is large, so inline highlighting and the connecting marks are reduced.",
+    "resolveAllFirst": "Resolve every change before applying.",
+    "discardTitle": "Discard the result?",
+    "discardBody": "The changes made in this editor have not been written. Closing now leaves the file as it was.",
+    "discard": "Discard and close",
+    "cancel": "Keep editing",
+    "loading": "Reading the three versions…"
   },
   "commit": {
     "message": {
@@ -95,6 +190,9 @@
       "placeholder": "Name <email>"
     },
     "button": "Commit",
+    "buttonCount_one": "Commit {{count}} staged file",
+    "buttonCount_other": "Commit {{count}} staged files",
+    "help": "Commit uses staged changes only. Disabled while nothing is staged.",
     "reason": {
       "nothing-staged": "Nothing is staged.",
       "conflicts": "There are unresolved conflicts."
@@ -118,11 +216,12 @@
     "loading": "Reading both versions…",
     "binary": "This is a binary file: {{from}} bytes against {{to}} bytes.",
     "large": "This file is large, so inline highlighting is off and the diff is read line by line.",
-    "collapse": "Fold unchanged",
+    "collapse": "Collapse",
+    "collapseHint": "Collapse unchanged lines",
     "context": "Context",
     "layout": {
       "label": "Layout",
-      "side-by-side": "Side by side",
+      "side-by-side": "Side-by-side",
       "unified": "Unified",
       "three-pane": "Three panes"
     },
@@ -136,16 +235,28 @@
     },
     "whitespace": {
       "label": "Whitespace",
-      "none": "Show all",
+      "none": "None",
       "trim": "Ignore around",
       "ignore": "Ignore all",
       "ignore-and-blank": "Ignore all and blank lines"
+    },
+    "differenceOf": "Difference {{current}} of {{total}}",
+    "columns": {
+      "head": "HEAD (read-only)",
+      "index": "Index (read-only)",
+      "worktree": "Working copy (editable)",
+      "stage1": "Base (read-only)",
+      "stage2": "Yours (read-only)",
+      "stage3": "Theirs (read-only)"
     },
     "navigation": {
       "previous": "Previous difference",
       "next": "Next difference"
     },
     "hunk": {
+      "staged": "Staged change",
+      "pending": "Unstaged change",
+      "both": "Staged and unstaged change",
       "stage": "Stage hunk",
       "stageSelection": "Stage selected lines",
       "unstage": "Unstage hunk",
@@ -156,11 +267,29 @@
     },
     "count": "Differences: {{count}}",
     "three": {
+      "title": "Stage changes line by line",
       "head": "HEAD",
       "index": "Index",
       "worktree": "Working copy",
+      "indexNote": "next commit",
+      "readOnly": "read-only",
+      "editable": "editable",
       "done": "Done",
       "close": "Close",
+      "stageAll": "Stage all remaining changes",
+      "resetIndex": "Reset index to HEAD",
+      "statsStaged_one": "Index differs from HEAD by {{count}} line.",
+      "statsStaged_other": "Index differs from HEAD by {{count}} lines.",
+      "statsWorktree_one": "Working copy differs from the index by {{count}} line.",
+      "statsWorktree_other": "Working copy differs from the index by {{count}} lines.",
+      "staged": "staged",
+      "helpStageTitle": "Right arrow: stage",
+      "helpStageBody": "The arrow between the index and the working copy takes that line into the index. One line, one hunk, or the whole file, your choice.",
+      "helpUnstageTitle": "Left arrow: unstage",
+      "helpUnstageBody": "The arrow between HEAD and the index puts the HEAD version of that line back, so it drops out of the next commit.",
+      "helpEditTitle": "Edit the middle",
+      "helpEditBody": "The centre pane is a normal editor. Type in it to stage something finer, such as one word of a line. Its text is exactly what Git stores.",
+      "status": "Staged lines get a \"staged\" label. Lines still to stage keep an arrow.",
       "binary": "This file is binary, so it cannot be prepared by line.",
       "takeHead": "Take this line from HEAD",
       "takeHeadHunk": "Take this change from HEAD",

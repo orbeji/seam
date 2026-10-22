@@ -7,6 +7,7 @@ import {
   buildThreePane,
   editLine,
   middleText,
+  takeAll,
   takeHunk,
   takeLine,
   type ThreePaneState
@@ -79,6 +80,24 @@ describe('the three-pane model', () => {
   it('takes a whole change from the working copy', () => {
     const state = pane(['a', 'b', 'c'], ['a', 'b', 'c'], ['a', 'B', 'C'])
     expect(middleText(takeHunk(state, rowOfIndex(state, 1), 'worktree'))).toBe('a\nB\nC')
+  })
+
+  it('marks a line taken from the working copy as prepared at once', () => {
+    const state = pane(['a', 'b', 'c'], ['a', 'b', 'c'], ['a', 'B', 'c'])
+    const taken = takeLine(state, rowOfIndex(state, 1), 'worktree')
+    const row = taken.rows[rowOfIndex(taken, 1)] as (typeof taken.rows)[number]
+    expect(row.staged).toBe(true)
+    expect(row.unstaged).toBe(false)
+  })
+
+  it('takes every remaining change from the working copy at once', () => {
+    const state = pane(['a', 'b', 'c'], ['a', 'b', 'c'], ['a', 'B', 'C'])
+    expect(middleText(takeAll(state, 'worktree'))).toBe('a\nB\nC')
+  })
+
+  it('resets every prepared change to HEAD at once', () => {
+    const state = pane(['a', 'b', 'c'], ['a', 'B', 'C'], ['a', 'B', 'C'])
+    expect(middleText(takeAll(state, 'head'))).toBe('a\nb\nc')
   })
 
   it('takes a whole prepared change back from HEAD', () => {

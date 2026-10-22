@@ -11,14 +11,18 @@ import type {
   IdentityScope
 } from '../shared/git'
 import type { CrlfChoice, FileVersionSource, IpcErrorCode, RepositorySnapshot } from '../shared/ipc'
+import { fileBadge, type FileBadge } from './changes/entry-view'
 import ChangesView from './changes/ChangesView'
 import CommitBox from './commit/CommitBox'
 import EolDialog, { type EolAnswer } from './commit/EolDialog'
 import IdentityDialog from './commit/IdentityDialog'
 import ConflictsDialog, { type ConflictOverwrite } from './conflicts/ConflictsDialog'
-import DiffView from './diff/DiffView'
+import DiffView, { type DiffInfo } from './diff/DiffView'
 import { ERROR_KEYS } from './errors'
+import MergeEditor from './merge/MergeEditor'
 import { SUPPORTED_LANGUAGES, type SupportedLanguage } from './i18n'
+import { splitPath } from './paths'
+import TopBar from './shell/TopBar'
 
 type View =
   | { state: 'idle' }
@@ -71,12 +75,26 @@ function sameFile(a: Selection, b: Selection): boolean {
   return a.path === b.path && a.from === b.from && a.to === b.to
 }
 
+/** The badge of the selected file, read from whichever list holds it. */
+function selectionBadge(summary: ChangeSummary, selection: Selection): FileBadge | null {
+  const entry = [
+    ...summary.staged,
+    ...summary.unstaged,
+    ...summary.untracked,
+    ...summary.conflicts
+  ].find((candidate) => candidate.path === selection.path)
+  return entry === undefined ? null : fileBadge(entry)
+}
+
 export default function App() {
   const { t, i18n } = useTranslation()
   const current: SupportedLanguage = (i18n.resolvedLanguage as SupportedLanguage) ?? 'en'
   const [view, setView] = useState<View>({ state: 'idle' })
   const [recent, setRecent] = useState<string[]>([])
   const [selected, setSelected] = useState<Selection | null>(null)
+  // The open file's language and hunk counts, reported by the viewer for the
+  // status bar. It is null whenever no file is open.
+  const [fileInfo, setFileInfo] = useState<DiffInfo | null>(null)
   // A failed stage or unstage, shown above the lists without hiding them.
   const [writeError, setWriteError] = useState<{
     code: IpcErrorCode
@@ -136,6 +154,9 @@ export default function App() {
   // once per operation, not on every refresh; when none are left the key is
   // cleared so the next operation opens it again.
   const conflictsOpenedFor = useRef<string | null>(null)
+  // The file the merge editor has open, with its repository, or null when the
+  // three-pane editor is closed and the main window is showing.
+  const [mergeEditor, setMergeEditor] = useState<{ repo: string; path: string } | null>(null)
 
   const open = useCallback(async (repo: string) => {
     setSelected(null)
@@ -156,6 +177,7 @@ export default function App() {
     setConflictsError(null)
     setConflictsNotice(null)
     setOverwrite(null)
+    setMergeEditor(null)
     conflictsOpenedFor.current = null
     setView({ state: 'loading' })
     const result = await window.seam.readRepositoryStatus(repo)
@@ -168,9 +190,15 @@ export default function App() {
 
   const currentRepo = view.state === 'ready' ? view.snapshot.repo : null
   const staged = view.state === 'ready' ? view.snapshot.summary.staged.length : 0
+  const unstaged = view.state === 'ready' ? view.snapshot.summary.unstaged.length : 0
+  const untracked = view.state === 'ready' ? view.snapshot.summary.untracked.length : 0
   const conflicts = view.state === 'ready' ? view.snapshot.summary.conflicts.length : 0
   const operation = view.state === 'ready' ? view.snapshot.operation : null
   const canAmend = view.state === 'ready' && view.snapshot.status.branch.oid !== null
+  const branchStatus = view.state === 'ready' ? view.snapshot.status.branch : null
+  const branchLabel =
+    branchStatus === null ? null : (branchStatus.head ?? branchStatus.oid?.slice(0, 7) ?? null)
+  const fileCount = staged + unstaged + untracked + conflicts
 
   // The open repository, kept in a ref so the focus and change listeners can be
   // set up once and never resubscribe as the view changes.
@@ -345,6 +373,35 @@ export default function App() {
     setConflictsNotice(null)
     setOverwrite(null)
   }, [])
+
+  /** Closes the dialog on the resolved file, comparing the result against HEAD. */
+  const showConflictDiff = useCallback(
+    (entry: ConflictEntry) => {
+      closeConflicts()
+      setSelected({ path: entry.path, from: 'head', to: 'worktree' })
+    },
+    [closeConflicts]
+  )
+
+  /** Leaves the list for the three-pane editor on one manually merged file. */
+  const openMergeEditor = useCallback((entry: ConflictEntry) => {
+    const repo = repoRef.current
+    if (repo === null) return
+    setOverwrite(null)
+    setConflictsView(null)
+    setMergeEditor({ repo, path: entry.path })
+  }, [])
+
+  /**
+   * Comes back from the editor, rereading the status and the conflict list. The
+   * list reopens whether the result was written or discarded, so the user lands
+   * on the remaining files instead of the plain window.
+   */
+  const leaveMergeEditor = useCallback(async () => {
+    setMergeEditor(null)
+    await refresh()
+    await openConflicts()
+  }, [refresh, openConflicts])
 
   // Conflicts open the dialog once per operation, not on every refresh: the
   // key is the operation and the commit it started from. A closed dialog stays
@@ -623,98 +680,91 @@ export default function App() {
     if (next !== undefined) setSelected(next)
   }
 
+  if (mergeEditor !== null) {
+    return (
+      <MergeEditor
+        key={`${mergeEditor.repo}\u0000${mergeEditor.path}`}
+        repo={mergeEditor.repo}
+        path={mergeEditor.path}
+        onExit={() => void leaveMergeEditor()}
+      />
+    )
+  }
+
   return (
     <div className="app">
-      <header className="app__header">
-        <h1 className="app__title">{t('app.name')}</h1>
-        <p className="app__tagline">{t('app.tagline')}</p>
-      </header>
+      <TopBar
+        repo={currentRepo}
+        branch={branchLabel}
+        recent={recent}
+        canRefresh={currentRepo !== null}
+        language={current}
+        languages={SUPPORTED_LANGUAGES}
+        onChoose={() => void choose()}
+        onOpen={(repo) => void open(repo)}
+        onRefresh={() => void refresh()}
+        onLanguageChange={(language) => void i18n.changeLanguage(language)}
+      />
 
-      <div className="app__toolbar">
-        <button type="button" className="button" onClick={() => void choose()}>
-          {t('changes.open')}
-        </button>
-        {currentRepo !== null && <span className="app__repo">{currentRepo}</span>}
+      <div className="shell">
+        <aside className="sidebar" aria-label={t('changes.title')}>
+          <div className="sidebar__heading">
+            <span>{t('changes.title')}</span>
+            <span className="sidebar__count" data-testid="changes-count">
+              {t('changes.files', { count: fileCount })}
+            </span>
+          </div>
+
+          <div className="sidebar__scroll">{renderSidebar()}</div>
+
+          {currentRepo !== null && (
+            <div className="sidebar__commit">
+              {commitNotice !== null && (
+                <p className="app__notice" data-testid="commit-notice">
+                  <span className="app__notice-text">
+                    {t('commit.committed', { id: commitNotice })}
+                  </span>
+                  <button
+                    type="button"
+                    className="app__notice-copy"
+                    data-testid="commit-copy"
+                    onClick={copyShortId}
+                  >
+                    {t(copied ? 'commit.copied' : 'commit.copy')}
+                  </button>
+                </p>
+              )}
+              <CommitBox
+                value={commitMessage}
+                onChange={writeMessage}
+                amend={amend}
+                onAmendChange={(next) => void changeAmend(next)}
+                canAmend={canAmend}
+                head={head}
+                author={author}
+                onAuthorChange={setAuthor}
+                signoff={signoff}
+                onSignoffChange={setSignoff}
+                runHooks={runHooks}
+                onRunHooksChange={changeRunHooks}
+                staged={staged}
+                conflicts={conflicts}
+                operation={operation}
+                onCommit={() => void commit()}
+                onCancel={cancelCommit}
+                busy={committing}
+                output={commitOutput}
+                history={commitHistory}
+                onPickHistory={writeMessage}
+              />
+            </div>
+          )}
+        </aside>
+
+        <main className="workarea">{renderWorkArea()}</main>
       </div>
 
-      {currentRepo !== null && (
-        <>
-          <CommitBox
-            value={commitMessage}
-            onChange={writeMessage}
-            amend={amend}
-            onAmendChange={(next) => void changeAmend(next)}
-            canAmend={canAmend}
-            head={head}
-            author={author}
-            onAuthorChange={setAuthor}
-            signoff={signoff}
-            onSignoffChange={setSignoff}
-            runHooks={runHooks}
-            onRunHooksChange={changeRunHooks}
-            staged={staged}
-            conflicts={conflicts}
-            operation={operation}
-            onCommit={() => void commit()}
-            onCancel={cancelCommit}
-            busy={committing}
-            output={commitOutput}
-            history={commitHistory}
-            onPickHistory={writeMessage}
-          />
-
-          {commitNotice !== null && (
-            <p className="app__notice" data-testid="commit-notice">
-              <span className="app__notice-text">
-                {t('commit.committed', { id: commitNotice })}
-              </span>
-              <button
-                type="button"
-                className="app__notice-copy"
-                data-testid="commit-copy"
-                onClick={copyShortId}
-              >
-                {t(copied ? 'commit.copied' : 'commit.copy')}
-              </button>
-            </p>
-          )}
-        </>
-      )}
-
-      <main className="app__body">{renderBody()}</main>
-
-      {recent.length > 0 && (
-        <aside className="app__recent" aria-label={t('changes.recent')}>
-          <h2 className="app__recent-title">{t('changes.recent')}</h2>
-          <ul className="app__recent-list">
-            {recent.map((repo) => (
-              <li key={repo}>
-                <button type="button" className="app__recent-item" onClick={() => void open(repo)}>
-                  {repo}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </aside>
-      )}
-
-      <footer className="app__footer">
-        <label className="language__label" htmlFor="language">
-          {t('language.label')}
-        </label>
-        <select
-          id="language"
-          className="language__select"
-          value={current}
-          onChange={(event) => void i18n.changeLanguage(event.target.value)}
-        >
-          {SUPPORTED_LANGUAGES.map((language) => (
-            <option key={language} value={language}>
-              {t(`language.names.${language}`)}
-            </option>
-          ))}
-        </select>
-      </footer>
+      {renderStatusBar()}
 
       {identityPrompt !== null && (
         <IdentityDialog
@@ -745,6 +795,8 @@ export default function App() {
           onAccept={acceptConflict}
           onResolveSimple={() => void resolveSimple()}
           onRevert={(entry) => void revertConflict(entry)}
+          onResolveManually={openMergeEditor}
+          onShowDiff={showConflictDiff}
           onOverwrite={confirmOverwrite}
           onCancelOverwrite={() => setOverwrite(null)}
           onClose={closeConflicts}
@@ -753,12 +805,12 @@ export default function App() {
     </div>
   )
 
-  function renderBody() {
+  function renderSidebar() {
     switch (view.state) {
       case 'idle':
-        return <p className="app__empty">{t('changes.empty')}</p>
+        return <p className="panel__empty">{t('changes.empty')}</p>
       case 'loading':
-        return <p className="app__empty">{t('changes.loading')}</p>
+        return <p className="panel__empty">{t('changes.loading')}</p>
       case 'error':
         return (
           <div className="app__error" role="alert">
@@ -780,28 +832,140 @@ export default function App() {
                 <p className="app__error-detail">{writeError.message}</p>
               </div>
             )}
-            {selected === null ? (
-              <ChangesView
-                summary={view.snapshot.summary}
-                operation={view.snapshot.operation}
-                onOpen={(path, from, to) => setSelected({ path, from, to })}
-                onStage={(paths) => void writeStaging(paths, false)}
-                onUnstage={(paths) => void writeStaging(paths, true)}
-                onResolve={() => void openConflicts()}
-              />
-            ) : (
-              <DiffView
-                repo={view.snapshot.repo}
-                path={selected.path}
-                from={selected.from}
-                to={selected.to}
-                onClose={() => setSelected(null)}
-                onEdge={(direction) => move(view.snapshot.summary, selected, direction)}
-                onChanged={() => void refresh()}
-              />
-            )}
+            <ChangesView
+              summary={view.snapshot.summary}
+              operation={view.snapshot.operation}
+              selectedPath={selected?.path ?? null}
+              onOpen={(path, from, to) => setSelected({ path, from, to })}
+              onStage={(paths) => void writeStaging(paths, false)}
+              onUnstage={(paths) => void writeStaging(paths, true)}
+              onResolve={() => void openConflicts()}
+            />
           </>
         )
     }
+  }
+
+  function renderWorkArea() {
+    if (view.state === 'error') {
+      return (
+        <div className="workarea__empty">
+          <div className="app__error" role="alert">
+            <p className="app__error-title">{t(ERROR_KEYS[view.code])}</p>
+            <p className="app__error-detail">{view.message}</p>
+          </div>
+        </div>
+      )
+    }
+    if (view.state === 'idle' || view.state === 'loading') {
+      return (
+        <p className="workarea__empty">
+          {t(view.state === 'idle' ? 'changes.empty' : 'changes.loading')}
+        </p>
+      )
+    }
+    if (selected === null) {
+      return <p className="workarea__empty">{t('workarea.selectFile')}</p>
+    }
+
+    const { name, dir } = splitPath(selected.path)
+    const badge = selectionBadge(view.snapshot.summary, selected)
+    return (
+      <>
+        <div className="workarea__tabbar">
+          <div className="workarea__tab">
+            {badge !== null && (
+              <span className={`changes__badge changes__badge--${badge.tone}`}>{badge.letter}</span>
+            )}
+            <span className="workarea__tab-name" title={selected.path}>
+              {name}
+            </span>
+            <span className="sr-only" data-testid="diff-path">
+              {selected.path}
+            </span>
+            {dir !== '' && <span className="workarea__tab-dir">{dir}</span>}
+            <button
+              type="button"
+              className="icon-button workarea__tab-close"
+              data-testid="diff-close"
+              aria-label={t('workarea.closeTab')}
+              title={t('workarea.closeTab')}
+              onClick={() => setSelected(null)}
+            >
+              <svg
+                width="10"
+                height="10"
+                viewBox="0 0 10 10"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                aria-hidden="true"
+              >
+                <path d="M2 2l6 6M8 2l-6 6" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <div className="workarea__content">
+          <DiffView
+            repo={view.snapshot.repo}
+            path={selected.path}
+            from={selected.from}
+            to={selected.to}
+            onEdge={(direction) => move(view.snapshot.summary, selected, direction)}
+            onChanged={() => void refresh()}
+            onInfoChange={setFileInfo}
+          />
+        </div>
+      </>
+    )
+  }
+
+  function renderStatusBar() {
+    const info = selected !== null && view.state === 'ready' ? fileInfo : null
+    const fileHunks = info === null ? 0 : info.stagedHunks + info.unstagedHunks
+    return (
+      <footer className="statusbar">
+        <span className="statusbar__left">
+          {info !== null ? (
+            fileHunks === 0 ? (
+              <span>{t('status.noHunks')}</span>
+            ) : (
+              <span>
+                {t('status.fileHunks', {
+                  count: fileHunks,
+                  staged: info.stagedHunks,
+                  unstaged: info.unstagedHunks
+                })}
+              </span>
+            )
+          ) : view.state === 'ready' ? (
+            <>
+              <span>{t('status.staged', { count: staged })}</span>
+              <span>{t('status.unstaged', { count: unstaged })}</span>
+              <span>{t('status.untracked', { count: untracked })}</span>
+              {conflicts > 0 && (
+                <span className="statusbar__conflict">
+                  {t('status.conflicts', { count: conflicts })}
+                </span>
+              )}
+            </>
+          ) : (
+            <span>{t('status.ready')}</span>
+          )}
+        </span>
+        {info !== null && info.language !== null ? (
+          <span className="statusbar__language">
+            {t('status.languageDetected', { language: info.language })}
+          </span>
+        ) : currentRepo !== null ? (
+          <span className="statusbar__repo" title={currentRepo}>
+            {currentRepo}
+          </span>
+        ) : null}
+      </footer>
+    )
   }
 }

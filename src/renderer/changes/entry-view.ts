@@ -9,6 +9,15 @@ export interface EntryView {
   label: string
 }
 
+/** The colour family of a file's badge in the sidebar. */
+export type BadgeTone = 'modified' | 'added' | 'deleted' | 'untracked' | 'conflict'
+
+/** A file row's one-letter badge and the colour it uses. */
+export interface FileBadge {
+  letter: string
+  tone: BadgeTone
+}
+
 /**
  * Turns a status entry into a row. The badges are Git's own letters (porcelain
  * `X`/`Y` for ordinary and renamed entries, the conflict code for unmerged
@@ -28,5 +37,33 @@ export function entryView(entry: StatusEntry): EntryView {
       }
     case 'ordinary':
       return { key: entry.path, badge: `${entry.x}${entry.y}`, label: entry.path }
+  }
+}
+
+/**
+ * The compact badge the sidebar shows. Git's two porcelain letters are useful
+ * in a table but too wide for a 18px square, so a row is reduced to the one
+ * letter that best describes it: added, deleted, renamed, modified or a
+ * conflict. The badge still carries colour, so a modified file reads as blue
+ * and a conflict as red even when both say `M`/`U`.
+ */
+export function fileBadge(entry: StatusEntry): FileBadge {
+  switch (entry.kind) {
+    case 'untracked':
+      return { letter: '?', tone: 'untracked' }
+    case 'unmerged':
+      return { letter: 'U', tone: 'conflict' }
+    case 'renamed':
+      return { letter: 'R', tone: 'modified' }
+    case 'ordinary': {
+      const letters = `${entry.x}${entry.y}`
+      if (letters.includes('U')) return { letter: 'U', tone: 'conflict' }
+      if (letters.includes('A')) return { letter: 'A', tone: 'added' }
+      if (letters.includes('D')) return { letter: 'D', tone: 'deleted' }
+      if (letters.includes('R')) return { letter: 'R', tone: 'modified' }
+      if (letters.includes('C')) return { letter: 'C', tone: 'modified' }
+      if (letters.includes('T')) return { letter: 'T', tone: 'modified' }
+      return { letter: 'M', tone: 'modified' }
+    }
   }
 }

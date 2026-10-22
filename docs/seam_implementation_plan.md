@@ -256,7 +256,7 @@ Si algún comando de la especificación no se comporta como se espera con la ver
 
 ## Decisiones
 
-Cinco decisiones están tomadas y dos se aplazan a la fase 9, cuando se prepare el instalador.
+Seis decisiones están tomadas y las restantes se aplazan a la fase 9, cuando se prepare el instalador.
 
 | Decisión | Resultado | Efecto en el plan |
 | --- | --- | --- |
@@ -265,10 +265,10 @@ Cinco decisiones están tomadas y dos se aplazan a la fase 9, cuando se prepare 
 | Repositorio y CI | GitHub, con GitHub Actions | La sección de CI deja de ser una suposición. |
 | Versión mínima de Git | 2.30 | La fase 0 comprueba que los comandos funcionan con esa versión, y Seam avisa si encuentra una anterior. |
 | Idiomas de la interfaz | Inglés y español, con estructura para añadir más, por ejemplo catalán | Los textos van en catálogos desde la fase 0; cada idioma nuevo es un archivo. |
+| Terminar un merge | Abrir la caja de mensaje de la fase 4 con `MERGE_MSG` precargado antes de crear el commit | «Accept and finish» de la fase 7 no hace `commit --no-edit`: muestra la caja y crea el commit al confirmarla. |
 
 **Aplazadas a la fase 9**
 
 - [ ] Git en el instalador o instalado aparte. Hasta entonces Seam usa el Git que haya instalado.
 - [ ] Firma de código en Windows para la 0.1.0: certificado de pago o publicar sin firma.
 - [ ] Yours y Theirs durante un rebase: la propuesta (capítulo de la fase 5) es que Yours sean tus commits repetidos, que Git llama `theirs`.
-- [ ] «Accept and finish» en un merge: abrir antes la caja de mensaje (capítulo de la fase 7).

@@ -109,9 +109,27 @@ function contribution(row: ThreeRow, from: ThreeSource): { present: boolean; tex
   return text === null ? { present: false, text: '' } : { present: true, text }
 }
 
+/**
+ * Recomputes what is prepared and what is still pending. The middle is the
+ * index the view is preparing, so the flags follow every take and edit rather
+ * than the index the view opened with.
+ */
+function withFlags(state: ThreePaneState): ThreePaneState {
+  const rows = state.rows.map((row, at): ThreeRow => {
+    const middle = state.middle[at]
+    const text = middle?.present === true ? middle.text : null
+    return {
+      ...row,
+      staged: row.headText !== text,
+      unstaged: row.worktreeText !== text
+    }
+  })
+  return { ...state, rows }
+}
+
 function replaceMiddle(state: ThreePaneState, row: number, next: ThreeMiddle): ThreePaneState {
   const middle = state.middle.map((entry, at) => (at === row ? next : entry))
-  return { ...state, middle }
+  return withFlags({ ...state, middle })
 }
 
 /** Takes one row's line from HEAD (`head`) or the working copy (`worktree`). */
@@ -137,7 +155,20 @@ export function takeHunk(state: ThreePaneState, row: number, from: ThreeSource):
     if (source === undefined || at < first || at > last) return entry
     return { ...contribution(source, from), source: from }
   })
-  return { ...state, middle }
+  return withFlags({ ...state, middle })
+}
+
+/** Takes every change still pending on one side, leaving the other side alone. */
+export function takeAll(state: ThreePaneState, from: ThreeSource): ThreePaneState {
+  const flag = from === 'head' ? 'staged' : 'unstaged'
+  if (!state.rows.some((row) => row[flag])) return state
+
+  const middle = state.middle.map((entry, at) => {
+    const source = state.rows[at]
+    if (source === undefined || !source[flag]) return entry
+    return { ...contribution(source, from), source: from }
+  })
+  return withFlags({ ...state, middle })
 }
 
 /** Replaces the text of one centre line, which becomes part of the index. */

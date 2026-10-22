@@ -5,6 +5,7 @@ import type {
   CommitOutcome,
   ConflictAcceptOutcome,
   ConflictSide,
+  ConflictSides,
   ConflictState,
   GitOperation,
   HeadCommit,
@@ -19,7 +20,7 @@ import type {
  * interface. Bump it whenever a message shape changes so the three layers can
  * detect a mismatch instead of failing silently.
  */
-export const IPC_CONTRACT_VERSION = 16
+export const IPC_CONTRACT_VERSION = 17
 
 /** Channel names shared by the main process and the preload bridge. */
 export const IPC_CHANNELS = {
@@ -51,6 +52,8 @@ export const IPC_CHANNELS = {
   acceptConflict: 'conflicts:accept',
   resolveSimpleConflicts: 'conflicts:resolve-simple',
   revertConflict: 'conflicts:revert',
+  readMergeEditor: 'merge:read',
+  applyMerge: 'merge:apply',
   /** Copies text from the interface through the main process's clipboard. */
   writeClipboardText: 'clipboard:write-text'
 } as const
@@ -266,6 +269,50 @@ export interface ConflictRevertRequest {
   readonly path: string
 }
 
+/** The file the merge editor opens, and the repository that holds it. */
+export interface MergeEditorRequest {
+  readonly repo: string
+  readonly path: string
+}
+
+/**
+ * The versions the merge editor starts from. `left` and `right` are already
+ * mapped to what the dialog calls Yours and Theirs: in a rebase Git's `ours` is
+ * the base being replayed onto, so the stages are swapped before they get here.
+ *
+ * The result starts from `base`, as the specification decides. `worktree` is
+ * only used to keep the original line ending and to tell a file that already
+ * carries markers with no stages left from one that can still be merged.
+ */
+export interface MergeEditorModel {
+  readonly path: string
+  readonly base: DiffSide | null
+  readonly left: DiffSide | null
+  readonly right: DiffSide | null
+  readonly worktree: DiffSide | null
+  readonly binary: boolean
+  /** The file has no two sides to merge, so the editor only shows it. */
+  readonly readOnly: boolean
+  readonly sides: ConflictSides
+  /** Whether the result the editor writes should end with a newline. */
+  readonly finalNewline: boolean
+  /** The encoding the working copy carries, for the status bar. */
+  readonly encoding: string
+  /** The working copy's line endings, for the status bar. */
+  readonly eol: string
+  /** Above the viewer's threshold, so inline highlighting and ribbons are reduced. */
+  readonly large: boolean
+}
+
+/** The whole result the merge editor wants to write, and whether to stage it. */
+export interface MergeApplyRequest {
+  readonly repo: string
+  readonly path: string
+  readonly content: string
+  /** Run `git add` after writing; Apply changes does, Save and close does not. */
+  readonly stage: boolean
+}
+
 /**
  * Surface the preload script exposes to the renderer on `window.seam`. It grows
  * as the interface needs typed calls: stage, commit, resolve, continue and abort
@@ -376,6 +423,16 @@ export interface SeamApi {
   resolveSimpleConflicts(repo: string): Promise<IpcResult<ResolveSimpleOutcome>>
   /** Puts a resolved file back into conflict; never throws. */
   revertConflict(request: ConflictRevertRequest): Promise<IpcResult<null>>
+  /**
+   * The three versions of one unresolved conflict and the names of its sides,
+   * ready for the merge editor; never throws.
+   */
+  readMergeEditor(request: MergeEditorRequest): Promise<IpcResult<MergeEditorModel>>
+  /**
+   * Writes the editor's result over the working copy and, when `stage` is set,
+   * prepares it so the conflict is resolved; never throws.
+   */
+  applyMerge(request: MergeApplyRequest): Promise<IpcResult<null>>
   /**
    * Copies text to the system clipboard, so the commit notification can offer
    * the short id without the renderer fighting the browser's clipboard rules;

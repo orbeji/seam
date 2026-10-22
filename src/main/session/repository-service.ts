@@ -5,6 +5,7 @@ import { resolve } from 'node:path'
 import { revertHunks, stageHunks, stageSelection, unstageHunks } from '../../core/diff'
 import {
   acceptConflict as acceptConflictSide,
+  applyMerge as applyMergeResult,
   createCommit,
   detectOperation,
   GitCommandError,
@@ -18,6 +19,7 @@ import {
   readFileModel,
   readHeadCommit,
   readIdentity,
+  readMergeEditor as readMergeEditorModel,
   readStatus,
   removeIndexPaths,
   resolveSimpleConflicts as resolveSimple,
@@ -37,6 +39,8 @@ import type {
   HunkRange,
   IpcErrorCode,
   IpcResult,
+  MergeApplyRequest,
+  MergeEditorModel,
   RepositorySnapshot,
   StagingModel
 } from '../../shared/ipc'
@@ -418,6 +422,26 @@ export class RepositoryService {
   /** Puts a resolved file back into conflict, restoring its stages. */
   revertConflict(repo: string, path: string): Promise<IpcResult<null>> {
     return this.write(repo, () => revertConflictResolution(this.runner, repo, path))
+  }
+
+  /** Reads the three stages and sides of one conflict for the merge editor. */
+  async readMergeEditor(repo: string, path: string): Promise<IpcResult<MergeEditorModel>> {
+    const opened = await this.open(repo)
+    if (!opened.ok) return opened
+
+    try {
+      return { ok: true, value: await readMergeEditorModel(this.runner, repo, path) }
+    } catch (error) {
+      return failureFrom(error)
+    }
+  }
+
+  /**
+   * Writes the merge editor's result over the working copy. Apply changes also
+   * stages it; Save and close leaves the conflict unresolved.
+   */
+  applyMerge(request: MergeApplyRequest): Promise<IpcResult<null>> {
+    return this.write(request.repo, () => applyMergeResult(this.runner, request.repo, request))
   }
 
   /** Opens the repository, runs one write and maps any failure to a result. */
