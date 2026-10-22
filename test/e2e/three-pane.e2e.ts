@@ -71,9 +71,15 @@ async function pending(): Promise<void> {
 beforeEach(pending)
 
 afterEach(async () => {
-  const exit = page.locator('[data-testid=three-close]')
-  if ((await exit.count()) > 0) {
-    await exit.click()
+  // Done already leaves the three-pane view, so the Close button can vanish
+  // between this check and the click; the wait for the pane to detach is what
+  // the cleanup needs.
+  const pane = page.locator('[data-testid=three-pane]')
+  if ((await pane.count()) > 0) {
+    await page
+      .locator('[data-testid=three-close]')
+      .click({ timeout: 2_000 })
+      .catch(() => undefined)
     await page.waitForSelector('[data-testid=three-pane]', { state: 'detached' })
   }
   const close = page.locator('[data-testid=diff-close]')
