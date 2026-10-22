@@ -211,7 +211,11 @@ export default function CommitBox({
               disabled={availability.kind !== 'ready' || busy}
               onClick={onCommit}
             >
-              {staged > 0 ? t('commit.buttonCount', { count: staged }) : t('commit.button')}
+              {operation === 'merge'
+                ? t('commit.finishMerge')
+                : staged > 0
+                  ? t('commit.buttonCount', { count: staged })
+                  : t('commit.button')}
             </button>
             {busy && (
               <button
@@ -227,7 +231,9 @@ export default function CommitBox({
         )}
       </div>
 
-      <p className="commit__help">{t('commit.help')}</p>
+      <p className="commit__help">
+        {t(operation === 'merge' ? 'commit.helpMerge' : 'commit.help')}
+      </p>
 
       {output !== null && (
         <details className="commit__output" data-testid="commit-output" open>

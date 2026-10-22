@@ -7,8 +7,10 @@ import type {
   ConflictEntry,
   ConflictSide,
   ConflictState,
+  GitOperation,
   HeadCommit,
-  IdentityScope
+  IdentityScope,
+  OperationOutcome
 } from '../shared/git'
 import type { CrlfChoice, FileVersionSource, IpcErrorCode, RepositorySnapshot } from '../shared/ipc'
 import { fileBadge, type FileBadge } from './changes/entry-view'
@@ -17,6 +19,7 @@ import CommitBox from './commit/CommitBox'
 import EolDialog, { type EolAnswer } from './commit/EolDialog'
 import IdentityDialog from './commit/IdentityDialog'
 import ConflictsDialog, { type ConflictOverwrite } from './conflicts/ConflictsDialog'
+import OutputDialog from './conflicts/OutputDialog'
 import DiffView, { type DiffInfo } from './diff/DiffView'
 import { ERROR_KEYS } from './errors'
 import MergeEditor from './merge/MergeEditor'
@@ -150,6 +153,15 @@ export default function App() {
   const [conflictsNotice, setConflictsNotice] = useState<string | null>(null)
   // The file and side waiting for the user to confirm an overwrite.
   const [overwrite, setOverwrite] = useState<ConflictOverwrite | null>(null)
+  // A confirmation the dialog should open with, when Abort was pressed in the
+  // changes list rather than inside the dialog.
+  const [conflictsPrompt, setConflictsPrompt] = useState<'abort' | null>(null)
+  // What Git printed when a hook or another error stopped an operation, in a
+  // dialog over the conflicts list so no resolution is lost.
+  const [gitOutput, setGitOutput] = useState<string | null>(null)
+  // The result of the last finished, skipped or aborted operation, shown under
+  // the operation label until another operation starts.
+  const [operationNotice, setOperationNotice] = useState<string | null>(null)
   // The operation the dialog was last opened for. Conflicts open the dialog
   // once per operation, not on every refresh; when none are left the key is
   // cleared so the next operation opens it again.
@@ -177,6 +189,9 @@ export default function App() {
     setConflictsError(null)
     setConflictsNotice(null)
     setOverwrite(null)
+    setConflictsPrompt(null)
+    setGitOutput(null)
+    setOperationNotice(null)
     setMergeEditor(null)
     conflictsOpenedFor.current = null
     setView({ state: 'loading' })
@@ -254,9 +269,10 @@ export default function App() {
   }, [])
 
   /** Opens the dialog and reads the conflicts, including the resolved ones. */
-  const openConflicts = useCallback(async () => {
+  const openConflicts = useCallback(async (prompt: 'abort' | null = null) => {
     const repo = repoRef.current
     if (repo === null) return
+    setConflictsPrompt(prompt)
     setConflictsView({ state: 'loading' })
     setConflictsError(null)
     setConflictsNotice(null)
@@ -372,7 +388,137 @@ export default function App() {
     setConflictsError(null)
     setConflictsNotice(null)
     setOverwrite(null)
+    setConflictsPrompt(null)
+    setGitOutput(null)
   }, [])
+
+  /**
+   * Reads what continuing, skipping or aborting did. A rebase that stopped on
+   * the next commit reloads the list and keeps the dialog; a hook refusal with
+   * no conflict left goes to the output dialog; a finished operation closes the
+   * dialog and says so under the operation label.
+   */
+  const handleOperationOutcome = useCallback(
+    async (outcome: OperationOutcome, operation: GitOperation | null, successKey: string) => {
+      if (outcome.failed && outcome.conflicts === 0) {
+        setGitOutput(outcome.output === '' ? t('conflicts.outputEmpty') : outcome.output)
+        return
+      }
+      if (!outcome.finished) {
+        await refresh()
+        await reloadConflicts()
+        setConflictsNotice(
+          t('conflicts.stopped', {
+            operation: t(`changes.operation.${outcome.operation ?? operation ?? 'merge'}`)
+          })
+        )
+        return
+      }
+      closeConflicts()
+      await refresh()
+      setOperationNotice(t(successKey))
+    },
+    [refresh, reloadConflicts, closeConflicts, t]
+  )
+
+  /** Closes the conflicts dialog in the way the operation requires. */
+  const finishConflicts = useCallback(async () => {
+    const repo = repoRef.current
+    if (repo === null || conflictsView?.state !== 'ready') return
+    const operation = conflictsView.data.sides.operation
+    setConflictsBusy(true)
+    setConflictsError(null)
+    setConflictsNotice(null)
+    setOperationNotice(null)
+    try {
+      // A merge is finished with the commit box, which takes MERGE_MSG as its
+      // starting point and lets the user edit it before committing.
+      if (operation === 'merge') {
+        const message = await window.seam.readMergeMessage(repo)
+        if (!message.ok) {
+          setConflictsError(message.message)
+          return
+        }
+        setCommitMessage(message.value)
+        void window.seam.writeCommitDraft({ repo, message: message.value })
+        closeConflicts()
+        setOperationNotice(t('conflicts.reviewMergeMessage'))
+        requestAnimationFrame(() => {
+          const box = document.getElementById('commit-message')
+          if (box instanceof HTMLTextAreaElement) {
+            box.focus()
+            box.select()
+          }
+        })
+        return
+      }
+
+      const result = await window.seam.finishOperation(repo)
+      if (!result.ok) {
+        setConflictsError(result.message)
+        return
+      }
+      await handleOperationOutcome(
+        result.value,
+        operation,
+        operation === null ? 'conflicts.finished.stash' : `conflicts.finished.${operation}`
+      )
+    } finally {
+      setConflictsBusy(false)
+    }
+  }, [conflictsView, closeConflicts, handleOperationOutcome, t])
+
+  /** Leaves out the commit that stopped a rebase, cherry-pick or revert. */
+  const skipConflicts = useCallback(async () => {
+    const repo = repoRef.current
+    if (repo === null || conflictsView?.state !== 'ready') return
+    const operation = conflictsView.data.sides.operation
+    setConflictsBusy(true)
+    setConflictsError(null)
+    setConflictsNotice(null)
+    setOperationNotice(null)
+    try {
+      const result = await window.seam.skipOperation(repo)
+      if (!result.ok) {
+        setConflictsError(result.message)
+        return
+      }
+      await handleOperationOutcome(
+        result.value,
+        operation,
+        operation === null ? 'conflicts.finished.stash' : `conflicts.finished.${operation}`
+      )
+    } finally {
+      setConflictsBusy(false)
+    }
+  }, [conflictsView, handleOperationOutcome])
+
+  /** Aborts the operation, or undoes a conflicted stash pop. */
+  const abortConflicts = useCallback(async () => {
+    const repo = repoRef.current
+    if (repo === null || conflictsView?.state !== 'ready') return
+    const operation = conflictsView.data.sides.operation
+    setConflictsBusy(true)
+    setConflictsError(null)
+    setConflictsNotice(null)
+    setOperationNotice(null)
+    try {
+      const result = await window.seam.abortOperation(repo)
+      if (!result.ok) {
+        setConflictsError(result.message)
+        return
+      }
+      if (result.value.failed) {
+        setGitOutput(result.value.output === '' ? t('conflicts.outputEmpty') : result.value.output)
+        return
+      }
+      closeConflicts()
+      await refresh()
+      setOperationNotice(t(`conflicts.aborted.${operation ?? 'stash'}`))
+    } finally {
+      setConflictsBusy(false)
+    }
+  }, [conflictsView, closeConflicts, refresh, t])
 
   /** Closes the dialog on the resolved file, comparing the result against HEAD. */
   const showConflictDiff = useCallback(
@@ -418,6 +564,29 @@ export default function App() {
     conflictsOpenedFor.current = key
     void openConflicts()
   }, [view, conflictsView, openConflicts])
+
+  // The operation can also end from a terminal while the dialog is open: the
+  // watcher refreshes the status, the marker disappears and the dialog closes
+  // with a note instead of pretending the list is still live.
+  const dialogOperation =
+    conflictsView?.state === 'ready' ? conflictsView.data.sides.operation : null
+  useEffect(() => {
+    if (conflictsView === null || dialogOperation === null || view.state !== 'ready') return
+    if (conflictsBusy || view.snapshot.operation !== null) return
+    // The refresh that ended the operation arrives as a new snapshot; closing
+    // the dialog is a reaction to it, so it runs after the effect instead of
+    // triggering a cascading render during the same commit.
+    queueMicrotask(() => {
+      closeConflicts()
+      setOperationNotice(t('conflicts.endedOutside'))
+    })
+  }, [view, conflictsView, dialogOperation, conflictsBusy, closeConflicts, t])
+
+  // A new operation clears what the last one said; a finished one keeps it.
+  useEffect(() => {
+    if (operation === null) return
+    queueMicrotask(() => setOperationNotice(null))
+  }, [operation])
 
   useEffect(() => {
     void (async () => {
@@ -542,10 +711,12 @@ export default function App() {
 
       setCommitting(true)
       try {
+        // A merge in progress is finished by this commit, never by an amend.
+        const amending = operation === null && amend
         const result = await window.seam.commit({
           repo,
           message: commitMessage,
-          amend,
+          amend: amending,
           author,
           signoff,
           runHooks,
@@ -603,7 +774,7 @@ export default function App() {
         setCommitting(false)
       }
     },
-    [commitMessage, amend, author, signoff, runHooks, refresh, t]
+    [commitMessage, amend, author, signoff, runHooks, operation, refresh, t]
   )
 
   // Stops a commit a hook is holding up, so the user is not stuck for five
@@ -739,7 +910,7 @@ export default function App() {
                 onChange={writeMessage}
                 amend={amend}
                 onAmendChange={(next) => void changeAmend(next)}
-                canAmend={canAmend}
+                canAmend={canAmend && operation === null}
                 head={head}
                 author={author}
                 onAuthorChange={setAuthor}
@@ -799,9 +970,15 @@ export default function App() {
           onShowDiff={showConflictDiff}
           onOverwrite={confirmOverwrite}
           onCancelOverwrite={() => setOverwrite(null)}
+          onFinish={() => void finishConflicts()}
+          onAbort={() => void abortConflicts()}
+          onSkip={() => void skipConflicts()}
+          initialPrompt={conflictsPrompt}
           onClose={closeConflicts}
         />
       )}
+
+      {gitOutput !== null && <OutputDialog output={gitOutput} onClose={() => setGitOutput(null)} />}
     </div>
   )
 
@@ -826,6 +1003,11 @@ export default function App() {
                 {t(`changes.operation.${view.snapshot.operation}`)}
               </p>
             )}
+            {operationNotice !== null && (
+              <p className="app__operation" data-testid="operation-notice">
+                {operationNotice}
+              </p>
+            )}
             {writeError !== null && (
               <div className="app__error app__error--inline" role="alert" data-testid="write-error">
                 <p className="app__error-title">{t(ERROR_KEYS[writeError.code])}</p>
@@ -840,6 +1022,7 @@ export default function App() {
               onStage={(paths) => void writeStaging(paths, false)}
               onUnstage={(paths) => void writeStaging(paths, true)}
               onResolve={() => void openConflicts()}
+              onAbort={() => void openConflicts('abort')}
             />
           </>
         )

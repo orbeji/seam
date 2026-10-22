@@ -12,7 +12,8 @@ import { createSampleRepositories, type SampleRepositories } from '../fixtures/s
  * The phase 5 conflicts dialog against a stopped merge: it opens on its own,
  * names both sides, resolves each kind without an editor, resolves the simple
  * conflicts in bulk, asks before overwriting an edited file and undoes a
- * resolution. The phase 7 buttons are visible but disabled.
+ * resolution. Abort is available from the start; Accept and finish waits for
+ * every file to be resolved.
  */
 
 let repository: string
@@ -104,11 +105,12 @@ describe('the conflicts dialog', () => {
     )
   })
 
-  it('leaves Accept and Finish and Abort visible but disabled', async () => {
+  it('offers Abort at once and waits for every file before Accept and finish', async () => {
+    expect(await page.locator('[data-testid=dialog-abort]').isDisabled()).toBe(false)
+    expect(await page.locator('[data-testid=dialog-abort]').textContent()).toBe('Abort merge')
     expect(await page.locator('[data-testid=accept-finish]').isDisabled()).toBe(true)
-    expect(await page.locator('[data-testid=dialog-abort]').isDisabled()).toBe(true)
     expect(await page.locator('[data-testid=accept-finish]').getAttribute('title')).toBe(
-      'Available in a later phase.'
+      'Resolve every conflict before finishing.'
     )
   })
 

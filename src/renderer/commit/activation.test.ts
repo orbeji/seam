@@ -25,17 +25,29 @@ describe('commitAvailability', () => {
     })
   })
 
-  it('replaces the button while an operation is in progress', () => {
-    expect(commitAvailability({ ...base, staged: 3, operation: 'rebase' })).toEqual({
-      kind: 'replaced',
-      operation: 'rebase'
+  it('replaces the button while a rebase, cherry-pick or revert is in progress', () => {
+    for (const operation of ['rebase', 'cherry-pick', 'revert'] as const) {
+      expect(commitAvailability({ ...base, staged: 3, operation })).toEqual({
+        kind: 'replaced',
+        operation
+      })
+    }
+  })
+
+  it('lets a merge be finished with a commit once its conflicts are resolved', () => {
+    expect(commitAvailability({ ...base, staged: 3, operation: 'merge' })).toEqual({
+      kind: 'ready'
     })
   })
 
-  it('lets the operation rule win over conflicts', () => {
-    expect(commitAvailability({ ...base, conflicts: 1, operation: 'merge' })).toEqual({
-      kind: 'replaced',
-      operation: 'merge'
+  it('keeps the merge ready even when resolving to ours left nothing staged', () => {
+    expect(commitAvailability({ ...base, operation: 'merge' })).toEqual({ kind: 'ready' })
+  })
+
+  it('blocks the merge commit while conflicts are unresolved', () => {
+    expect(commitAvailability({ ...base, staged: 3, conflicts: 1, operation: 'merge' })).toEqual({
+      kind: 'disabled',
+      reason: 'conflicts'
     })
   })
 })

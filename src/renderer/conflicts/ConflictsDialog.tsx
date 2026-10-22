@@ -49,8 +49,19 @@ interface ConflictsDialogProps {
   readonly onShowDiff: (entry: ConflictEntry) => void
   readonly onOverwrite: () => void
   readonly onCancelOverwrite: () => void
+  readonly onFinish: () => void
+  readonly onAbort: () => void
+  readonly onSkip: () => void
+  /**
+   * A confirmation the dialog opens with. The changes list's Abort button uses
+   * it, so pressing it does not throw work away without a question.
+   */
+  readonly initialPrompt: 'abort' | 'skip' | null
   readonly onClose: () => void
 }
+
+/** The destructive action waiting for the user's answer. */
+type PendingAction = 'abort' | 'skip' | null
 
 /** The Seam side that stands for one Git side, according to the operation. */
 function seamSide(sides: ConflictSides, gitSide: GitSide): ConflictSide {
@@ -93,8 +104,9 @@ function helpKey(entry: ConflictEntry): string {
  * The conflicts list, laid out as the table in the screen designs: every
  * unmerged file with the actions that resolve it without opening the three-pane
  * editor, the files whose resolution can still be undone, the legend and the
- * bulk actions. Accept and Finish and Abort belong to the next phase, so they
- * stay disabled and say why.
+ * bulk actions. Abort is always available for an operation in progress, while
+ * Accept and Finish waits until every file is resolved; on a merge it hands the
+ * prepared message to the commit box instead of committing here.
  */
 export default function ConflictsDialog({
   state,
@@ -109,6 +121,10 @@ export default function ConflictsDialog({
   onShowDiff,
   onOverwrite,
   onCancelOverwrite,
+  onFinish,
+  onAbort,
+  onSkip,
+  initialPrompt,
   onClose
 }: ConflictsDialogProps) {
   const { t } = useTranslation()
@@ -116,6 +132,7 @@ export default function ConflictsDialog({
   const entries = state?.entries ?? []
   const [selectedPath, setSelectedPath] = useState<string | null>(null)
   const [menu, setMenu] = useState<ContextMenu | null>(null)
+  const [pending, setPending] = useState<PendingAction>(initialPrompt)
   const menuRef = useRef<HTMLDivElement | null>(null)
 
   const selected = entries.find((entry) => entry.path === selectedPath) ?? entries[0] ?? null
@@ -151,6 +168,16 @@ export default function ConflictsDialog({
 
   const resolved = entries.filter((entry) => entry.resolved).length
   const unresolved = entries.length - resolved
+  const operation = state?.sides.operation ?? null
+  const operationKey = operation ?? 'stash'
+  /** Abort works on a marked operation and on a pop, which only has the stash. */
+  const canAbort = !busy && state !== null && (operation !== null || state.stash !== null)
+  const canSkip =
+    !busy && (operation === 'rebase' || operation === 'cherry-pick' || operation === 'revert')
+  /** Every file resolved and something left to close: continue, commit or drop. */
+  const canFinish =
+    !busy && state !== null && unresolved === 0 && (operation !== null || state.stash !== null)
+  const finishHint = unresolved > 0 ? t('conflicts.noFinish') : undefined
 
   /** Opens the resolved file's menu under its row, staying inside the window. */
   const toggleMenu = (event: ReactMouseEvent<HTMLButtonElement>, path: string): void => {
@@ -192,6 +219,14 @@ export default function ConflictsDialog({
               })}
             </p>
           )}
+          {state?.progress !== null && state?.progress !== undefined && (
+            <p className="conflicts__progress" data-testid="rebase-progress">
+              {t('conflicts.progress', {
+                current: state.progress.current,
+                total: state.progress.total
+              })}
+            </p>
+          )}
         </header>
 
         {state === null ? (
@@ -222,6 +257,48 @@ export default function ConflictsDialog({
                     onClick={onCancelOverwrite}
                   >
                     {t('conflicts.overwriteCancel')}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {pending !== null && (
+              <div
+                className="conflicts__overwrite"
+                role="alert"
+                data-testid={pending === 'abort' ? 'abort-prompt' : 'skip-prompt'}
+              >
+                <p className="conflicts__overwrite-title">
+                  {t(pending === 'abort' ? 'conflicts.abortTitle' : 'conflicts.skipTitle')}
+                </p>
+                <p className="dialog__explain">
+                  {pending === 'abort'
+                    ? t('conflicts.abortExplain', { count: resolved })
+                    : t('conflicts.skipExplain')}
+                </p>
+                <div className="dialog__actions">
+                  <button
+                    type="button"
+                    className="conflicts__button conflicts__button--danger"
+                    data-testid={pending === 'abort' ? 'abort-confirm' : 'skip-confirm'}
+                    disabled={busy}
+                    onClick={() => {
+                      const action = pending
+                      setPending(null)
+                      if (action === 'abort') onAbort()
+                      else onSkip()
+                    }}
+                  >
+                    {t(pending === 'abort' ? 'conflicts.confirmAbort' : 'conflicts.confirmSkip')}
+                  </button>
+                  <button
+                    type="button"
+                    className="conflicts__button"
+                    data-testid={pending === 'abort' ? 'abort-cancel' : 'skip-cancel'}
+                    disabled={busy}
+                    onClick={() => setPending(null)}
+                  >
+                    {t('conflicts.cancel')}
                   </button>
                 </div>
               </div>
@@ -455,11 +532,22 @@ export default function ConflictsDialog({
             type="button"
             className="conflicts__button conflicts__button--danger"
             data-testid="dialog-abort"
-            disabled
-            title={t('conflicts.laterPhase')}
+            disabled={!canAbort}
+            onClick={() => setPending('abort')}
           >
-            {t('conflicts.abort')}
+            {t(`conflicts.abort.${operationKey}`)}
           </button>
+          {canSkip && (
+            <button
+              type="button"
+              className="conflicts__button"
+              data-testid="skip-commit"
+              disabled={!canSkip}
+              onClick={() => setPending('skip')}
+            >
+              {t('conflicts.skip')}
+            </button>
+          )}
           <button
             type="button"
             className="conflicts__button"
@@ -488,8 +576,9 @@ export default function ConflictsDialog({
             type="button"
             className="conflicts__button conflicts__button--primary"
             data-testid="accept-finish"
-            disabled
-            title={t('conflicts.laterPhase')}
+            disabled={!canFinish}
+            title={finishHint}
+            onClick={onFinish}
           >
             {t('conflicts.acceptAndFinish')}
           </button>

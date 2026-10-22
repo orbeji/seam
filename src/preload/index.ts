@@ -7,6 +7,7 @@ import type {
   ConflictState,
   HeadCommit,
   Identity,
+  OperationOutcome,
   ResolveSimpleOutcome
 } from '../shared/git'
 import {
@@ -106,6 +107,14 @@ const seamApi: SeamApi = {
     >,
   applyMerge: (request: MergeApplyRequest) =>
     ipcRenderer.invoke(IPC_CHANNELS.applyMerge, request) as Promise<IpcResult<null>>,
+  finishOperation: (repo: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.finishOperation, repo) as Promise<IpcResult<OperationOutcome>>,
+  skipOperation: (repo: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.skipOperation, repo) as Promise<IpcResult<OperationOutcome>>,
+  abortOperation: (repo: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.abortOperation, repo) as Promise<IpcResult<OperationOutcome>>,
+  readMergeMessage: (repo: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.readMergeMessage, repo) as Promise<IpcResult<string>>,
   writeClipboardText: (text: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.writeClipboardText, text) as Promise<IpcResult<null>>,
   onRepositoryChanged: (listener: (repo: string) => void) => {

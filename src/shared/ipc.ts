@@ -11,6 +11,7 @@ import type {
   HeadCommit,
   Identity,
   IdentityScope,
+  OperationOutcome,
   RepoStatus,
   ResolveSimpleOutcome
 } from './git'
@@ -20,7 +21,7 @@ import type {
  * interface. Bump it whenever a message shape changes so the three layers can
  * detect a mismatch instead of failing silently.
  */
-export const IPC_CONTRACT_VERSION = 17
+export const IPC_CONTRACT_VERSION = 18
 
 /** Channel names shared by the main process and the preload bridge. */
 export const IPC_CHANNELS = {
@@ -54,6 +55,10 @@ export const IPC_CHANNELS = {
   revertConflict: 'conflicts:revert',
   readMergeEditor: 'merge:read',
   applyMerge: 'merge:apply',
+  finishOperation: 'operation:finish',
+  skipOperation: 'operation:skip',
+  abortOperation: 'operation:abort',
+  readMergeMessage: 'operation:merge-message',
   /** Copies text from the interface through the main process's clipboard. */
   writeClipboardText: 'clipboard:write-text'
 } as const
@@ -433,6 +438,23 @@ export interface SeamApi {
    * prepares it so the conflict is resolved; never throws.
    */
   applyMerge(request: MergeApplyRequest): Promise<IpcResult<null>>
+  /**
+   * Finishes the operation in progress: continues a cherry-pick, revert or
+   * rebase, or drops the stash a resolved pop left behind. A merge is finished
+   * from the commit box instead, with `readMergeMessage` filling it. Never
+   * throws; the outcome says whether Git stopped on another conflict or a hook
+   * refused, and carries everything it printed.
+   */
+  finishOperation(repo: string): Promise<IpcResult<OperationOutcome>>
+  /** Skips the commit that stopped a rebase, cherry-pick or revert; never throws. */
+  skipOperation(repo: string): Promise<IpcResult<OperationOutcome>>
+  /** Aborts the operation in progress, or a conflicted stash pop; never throws. */
+  abortOperation(repo: string): Promise<IpcResult<OperationOutcome>>
+  /**
+   * The message Git prepared for a merge commit (`MERGE_MSG`), with its comment
+   * lines removed, so the commit box can show it; never throws.
+   */
+  readMergeMessage(repo: string): Promise<IpcResult<string>>
   /**
    * Copies text to the system clipboard, so the commit notification can offer
    * the short id without the renderer fighting the browser's clipboard rules;

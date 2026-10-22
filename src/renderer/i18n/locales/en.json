@@ -115,12 +115,48 @@
     "overwriteExplain": "“{{path}}” changed since the conflict was read. Accepting this side overwrites it.",
     "overwriteCancel": "Cancel",
     "acceptAndFinish": "Accept and finish",
-    "abort": "Abort merge",
     "close": "Close",
-    "laterPhase": "Available in a later phase.",
     "resolve": "Resolve",
     "resolveConflicts": "Resolve conflicts",
-    "noUnresolved": "No unresolved conflicts."
+    "noUnresolved": "No unresolved conflicts.",
+    "progress": "Commit {{current}} of {{total}}",
+    "abort": {
+      "merge": "Abort merge",
+      "cherry-pick": "Abort cherry-pick",
+      "revert": "Abort revert",
+      "rebase": "Abort rebase",
+      "stash": "Abort stash pop"
+    },
+    "skip": "Skip commit",
+    "confirmAbort": "Abort",
+    "confirmSkip": "Skip commit",
+    "cancel": "Cancel",
+    "abortTitle": "Abort the operation?",
+    "abortExplain_one": "{{count}} resolved file will be lost. The repository goes back to how it was before the operation started.",
+    "abortExplain_other": "{{count}} resolved files will be lost. The repository goes back to how it was before the operation started.",
+    "skipTitle": "Skip this commit?",
+    "skipExplain": "The commit that stopped here is left out of the operation.",
+    "noFinish": "Resolve every conflict before finishing.",
+    "finished": {
+      "merge": "Merge finished.",
+      "cherry-pick": "Cherry-pick finished.",
+      "revert": "Revert finished.",
+      "rebase": "Rebase finished.",
+      "stash": "Stash dropped."
+    },
+    "aborted": {
+      "merge": "Merge aborted.",
+      "cherry-pick": "Cherry-pick aborted.",
+      "revert": "Revert aborted.",
+      "rebase": "Rebase aborted.",
+      "stash": "Stash pop aborted."
+    },
+    "stopped": "{{operation}} stopped on another commit. The list has been reloaded.",
+    "gitOutput": "Git output",
+    "outputHint": "Git stopped before finishing. Its output is below; the conflicts and resolutions are still in place.",
+    "endedOutside": "The operation finished outside Seam.",
+    "reviewMergeMessage": "Review the merge message and finish the commit.",
+    "outputEmpty": "Git stopped without printing anything."
   },
   "merge": {
     "yours": "Yours",
@@ -197,7 +233,9 @@
       "nothing-staged": "Nothing is staged.",
       "conflicts": "There are unresolved conflicts."
     },
-    "operation": "{{operation}}: finish it before committing."
+    "operation": "{{operation}}: finish it before committing.",
+    "finishMerge": "Finish merge",
+    "helpMerge": "This commits the merge with the message above, once every conflict is resolved."
   },
   "identity": {
     "title": "Set your identity",

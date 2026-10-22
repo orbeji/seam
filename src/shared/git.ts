@@ -202,10 +202,44 @@ export interface ConflictSides {
   readonly theirs: GitSide
 }
 
-/** Everything the conflicts dialog shows: the files and the name of each side. */
+/** How far a rebase has got, as `rebase-merge/msgnum` and `end` record it. */
+export interface RebaseProgress {
+  /** The commit being replayed, counting from 1. */
+  readonly current: number
+  /** How many commits the rebase replays. */
+  readonly total: number
+}
+
+/** Everything the conflicts dialog shows: the files, the sides and the progress. */
 export interface ConflictState {
   readonly entries: readonly ConflictEntry[]
   readonly sides: ConflictSides
+  /** The step of a rebase in progress, or null for every other operation. */
+  readonly progress: RebaseProgress | null
+  /**
+   * The stash entry a conflicted `stash pop` left behind, or null. It names the
+   * entry Seam would drop when the resolution is accepted, and lets the dialog
+   * offer to abort a pop, which leaves no other marker.
+   */
+  readonly stash: string | null
+}
+
+/**
+ * What came of continuing, skipping or aborting an operation. Git exits non-zero
+ * both when it stopped on the next conflict and when a hook refused, so the
+ * caller looks at `failed`, `conflicts` and `finished` together.
+ */
+export interface OperationOutcome {
+  /** Whether the operation is over: no marker is left. */
+  readonly finished: boolean
+  /** Whether Git exited non-zero. */
+  readonly failed: boolean
+  /** The operation still in progress, or null when it finished. */
+  readonly operation: GitOperation | null
+  /** Files still unmerged, which is what a stopped rebase leaves behind. */
+  readonly conflicts: number
+  /** Everything Git and its hooks printed, for the error dialog. */
+  readonly output: string
 }
 
 /** The result of accepting a side: whether the user must confirm an overwrite. */

@@ -130,10 +130,12 @@ describe('the commit button', () => {
     await waitFor(() => button().isEnabled(), 'the button to be enabled by Amend')
   })
 
-  it('is replaced while an operation is in progress', async () => {
+  it('stays in place for a merge and waits for its conflicts', async () => {
     await launch(samples.conflicts)
-    await waitFor(async () => (await replacedBy()) === 'merge', 'the merge note')
-    expect(await button().count()).toBe(0)
+    await waitFor(async () => (await reason()) === 'conflicts', 'the conflicts reason')
+    expect(await replacedBy()).toBeNull()
+    expect((await button().textContent())?.toLowerCase()).toContain('merge')
+    expect(await button().isDisabled()).toBe(true)
   })
 
   it('is disabled while conflicts are unresolved', async () => {

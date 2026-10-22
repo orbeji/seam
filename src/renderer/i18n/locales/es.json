@@ -115,12 +115,48 @@
     "overwriteExplain": "«{{path}}» ha cambiado desde que se leyó el conflicto. Si aceptas este lado, se sobrescribirá.",
     "overwriteCancel": "Cancelar",
     "acceptAndFinish": "Aceptar y terminar",
-    "abort": "Abortar merge",
     "close": "Cerrar",
-    "laterPhase": "Disponible en una fase posterior.",
     "resolve": "Resolver",
     "resolveConflicts": "Resolver conflictos",
-    "noUnresolved": "No quedan conflictos sin resolver."
+    "noUnresolved": "No quedan conflictos sin resolver.",
+    "progress": "Commit {{current}} de {{total}}",
+    "abort": {
+      "merge": "Abortar merge",
+      "cherry-pick": "Abortar cherry-pick",
+      "revert": "Abortar revert",
+      "rebase": "Abortar rebase",
+      "stash": "Abortar stash pop"
+    },
+    "skip": "Saltar commit",
+    "confirmAbort": "Abortar",
+    "confirmSkip": "Saltar commit",
+    "cancel": "Cancelar",
+    "abortTitle": "¿Abortar la operación?",
+    "abortExplain_one": "Se perderá {{count}} archivo resuelto. El repositorio vuelve a como estaba antes de empezar la operación.",
+    "abortExplain_other": "Se perderán {{count}} archivos resueltos. El repositorio vuelve a como estaba antes de empezar la operación.",
+    "skipTitle": "¿Saltar este commit?",
+    "skipExplain": "El commit que se detuvo aquí queda fuera de la operación.",
+    "noFinish": "Resuelve todos los conflictos antes de terminar.",
+    "finished": {
+      "merge": "Merge terminado.",
+      "cherry-pick": "Cherry-pick terminado.",
+      "revert": "Revert terminado.",
+      "rebase": "Rebase terminado.",
+      "stash": "Stash eliminado."
+    },
+    "aborted": {
+      "merge": "Merge abortado.",
+      "cherry-pick": "Cherry-pick abortado.",
+      "revert": "Revert abortado.",
+      "rebase": "Rebase abortado.",
+      "stash": "Stash pop abortado."
+    },
+    "stopped": "{{operation}} se detuvo en otro commit. La lista se ha recargado.",
+    "gitOutput": "Salida de Git",
+    "outputHint": "Git se detuvo antes de terminar. Su salida está abajo; los conflictos y las resoluciones siguen intactos.",
+    "endedOutside": "La operación terminó fuera de Seam.",
+    "reviewMergeMessage": "Revisa el mensaje del merge y confirma el commit.",
+    "outputEmpty": "Git se detuvo sin imprimir nada."
   },
   "merge": {
     "yours": "Tuyos",
@@ -197,7 +233,9 @@
       "nothing-staged": "No hay nada preparado.",
       "conflicts": "Hay conflictos sin resolver."
     },
-    "operation": "{{operation}}: termínala antes de confirmar."
+    "operation": "{{operation}}: termínala antes de confirmar.",
+    "finishMerge": "Terminar merge",
+    "helpMerge": "Confirma el merge con el mensaje de arriba, cuando no queden conflictos sin resolver."
   },
   "identity": {
     "title": "Configura tu identidad",

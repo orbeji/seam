@@ -499,6 +499,34 @@ export function registerRepositoryHandlers(
     return service.applyMerge(parsed)
   })
 
+  ipcMain.handle(IPC_CHANNELS.finishOperation, (_event, repo: unknown) => {
+    if (typeof repo !== 'string') {
+      return { ok: false, code: 'unknown', message: 'Invalid finish request' }
+    }
+    return service.finishOperation(repo)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.skipOperation, (_event, repo: unknown) => {
+    if (typeof repo !== 'string') {
+      return { ok: false, code: 'unknown', message: 'Invalid skip request' }
+    }
+    return service.skipOperation(repo)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.abortOperation, (_event, repo: unknown) => {
+    if (typeof repo !== 'string') {
+      return { ok: false, code: 'unknown', message: 'Invalid abort request' }
+    }
+    return service.abortOperation(repo)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.readMergeMessage, (_event, repo: unknown) => {
+    if (typeof repo !== 'string') {
+      return { ok: false, code: 'unknown', message: 'Invalid merge message request' }
+    }
+    return service.readMergeMessage(repo)
+  })
+
   ipcMain.handle(IPC_CHANNELS.writeClipboardText, (_event, text: unknown) => {
     if (typeof text !== 'string') {
       return { ok: false, code: 'unknown', message: 'Invalid clipboard text' }

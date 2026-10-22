@@ -20,8 +20,9 @@ import type {
   UnmergedEntry
 } from '../../shared/git'
 import { GitError } from './errors'
-import { detectOperation } from './operation'
+import { detectOperation, readRebaseProgress } from './operation'
 import type { GitRunner } from './runner'
+import { readStashCandidate } from './stash'
 import { readStatus } from './status'
 import { readVersion, writeWorktreeFile } from './versions'
 
@@ -383,9 +384,23 @@ export async function readConflictState(runner: GitRunner, repo: string): Promis
 
   entries.sort((a, b) => Number(a.resolved) - Number(b.resolved) || a.path.localeCompare(b.path))
 
+  const progress = operation === 'rebase' ? await readRebaseProgress(runner, repo) : null
+  // A pop leaves no marker, so the stash entry is recognised by the files it
+  // touches: only then can the dialog offer to abort or drop it.
+  const stash =
+    operation === null
+      ? await readStashCandidate(
+          runner,
+          repo,
+          entries.map((entry) => entry.path)
+        )
+      : null
+
   return {
     entries,
-    sides: await readConflictSides(runner, repo, operation)
+    sides: await readConflictSides(runner, repo, operation),
+    progress,
+    stash
   }
 }
 

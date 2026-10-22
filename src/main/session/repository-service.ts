@@ -5,9 +5,11 @@ import { resolve } from 'node:path'
 import { revertHunks, stageHunks, stageSelection, unstageHunks } from '../../core/diff'
 import {
   acceptConflict as acceptConflictSide,
+  abortOperation as abortOperationInRepo,
   applyMerge as applyMergeResult,
   createCommit,
   detectOperation,
+  finishOperation as finishOperationInRepo,
   GitCommandError,
   GitError,
   GitNotFoundError,
@@ -20,10 +22,12 @@ import {
   readHeadCommit,
   readIdentity,
   readMergeEditor as readMergeEditorModel,
+  readMergeMessage as readMergeMessageFromRepo,
   readStatus,
   removeIndexPaths,
   resolveSimpleConflicts as resolveSimple,
   revertConflict as revertConflictResolution,
+  skipOperation as skipOperationInRepo,
   stagePaths,
   summarizeChanges,
   unstagePaths,
@@ -51,6 +55,7 @@ import type {
   ConflictState,
   Identity,
   IdentityScope,
+  OperationOutcome,
   ResolveSimpleOutcome
 } from '../../shared/git'
 import { GitWatcher } from './git-watcher'
@@ -442,6 +447,57 @@ export class RepositoryService {
    */
   applyMerge(request: MergeApplyRequest): Promise<IpcResult<null>> {
     return this.write(request.repo, () => applyMergeResult(this.runner, request.repo, request))
+  }
+
+  /**
+   * Finishes the operation in progress. A merge is finished with the commit
+   * box, so this continues the others and drops a resolved stash pop.
+   */
+  async finishOperation(repo: string): Promise<IpcResult<OperationOutcome>> {
+    const opened = await this.open(repo)
+    if (!opened.ok) return opened
+
+    try {
+      return { ok: true, value: await finishOperationInRepo(this.runner, repo) }
+    } catch (error) {
+      return failureFrom(error)
+    }
+  }
+
+  /** Skips the commit that stopped a rebase, cherry-pick or revert. */
+  async skipOperation(repo: string): Promise<IpcResult<OperationOutcome>> {
+    const opened = await this.open(repo)
+    if (!opened.ok) return opened
+
+    try {
+      return { ok: true, value: await skipOperationInRepo(this.runner, repo) }
+    } catch (error) {
+      return failureFrom(error)
+    }
+  }
+
+  /** Aborts the operation in progress, or a conflicted stash pop. */
+  async abortOperation(repo: string): Promise<IpcResult<OperationOutcome>> {
+    const opened = await this.open(repo)
+    if (!opened.ok) return opened
+
+    try {
+      return { ok: true, value: await abortOperationInRepo(this.runner, repo) }
+    } catch (error) {
+      return failureFrom(error)
+    }
+  }
+
+  /** The message Git prepared for a merge commit, without its comments. */
+  async readMergeMessage(repo: string): Promise<IpcResult<string>> {
+    const opened = await this.open(repo)
+    if (!opened.ok) return opened
+
+    try {
+      return { ok: true, value: await readMergeMessageFromRepo(this.runner, repo) }
+    } catch (error) {
+      return failureFrom(error)
+    }
   }
 
   /** Opens the repository, runs one write and maps any failure to a result. */

@@ -189,13 +189,17 @@ function Section({
  */
 function ConflictsSection({
   entries,
+  operation,
   onOpen,
   onResolve,
+  onAbort,
   selectedPath
 }: {
   entries: UnmergedEntry[]
+  operation: GitOperation | null
   onOpen: OpenDiff
   onResolve: () => void
+  onAbort: () => void
   selectedPath: string | null
 }) {
   const { t } = useTranslation()
@@ -278,10 +282,9 @@ function ConflictsSection({
           type="button"
           className="dialog__button"
           data-testid="conflicts-abort"
-          disabled
-          title={t('conflicts.laterPhase')}
+          onClick={onAbort}
         >
-          {t('conflicts.abort')}
+          {t(`conflicts.abort.${operation ?? 'stash'}`)}
         </button>
       </div>
     </section>
@@ -300,7 +303,8 @@ export default function ChangesView({
   onOpen,
   onStage,
   onUnstage,
-  onResolve
+  onResolve,
+  onAbort
 }: {
   summary: ChangeSummary
   operation: GitOperation | null
@@ -309,6 +313,7 @@ export default function ChangesView({
   onStage: StageAction
   onUnstage: StageAction
   onResolve: () => void
+  onAbort: () => void
 }) {
   return (
     <div className="changes">
@@ -348,8 +353,10 @@ export default function ChangesView({
       {(operation !== null || summary.conflicts.length > 0) && (
         <ConflictsSection
           entries={summary.conflicts}
+          operation={operation}
           onOpen={onOpen}
           onResolve={onResolve}
+          onAbort={onAbort}
           selectedPath={selectedPath}
         />
       )}

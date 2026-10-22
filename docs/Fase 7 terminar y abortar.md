@@ -18,11 +18,11 @@ La operación en curso se detecta con los marcadores de la fase 0. Todos los com
 
 | Operación | Terminar | Abortar | Saltar commit |
 | --- | --- | --- | --- |
-| Merge | `git commit --no-edit` | `git merge --abort` | No aplica |
+| Merge | `git commit -F -` con el mensaje de `MERGE_MSG`, desde la caja de mensaje | `git merge --abort` | No aplica |
 | Cherry-pick | `git cherry-pick --continue` | `git cherry-pick --abort` | `git cherry-pick --skip` |
 | Revert | `git revert --continue` | `git revert --abort` | `git revert --skip` |
 | Rebase | `git rebase --continue` | `git rebase --abort` | `git rebase --skip` |
-| Stash pop/apply | No hay operación; basta con commit o dejar el árbol | `git checkout -- .` más `git reset` (ver abajo) | No aplica |
+| Stash pop/apply | No hay operación: el usuario confirma los cambios resueltos | Restaurar solo las rutas del stash (ver `docs/spikes/fase-7-stash.md`) | No aplica |
 
 ### Mensaje del commit
 
@@ -62,23 +62,23 @@ El observador de la fase 3 detecta que desapareció `MERGE_HEAD` o el directorio
 ## Pruebas
 
 - Para cada fila de la tabla, una prueba de integración con un repositorio de ejemplo: provocar el conflicto, resolver, terminar, y comparar el id del commit resultante con el que produce la terminal.
-- Un rebase de cuatro commits con conflicto en el segundo y en el cuarto: la lista se recarga dos veces y el árbol final coincide con el de la terminal.
+- Un rebase de varios commits con más de un conflicto: la lista se recarga en cada parada y el árbol final coincide con el de la terminal.
 - Abortar cada operación deja `git status` limpio y el `HEAD` original.
 - Un hook `pre-commit` que falla: Seam muestra la salida y no pierde las resoluciones.
 - Terminar la operación desde la terminal con Seam abierto: la ventana se cierra con el aviso.
 
 ## Criterio de terminado
 
-- [ ] Merge, cherry-pick, revert y rebase se terminan y se abortan desde Seam, con el mismo resultado que en la terminal.
-- [ ] El progreso del rebase es correcto en cada paso.
-- [ ] Un fallo de hook se muestra y se puede reintentar sin perder trabajo.
-- [ ] El caso del stash está documentado y tiene un procedimiento probado.
+- [x] Merge, cherry-pick, revert y rebase se terminan y se abortan desde Seam, con el mismo resultado que en la terminal.
+- [x] El progreso del rebase es correcto en cada paso.
+- [x] Un fallo de hook se muestra y se puede reintentar sin perder trabajo.
+- [x] El caso del stash está documentado y tiene un procedimiento probado.
 
 ## Riesgos de la fase
 
 - Abortar descarta trabajo de resolución. Mitigación: confirmación que indica cuántos archivos resueltos se perderán.
 - La diferencia entre `rebase-merge` y `rebase-apply` en versiones antiguas de Git. Mitigación: probar con Git 2.30 y con la última versión en integración continua.
-- El stash sin comando de aborto puede dejar el árbol a medias. Mitigación: no ofrecer «Abort» en ese caso hasta que el experimento 7.1 lo valide.
+- El stash sin comando de aborto puede dejar el árbol a medias. Mitigación: el experimento 7.1 validó restaurar solo las rutas del stash y conservar la entrada; el aborto se ofrece con esa comprobación.
 
 ## Decisión tomada
 
