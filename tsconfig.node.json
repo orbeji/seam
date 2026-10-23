@@ -24,6 +24,7 @@
   "include": [
     "electron.vite.config.ts",
     "vitest.config.ts",
+    "vitest.integration.config.ts",
     "vitest.e2e.config.ts",
     "src/main/**/*",
     "src/preload/**/*",

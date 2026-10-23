@@ -21,10 +21,12 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test": "vitest run",
+    "test": "npm run test:unit && npm run test:integration",
+    "test:unit": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:watch": "vitest",
     "test:e2e": "electron-vite build && vitest run --config vitest.e2e.config.ts",
-    "samples": "vitest run test/sample-repositories.test.ts --disable-console-intercept"
+    "samples": "vitest run test/sample-repositories.integration.test.ts --disable-console-intercept"
   },
   "dependencies": {
     "@codemirror/commands": "6.11.1",

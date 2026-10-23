@@ -38,19 +38,25 @@ over thousands more.
 
 ## Scripts
 
-| Command             | What it does                                           |
-| ------------------- | ------------------------------------------------------ |
-| `npm run dev`       | Starts the app with hot reload for all three processes |
-| `npm run build`     | Type-checks and builds the production bundles          |
-| `npm run start`     | Previews the production build                          |
-| `npm run typecheck` | Runs `tsc --noEmit` for the Node and web projects      |
-| `npm run lint`      | Runs ESLint                                            |
-| `npm run format`    | Formats with Prettier                                  |
-| `npm test`          | Runs the Vitest suite once                             |
-| `npm run test:e2e`  | Builds and runs the Playwright smoke test              |
+| Command                    | What it does                                           |
+| -------------------------- | ------------------------------------------------------ |
+| `npm run dev`              | Starts the app with hot reload for all three processes |
+| `npm run build`            | Type-checks and builds the production bundles          |
+| `npm run start`            | Previews the production build                          |
+| `npm run typecheck`        | Runs `tsc --noEmit` for the Node and web projects      |
+| `npm run lint`             | Runs ESLint                                            |
+| `npm run format`           | Formats with Prettier                                  |
+| `npm test`                 | Runs the unit and integration suites once              |
+| `npm run test:unit`        | Runs the unit suite (the one CI runs)                  |
+| `npm run test:integration` | Runs the suite that drives real `git`                  |
+| `npm run test:e2e`         | Builds and runs the Playwright smoke test              |
 
-`npm run test:e2e` launches the built application, so it needs a display. On a
-headless Linux machine run it under `xvfb-run`.
+The unit suite never starts Git or Electron, so GitHub Actions runs only
+`npm run test:unit`. Name a test that needs either one
+`*.integration.test.ts` or `*.e2e.ts`; those suites are local only. The
+integration suite needs Git on the `PATH`; the end-to-end suite launches the
+built application and needs a display. Run both locally, under `xvfb-run` on a
+headless Linux machine.
 
 ## Opening a repository
 
@@ -68,6 +74,7 @@ src/
   shared/     IPC types shared by every layer
 test/
   fixtures/   scripts that build sample repositories
+  *.integration.test.ts  tests that drive real Git
   e2e/        Playwright tests
 docs/         specification, implementation plan and screen designs
 ```

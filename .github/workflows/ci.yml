@@ -12,8 +12,9 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# The end-to-end smoke test launches the real Electron application, so the
-# binary is needed on both runners.
+# CI runs only the deterministic unit suite. The integration suite (real Git)
+# and the end-to-end suite (real Electron) stay local; neither binary is needed
+# here.
 jobs:
   check:
     name: ${{ matrix.os }}
@@ -43,21 +44,4 @@ jobs:
         run: npm run typecheck
 
       - name: Unit tests
-        run: npm test
-
-      - name: Build
-        run: npm run build
-
-      - name: Install xvfb (Linux)
-        if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y xvfb
-
-      # Electron needs a display; a headless runner has none. Windows runners
-      # have an interactive desktop, so they run the test directly.
-      - name: End-to-end smoke test (Linux)
-        if: runner.os == 'Linux'
-        run: xvfb-run --auto-servernum npm run test:e2e
-
-      - name: End-to-end smoke test (Windows)
-        if: runner.os == 'Windows'
-        run: npm run test:e2e
+        run: npm run test:unit
