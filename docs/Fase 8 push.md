@@ -64,10 +64,10 @@ Solo se ofrece tras un rechazo, con una casilla separada que explica el riesgo, 
 
 ## Criterio de terminado
 
-- [ ] Un push normal funciona con y sin upstream.
-- [ ] Un rechazo por remoto adelantado se resuelve desde Seam hasta enviar.
-- [ ] Force push solo existe como `--force-with-lease` y requiere confirmación.
-- [ ] Los errores de credenciales explican qué hacer sin mostrar rutas ni datos sensibles.
+- [x] Un push normal funciona con y sin upstream.
+- [x] Un rechazo por remoto adelantado se resuelve desde Seam hasta enviar.
+- [x] Force push solo existe como `--force-with-lease` y requiere confirmación.
+- [x] Los errores de credenciales explican qué hacer sin mostrar rutas ni datos sensibles.
 
 ## Riesgos de la fase
 
@@ -75,6 +75,6 @@ Solo se ofrece tras un rechazo, con una casilla separada que explica el riesgo, 
 - Un push sobre una rama equivocada. Mitigación: el diálogo siempre muestra rama local, remota y número de commits.
 - Parsear mensajes de error cambia con la versión y el idioma de Git. Mitigación: `LC_ALL=C` y preferir la salida porcelain y los códigos de salida.
 
-## Decisión a confirmar
+## Decisión tomada
 
-- [ ] ¿Se permite enviar a una rama del remoto con distinto nombre que la local en 0.1.0, o solo a la rama con el mismo nombre? La propuesta es permitirlo solo cuando no hay upstream y el usuario lo elige a mano.
+- [x] Se permite enviar a una rama del remoto con distinto nombre que la local solo cuando no hay upstream y el usuario lo elige a mano. Con upstream, el destino es siempre el que Git ya sigue.

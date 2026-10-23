@@ -278,6 +278,15 @@ textarea {
   flex: 1;
 }
 
+/* Push sits next to refresh, compact enough for the 40px bar. */
+.topbar__push {
+  min-height: 26px;
+  height: 26px;
+  padding: 0 10px;
+  gap: 5px;
+  font-size: 12px;
+}
+
 .topbar__language-select {
   height: 26px;
   padding: 0 6px;
@@ -965,6 +974,20 @@ textarea {
 .commit__submit {
   height: 34px;
   font-size: 13px;
+}
+
+/* Commit and Push is the quieter companion of the main button. */
+.commit__submit--secondary {
+  height: 30px;
+  background: var(--control);
+  border-color: var(--border-strong);
+  color: var(--text);
+  font-weight: 500;
+}
+
+.commit__submit--secondary:hover:not(:disabled) {
+  background: var(--surface-hover);
+  border-color: var(--border-strong);
 }
 
 .commit__reason {
@@ -2049,6 +2072,236 @@ textarea {
   line-height: 1.45;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+/* The push dialog: the two branches, the commits that travel and the options. */
+.push__panel {
+  width: min(720px, calc(100vw - 48px));
+  max-height: min(640px, calc(100vh - 64px));
+  overflow-y: auto;
+}
+
+.push__branches {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--background);
+}
+
+.push__branch {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1 1 0;
+}
+
+.push__branch-label {
+  font-size: 11px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.push__branch-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  color: var(--accent);
+}
+
+.push__tracking {
+  color: var(--text-muted);
+  font-size: 11.5px;
+}
+
+.push__arrow {
+  flex: none;
+  padding-bottom: 4px;
+  color: var(--text-dim);
+}
+
+.push__target-fields {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+}
+
+.push__select,
+.push__input {
+  min-height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--control);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+}
+
+.push__input {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.push__select:focus-visible,
+.push__input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.push__commit-count {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.push__commits {
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  max-height: 190px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--background);
+}
+
+.push__commit {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.push__commit:hover {
+  background: var(--panel);
+}
+
+.push__commit-id {
+  flex: none;
+  color: var(--accent);
+  font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.push__commit-subject {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+.push__commit-meta {
+  flex: none;
+  margin-left: auto;
+  color: var(--text-dim);
+  font-size: 11.5px;
+}
+
+.push__option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.push__option input {
+  accent-color: var(--accent);
+}
+
+.push__rejected {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--conflict);
+  border-radius: 8px;
+  background: var(--background);
+}
+
+.push__rejected-title {
+  margin: 0;
+  color: var(--conflict);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.push__recovery {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.push__force {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.push__hint {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 11.5px;
+}
+
+.push__progress,
+.push__output {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--background);
+  font-size: 12px;
+}
+
+.push__progress-title,
+.push__output-summary {
+  margin: 0;
+  padding: 6px 10px;
+  color: var(--text-muted);
+}
+
+.push__output-summary {
+  cursor: pointer;
+}
+
+.push__progress-text,
+.push__output-text {
+  margin: 0;
+  padding: 8px 12px;
+  max-height: 180px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11.5px;
+}
+
+.push__actions {
+  flex-wrap: wrap;
+}
+
+.push__primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 600;
+}
+
+.push__danger {
+  border-color: var(--conflict);
+  color: var(--conflict);
 }
 
 /* The conflicts dialog, laid out as the table in the screen designs. */

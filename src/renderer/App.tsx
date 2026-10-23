@@ -10,7 +10,9 @@ import type {
   GitOperation,
   HeadCommit,
   IdentityScope,
-  OperationOutcome
+  OperationOutcome,
+  PushOutcome,
+  PushState
 } from '../shared/git'
 import type { CrlfChoice, FileVersionSource, IpcErrorCode, RepositorySnapshot } from '../shared/ipc'
 import { fileBadge, type FileBadge } from './changes/entry-view'
@@ -25,6 +27,7 @@ import { ERROR_KEYS } from './errors'
 import MergeEditor from './merge/MergeEditor'
 import { SUPPORTED_LANGUAGES, type SupportedLanguage } from './i18n'
 import { splitPath } from './paths'
+import PushDialog, { type PushChoice } from './push/PushDialog'
 import TopBar from './shell/TopBar'
 
 type View =
@@ -35,6 +38,9 @@ type View =
 
 /** The conflicts dialog's contents: loading, or the list and the side names. */
 type ConflictsView = { state: 'loading' } | { state: 'ready'; data: ConflictState }
+
+/** The push dialog's contents: loading, or the branch and the commits to send. */
+type PushView = { state: 'loading' } | { state: 'ready'; data: PushState }
 
 /** The file the viewer shows and the two versions it compares. */
 interface Selection {
@@ -169,6 +175,24 @@ export default function App() {
   // The file the merge editor has open, with its repository, or null when the
   // three-pane editor is closed and the main window is showing.
   const [mergeEditor, setMergeEditor] = useState<{ repo: string; path: string } | null>(null)
+  // The push dialog: null when closed, loading while the branch and the commits
+  // are read, and ready with everything it shows before pushing.
+  const [pushView, setPushView] = useState<PushView | null>(null)
+  // Whether a push or the update before it is running, so its buttons wait.
+  const [pushBusy, setPushBusy] = useState(false)
+  // A failed push, or the explanation of a rejection Seam cannot recover from.
+  const [pushError, setPushError] = useState<string | null>(null)
+  // What the last push did, shown inside the dialog when it did not simply land.
+  const [pushOutcome, setPushOutcome] = useState<PushOutcome | null>(null)
+  // Git's live output while a push runs, so a slow remote is visible.
+  const [pushProgress, setPushProgress] = useState('')
+  // How Update and push integrates the fetched upstream; the dialog remembers it.
+  const [pushStrategy, setPushStrategy] = useState<'rebase' | 'merge'>('rebase')
+  // A push that stopped on conflicts: finishing the operation reopens the
+  // dialog with the list refreshed, as the phase describes.
+  const pushAfterConflicts = useRef(false)
+  // Commit and Push: once the commit exists, the push dialog opens by itself.
+  const pushAfterCommit = useRef(false)
 
   const open = useCallback(async (repo: string) => {
     setSelected(null)
@@ -193,6 +217,14 @@ export default function App() {
     setGitOutput(null)
     setOperationNotice(null)
     setMergeEditor(null)
+    setPushView(null)
+    setPushBusy(false)
+    setPushError(null)
+    setPushOutcome(null)
+    setPushProgress('')
+    setPushStrategy('rebase')
+    pushAfterConflicts.current = false
+    pushAfterCommit.current = false
     conflictsOpenedFor.current = null
     setView({ state: 'loading' })
     const result = await window.seam.readRepositoryStatus(repo)
@@ -259,6 +291,88 @@ export default function App() {
     }
   }, [])
 
+  /** Closes the push dialog and forgets what the last push printed. */
+  const closePush = useCallback(() => {
+    setPushView(null)
+    setPushError(null)
+    setPushOutcome(null)
+    setPushProgress('')
+  }, [])
+
+  /** Opens the push dialog and reads the branch, its remotes and its commits. */
+  const openPush = useCallback(async () => {
+    const repo = repoRef.current
+    if (repo === null) return
+    setPushView({ state: 'loading' })
+    setPushError(null)
+    setPushOutcome(null)
+    setPushProgress('')
+    const result = await window.seam.readPushState(repo)
+    if (result.ok) setPushView({ state: 'ready', data: result.value })
+    else {
+      setPushView(null)
+      setWriteError({ code: result.code, message: result.message })
+    }
+  }, [])
+
+  /**
+   * Runs the push with the dialog's choices. A rejected reference stays in the
+   * outcome so the dialog can offer update or force; only a failure to start
+   * Git becomes an error above it.
+   */
+  const performPush = useCallback(
+    async (choice: PushChoice) => {
+      const repo = repoRef.current
+      if (repo === null) return
+      setPushError(null)
+      setPushOutcome(null)
+      setPushProgress('')
+      const result = await window.seam.push({ repo, ...choice })
+      if (!result.ok) {
+        setPushError(result.message)
+        return
+      }
+
+      const outcome = result.value
+      setPushOutcome(outcome)
+      if (outcome.cancelled) {
+        setPushError(t('push.cancelled'))
+        return
+      }
+      if (outcome.timedOut) {
+        setPushError(t('push.timedOut'))
+        return
+      }
+      if (outcome.ok) {
+        closePush()
+        await refresh()
+        setOperationNotice(t('push.done', { remote: choice.remote, branch: choice.remoteBranch }))
+        return
+      }
+      if (outcome.authFailed) setPushError(t('push.authFailed'))
+    },
+    [refresh, closePush, t]
+  )
+
+  /** Runs a push and holds the dialog's buttons until it is over. */
+  const runPush = useCallback(
+    async (choice: PushChoice) => {
+      setPushBusy(true)
+      try {
+        await performPush(choice)
+      } finally {
+        setPushBusy(false)
+      }
+    },
+    [performPush]
+  )
+
+  /** Stops a push whose remote will not answer. */
+  const cancelPush = useCallback(() => {
+    const repo = repoRef.current
+    if (repo !== null) void window.seam.cancelPush(repo)
+  }, [])
+
   /** Rereads the dialog's list without making it flash "loading". */
   const reloadConflicts = useCallback(async () => {
     const repo = repoRef.current
@@ -285,6 +399,45 @@ export default function App() {
       setWriteError({ code: result.code, message: result.message })
     }
   }, [])
+
+  /**
+   * Update and push: fetches, integrates the upstream with the chosen strategy
+   * and pushes again. A conflict hands over to the phase 5 list, and finishing
+   * it reopens this dialog with the list refreshed.
+   */
+  const updateAndPush = useCallback(
+    async (choice: PushChoice) => {
+      const repo = repoRef.current
+      if (repo === null) return
+      setPushBusy(true)
+      setPushError(null)
+      setPushProgress('')
+      try {
+        const result = await window.seam.updateForPush({ repo, strategy: pushStrategy })
+        if (!result.ok) {
+          setPushError(result.message)
+          return
+        }
+
+        const update = result.value
+        if (update.operation !== null || update.conflicts > 0) {
+          pushAfterConflicts.current = true
+          closePush()
+          await refresh()
+          await openConflicts()
+          return
+        }
+        if (!update.ok) {
+          setPushError(update.output === '' ? t('push.updateFailed') : update.output)
+          return
+        }
+        await performPush(choice)
+      } finally {
+        setPushBusy(false)
+      }
+    },
+    [pushStrategy, closePush, refresh, openConflicts, performPush, t]
+  )
 
   /**
    * Accepts one side of a file. When the working copy changed since the dialog
@@ -417,8 +570,14 @@ export default function App() {
       closeConflicts()
       await refresh()
       setOperationNotice(t(successKey))
+      // The operation started as Update and push: once it is over, the dialog
+      // reopens with the pending commits as they are now.
+      if (pushAfterConflicts.current) {
+        pushAfterConflicts.current = false
+        await openPush()
+      }
     },
-    [refresh, reloadConflicts, closeConflicts, t]
+    [refresh, reloadConflicts, closeConflicts, openPush, t]
   )
 
   /** Closes the conflicts dialog in the way the operation requires. */
@@ -512,6 +671,7 @@ export default function App() {
         setGitOutput(result.value.output === '' ? t('conflicts.outputEmpty') : result.value.output)
         return
       }
+      pushAfterConflicts.current = false
       closeConflicts()
       await refresh()
       setOperationNotice(t(`conflicts.aborted.${operation ?? 'stash'}`))
@@ -610,6 +770,16 @@ export default function App() {
       stopWatching()
     }
   }, [refresh])
+
+  // A push prints while it runs, so its output is appended to the dialog. The
+  // last few thousand characters are enough to see what the remote is doing.
+  useEffect(() => {
+    const stop = window.seam.onPushProgress(({ repo, text }) => {
+      if (repoRef.current !== repo) return
+      setPushProgress((previous) => `${previous}${text}`.slice(-20_000))
+    })
+    return stop
+  }, [])
 
   const choose = useCallback(async () => {
     const repo = await window.seam.chooseRepository()
@@ -723,6 +893,7 @@ export default function App() {
           ...(crlf === undefined ? {} : { crlf })
         })
         if (!result.ok) {
+          pushAfterCommit.current = false
           setWriteError({ code: result.code, message: result.message })
           return
         }
@@ -732,8 +903,12 @@ export default function App() {
 
         // A cancelled or timed-out commit keeps the message; the wait is over and
         // the box goes back to normal.
-        if (outcome.cancelled) return
+        if (outcome.cancelled) {
+          pushAfterCommit.current = false
+          return
+        }
         if (outcome.timedOut) {
+          pushAfterCommit.current = false
           setWriteError({ code: 'command-failed', message: t('commit.timedOut') })
           return
         }
@@ -754,6 +929,7 @@ export default function App() {
             })
             return
           }
+          pushAfterCommit.current = false
           setWriteError({ code: 'command-failed', message: outcome.message })
           return
         }
@@ -770,11 +946,19 @@ export default function App() {
         // The message just confirmed is the newest one the history offers.
         const history = await window.seam.readCommitHistory(repo)
         if (history.ok) setCommitHistory(history.value)
+
+        // Commit and Push chains the push dialog; a merge that finished an
+        // Update and push reopens it too, with the merge commit already in.
+        if (pushAfterCommit.current || pushAfterConflicts.current) {
+          pushAfterCommit.current = false
+          pushAfterConflicts.current = false
+          await openPush()
+        }
       } finally {
         setCommitting(false)
       }
     },
-    [commitMessage, amend, author, signoff, runHooks, operation, refresh, t]
+    [commitMessage, amend, author, signoff, runHooks, operation, refresh, openPush, t]
   )
 
   // Stops a commit a hook is holding up, so the user is not stuck for five
@@ -869,11 +1053,13 @@ export default function App() {
         branch={branchLabel}
         recent={recent}
         canRefresh={currentRepo !== null}
+        canPush={currentRepo !== null && branchStatus?.head != null && operation === null}
         language={current}
         languages={SUPPORTED_LANGUAGES}
         onChoose={() => void choose()}
         onOpen={(repo) => void open(repo)}
         onRefresh={() => void refresh()}
+        onPush={() => void openPush()}
         onLanguageChange={(language) => void i18n.changeLanguage(language)}
       />
 
@@ -921,7 +1107,14 @@ export default function App() {
                 staged={staged}
                 conflicts={conflicts}
                 operation={operation}
-                onCommit={() => void commit()}
+                onCommit={() => {
+                  pushAfterCommit.current = false
+                  void commit()
+                }}
+                onCommitAndPush={() => {
+                  pushAfterCommit.current = true
+                  void commit()
+                }}
                 onCancel={cancelCommit}
                 busy={committing}
                 output={commitOutput}
@@ -944,7 +1137,10 @@ export default function App() {
           busy={savingIdentity}
           error={writeError?.message ?? null}
           onSave={(identity) => void saveIdentity(identity)}
-          onCancel={() => setIdentityPrompt(null)}
+          onCancel={() => {
+            pushAfterCommit.current = false
+            setIdentityPrompt(null)
+          }}
         />
       )}
 
@@ -952,7 +1148,41 @@ export default function App() {
         <EolDialog
           files={crlfPrompt}
           onAnswer={(answer) => void answerCrlf(answer)}
-          onCancel={() => setCrlfPrompt(null)}
+          onCancel={() => {
+            pushAfterCommit.current = false
+            setCrlfPrompt(null)
+          }}
+        />
+      )}
+
+      {pushView !== null && (
+        <PushDialog
+          key={
+            pushView.state === 'ready'
+              ? [
+                  pushView.data.branch,
+                  pushView.data.upstream,
+                  pushView.data.remote,
+                  pushView.data.remoteBranch,
+                  pushView.data.remoteOid
+                ].join('|')
+              : 'loading'
+          }
+          state={pushView.state === 'ready' ? pushView.data : null}
+          busy={pushBusy}
+          error={pushError}
+          outcome={pushOutcome}
+          progress={pushProgress}
+          strategy={pushStrategy}
+          onStrategyChange={setPushStrategy}
+          onPush={(choice) => void runPush(choice)}
+          onUpdate={(choice) => void updateAndPush(choice)}
+          onCancelPush={cancelPush}
+          onClose={() => {
+            pushAfterCommit.current = false
+            pushAfterConflicts.current = false
+            closePush()
+          }}
         />
       )}
 

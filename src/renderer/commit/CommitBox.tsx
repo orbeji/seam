@@ -31,6 +31,8 @@ interface CommitBoxProps {
   readonly operation: GitOperation | null
   /** Creates a commit from the index and the message. */
   readonly onCommit: () => void
+  /** Creates the commit and opens the push dialog once it exists. */
+  readonly onCommitAndPush: () => void
   /** Stops a commit a hook is holding up. */
   readonly onCancel: () => void
   /** Whether a commit is in flight, so the button cannot be pressed twice. */
@@ -65,6 +67,7 @@ export default function CommitBox({
   conflicts,
   operation,
   onCommit,
+  onCommitAndPush,
   onCancel,
   busy,
   output,
@@ -216,6 +219,15 @@ export default function CommitBox({
                 : staged > 0
                   ? t('commit.buttonCount', { count: staged })
                   : t('commit.button')}
+            </button>
+            <button
+              type="button"
+              className="button commit__submit commit__submit--secondary"
+              data-testid="commit-push-button"
+              disabled={availability.kind !== 'ready' || busy}
+              onClick={onCommitAndPush}
+            >
+              {t('commit.commitAndPush')}
             </button>
             {busy && (
               <button

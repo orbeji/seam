@@ -83,6 +83,13 @@ export interface GitRunOptions {
   readOnly?: boolean
   /** A command that could otherwise open an editor. Sets `GIT_EDITOR=true`. */
   noEditor?: boolean
+  /**
+   * Receives stdout as it arrives, for commands whose progress the interface
+   * shows while they run, such as a push. The whole output is still returned.
+   */
+  onStdout?: (chunk: string) => void
+  /** Receives stderr as it arrives, for the same live progress. */
+  onStderr?: (chunk: string) => void
 }
 
 export interface GitRunResult {
@@ -282,8 +289,14 @@ export class GitRunner {
       // A closed pipe is not fatal: the command may exit before reading stdin.
       child.stdin.on('error', () => undefined)
 
-      child.stdout.on('data', (chunk: Buffer) => stdoutChunks.push(chunk))
-      child.stderr.on('data', (chunk: Buffer) => stderrChunks.push(chunk))
+      child.stdout.on('data', (chunk: Buffer) => {
+        stdoutChunks.push(chunk)
+        options.onStdout?.(chunk.toString('utf8'))
+      })
+      child.stderr.on('data', (chunk: Buffer) => {
+        stderrChunks.push(chunk)
+        options.onStderr?.(chunk.toString('utf8'))
+      })
 
       child.on('error', (error: NodeJS.ErrnoException) => {
         finish(() => {

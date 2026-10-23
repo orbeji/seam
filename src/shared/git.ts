@@ -242,6 +242,120 @@ export interface OperationOutcome {
   readonly output: string
 }
 
+/** A remote configured in the repository, as the push dialog lists it. */
+export interface PushRemote {
+  readonly name: string
+  readonly url: string
+}
+
+/** One commit the push sends, as the dialog lists it. */
+export interface PushCommit {
+  readonly oid: string
+  readonly shortId: string
+  readonly subject: string
+  readonly author: string
+  /** When the commit was made, in words (`%ar`), for the row's tail. */
+  readonly date: string
+}
+
+/** Which tags a push sends: none, the annotated ones it reaches, or every one. */
+export type PushTagMode = 'none' | 'follow' | 'all'
+
+/** Why Git refused one reference, when Seam can tell it apart. */
+export type PushRejection =
+  | 'non-fast-forward'
+  | 'remote-rejected'
+  | 'tag-exists'
+  | 'stale-info'
+  | 'other'
+
+/** The first letter of a `git push --porcelain` reference line. */
+export type PushRefFlag = ' ' | '*' | '!' | '=' | '+' | '-'
+
+/** One reference line of `git push --porcelain`, in Seam's words. */
+export interface PushRef {
+  /** `*` new, space updated, `!` rejected, `=` unchanged, `+` forced, `-` deleted. */
+  readonly flag: PushRefFlag
+  /** The local reference, such as `refs/heads/main`. */
+  readonly from: string
+  /** The remote reference, such as `refs/heads/main`. */
+  readonly to: string
+  /** Everything after the second tab: the range, `[new branch]`, and so on. */
+  readonly summary: string
+  /** The text in the summary's parentheses, or null when it has none. */
+  readonly reason: string | null
+  /** The refusal Seam recognised, or null for a reference that went through. */
+  readonly rejection: PushRejection | null
+  /** Whether the reference is a tag rather than a branch. */
+  readonly tag: boolean
+}
+
+/**
+ * Everything the push dialog shows before it runs: the local branch, where it
+ * would go, the commits that would travel and what the remote last looked like.
+ */
+export interface PushState {
+  /** The local branch, or null when HEAD is detached. */
+  readonly branch: string | null
+  /** The upstream as Git names it, such as `origin/main`, or null. */
+  readonly upstream: string | null
+  /** The remote the dialog starts with, or null when none is configured. */
+  readonly remote: string | null
+  /** The remote branch the dialog starts with, or null. */
+  readonly remoteBranch: string | null
+  /** The remote-tracking commit Seam saw, used as the lease and for force push. */
+  readonly remoteOid: string | null
+  readonly remotes: readonly PushRemote[]
+  /** The commits the push would send, newest first. */
+  readonly commits: readonly PushCommit[]
+  /** Whether HEAD is detached, which leaves nothing to push. */
+  readonly detached: boolean
+  /**
+   * Whether HEAD is already in a remote branch, so a rebase would rewrite
+   * published history and the dialog offers only a merge.
+   */
+  readonly published: boolean
+  /** Whether the branch is `main` or `master`, so a force push asks for its name. */
+  readonly protectedBranch: boolean
+  /** Whether the branch already tracks an upstream. */
+  readonly hasUpstream: boolean
+  /** Whether the target branch already exists on the remote. */
+  readonly remoteBranchExists: boolean
+}
+
+/** What came of a push: whether it landed and how each reference fared. */
+export interface PushOutcome {
+  /** Whether Git exited zero. */
+  readonly ok: boolean
+  /** One entry per reference Git printed, empty when it never got that far. */
+  readonly refs: readonly PushRef[]
+  /** Whether Git could not authenticate, so the dialog explains what to configure. */
+  readonly authFailed: boolean
+  /** Whether the user stopped the push. */
+  readonly cancelled: boolean
+  /** Whether the push ran past its deadline and was killed. */
+  readonly timedOut: boolean
+  /** Everything Git printed, for the dialog's output panel. */
+  readonly output: string
+}
+
+/**
+ * What came of fetching and integrating the upstream before pushing again.
+ * A conflict leaves the operation in progress, so the phase 5 list takes over.
+ */
+export interface PushUpdateOutcome {
+  /** Whether the branch was updated and no operation is left in progress. */
+  readonly ok: boolean
+  /** Whether the fetch itself succeeded. */
+  readonly fetched: boolean
+  /** Files still unmerged when Git stopped on a conflict. */
+  readonly conflicts: number
+  /** The operation still in progress, or null when the update finished. */
+  readonly operation: GitOperation | null
+  /** Everything Git printed, for the dialog's output panel. */
+  readonly output: string
+}
+
 /** The result of accepting a side: whether the user must confirm an overwrite. */
 export interface ConflictAcceptOutcome {
   readonly needsConfirmation: boolean

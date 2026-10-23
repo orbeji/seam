@@ -19,6 +19,8 @@ import type {
   IdentityWriteRequest,
   IndexWriteRequest,
   MergeApplyRequest,
+  PushRequest,
+  PushUpdateRequest,
   RevertHunksRequest,
   StagePathsRequest
 } from '../../shared/ipc'
@@ -153,6 +155,36 @@ function parseMergeApply(value: unknown): MergeApplyRequest | null {
   }
   if (typeof stage !== 'boolean') return null
   return { repo, path, content, stage }
+}
+
+/** Narrows an IPC payload to a push, rejecting anything else. */
+function parsePushRequest(value: unknown): PushRequest | null {
+  if (typeof value !== 'object' || value === null) return null
+  const { repo, remote, branch, remoteBranch, setUpstream, tags, forceLeaseOid } = value as Record<
+    string,
+    unknown
+  >
+  if (
+    typeof repo !== 'string' ||
+    typeof remote !== 'string' ||
+    typeof branch !== 'string' ||
+    typeof remoteBranch !== 'string'
+  ) {
+    return null
+  }
+  if (remote === '' || branch === '' || remoteBranch === '') return null
+  if (typeof setUpstream !== 'boolean') return null
+  if (tags !== 'none' && tags !== 'follow' && tags !== 'all') return null
+  if (forceLeaseOid !== null && typeof forceLeaseOid !== 'string') return null
+  return { repo, remote, branch, remoteBranch, setUpstream, tags, forceLeaseOid }
+}
+
+/** Narrows an IPC payload to the update that follows a rejected push. */
+function parsePushUpdate(value: unknown): PushUpdateRequest | null {
+  if (typeof value !== 'object' || value === null) return null
+  const { repo, strategy } = value as Record<string, unknown>
+  if (typeof repo !== 'string' || (strategy !== 'rebase' && strategy !== 'merge')) return null
+  return { repo, strategy }
 }
 
 /** Narrows an IPC payload to a repository and a message, rejecting anything
@@ -525,6 +557,51 @@ export function registerRepositoryHandlers(
       return { ok: false, code: 'unknown', message: 'Invalid merge message request' }
     }
     return service.readMergeMessage(repo)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.readPushState, (_event, repo: unknown) => {
+    if (typeof repo !== 'string') {
+      return { ok: false, code: 'unknown', message: 'Invalid push request' }
+    }
+    return service.readPushState(repo)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.runPush, (event, request: unknown) => {
+    const parsed = parsePushRequest(request)
+    if (parsed === null) {
+      return { ok: false, code: 'unknown', message: 'Invalid push request' }
+    }
+    return service.push(
+      parsed.repo,
+      {
+        remote: parsed.remote,
+        branch: parsed.branch,
+        remoteBranch: parsed.remoteBranch,
+        setUpstream: parsed.setUpstream,
+        tags: parsed.tags,
+        forceLeaseOid: parsed.forceLeaseOid
+      },
+      (text) => {
+        if (!event.sender.isDestroyed()) {
+          event.sender.send(IPC_CHANNELS.pushProgress, { repo: parsed.repo, text })
+        }
+      }
+    )
+  })
+
+  ipcMain.handle(IPC_CHANNELS.cancelPush, (_event, repo: unknown) => {
+    if (typeof repo !== 'string') {
+      return { ok: false, code: 'unknown', message: 'Invalid cancel push request' }
+    }
+    return service.cancelPush(repo)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.updateForPush, (_event, request: unknown) => {
+    const parsed = parsePushUpdate(request)
+    if (parsed === null) {
+      return { ok: false, code: 'unknown', message: 'Invalid push update request' }
+    }
+    return service.updateForPush(parsed.repo, parsed.strategy)
   })
 
   ipcMain.handle(IPC_CHANNELS.writeClipboardText, (_event, text: unknown) => {

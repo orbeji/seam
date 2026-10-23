@@ -12,6 +12,10 @@ import type {
   Identity,
   IdentityScope,
   OperationOutcome,
+  PushOutcome,
+  PushState,
+  PushTagMode,
+  PushUpdateOutcome,
   RepoStatus,
   ResolveSimpleOutcome
 } from './git'
@@ -21,7 +25,7 @@ import type {
  * interface. Bump it whenever a message shape changes so the three layers can
  * detect a mismatch instead of failing silently.
  */
-export const IPC_CONTRACT_VERSION = 18
+export const IPC_CONTRACT_VERSION = 19
 
 /** Channel names shared by the main process and the preload bridge. */
 export const IPC_CHANNELS = {
@@ -59,6 +63,12 @@ export const IPC_CHANNELS = {
   skipOperation: 'operation:skip',
   abortOperation: 'operation:abort',
   readMergeMessage: 'operation:merge-message',
+  readPushState: 'push:read',
+  runPush: 'push:run',
+  cancelPush: 'push:cancel',
+  updateForPush: 'push:update',
+  /** Sent from main to the interface while a push prints its progress. */
+  pushProgress: 'push:progress',
   /** Copies text from the interface through the main process's clipboard. */
   writeClipboardText: 'clipboard:write-text'
 } as const
@@ -318,10 +328,41 @@ export interface MergeApplyRequest {
   readonly stage: boolean
 }
 
+/** The choices the push dialog made, ready for `git push --porcelain`. */
+export interface PushRequest {
+  readonly repo: string
+  readonly remote: string
+  /** The local branch to send. */
+  readonly branch: string
+  /** The branch name on the remote, which may differ when no upstream exists. */
+  readonly remoteBranch: string
+  /** Adds `--set-upstream`, for a branch that does not track anything yet. */
+  readonly setUpstream: boolean
+  readonly tags: PushTagMode
+  /**
+   * The commit the remote branch must still point at. Present only when the user
+   * chose a force push; the main process always sends it as
+   * `--force-with-lease`, never as a plain `--force`.
+   */
+  readonly forceLeaseOid: string | null
+}
+
+/** How the retry after a rejection integrates the fetched upstream. */
+export interface PushUpdateRequest {
+  readonly repo: string
+  readonly strategy: 'rebase' | 'merge'
+}
+
+/** One chunk of a push's live output, tied to the repository it belongs to. */
+export interface PushProgress {
+  readonly repo: string
+  readonly text: string
+}
+
 /**
  * Surface the preload script exposes to the renderer on `window.seam`. It grows
- * as the interface needs typed calls: stage, commit, resolve, continue and abort
- * arrive in later phases.
+ * as the interface needs typed calls: stage, commit, resolve, continue, abort and
+ * push arrive in later phases.
  */
 export interface SeamApi {
   readonly contractVersion: number
@@ -455,6 +496,29 @@ export interface SeamApi {
    * lines removed, so the commit box can show it; never throws.
    */
   readMergeMessage(repo: string): Promise<IpcResult<string>>
+  /**
+   * The branch, its upstream, the remotes and the commits the push dialog would
+   * send; never throws.
+   */
+  readPushState(repo: string): Promise<IpcResult<PushState>>
+  /**
+   * Runs `git push --porcelain` with the dialog's choices. A rejected reference
+   * comes back inside the outcome, not as an error; only a failure to reach Git
+   * itself is one. Progress arrives through `onPushProgress`.
+   */
+  push(request: PushRequest): Promise<IpcResult<PushOutcome>>
+  /** Stops the push running in a repository; never throws. */
+  cancelPush(repo: string): Promise<IpcResult<null>>
+  /**
+   * Fetches and integrates the upstream with a rebase or a merge before the
+   * dialog retries; never throws. A conflict leaves the operation in progress.
+   */
+  updateForPush(request: PushUpdateRequest): Promise<IpcResult<PushUpdateOutcome>>
+  /**
+   * Calls the listener with each chunk of a running push's output, so the dialog
+   * can show it live. Returns a function that removes the listener.
+   */
+  onPushProgress(listener: (progress: PushProgress) => void): () => void
   /**
    * Copies text to the system clipboard, so the commit notification can offer
    * the short id without the renderer fighting the browser's clipboard rules;

@@ -8,6 +8,9 @@ import type {
   HeadCommit,
   Identity,
   OperationOutcome,
+  PushOutcome,
+  PushState,
+  PushUpdateOutcome,
   ResolveSimpleOutcome
 } from '../shared/git'
 import {
@@ -26,6 +29,9 @@ import {
   type MergeApplyRequest,
   type MergeEditorModel,
   type MergeEditorRequest,
+  type PushProgress,
+  type PushRequest,
+  type PushUpdateRequest,
   type RepositorySnapshot,
   type RevertHunksRequest,
   type SeamApi,
@@ -115,6 +121,23 @@ const seamApi: SeamApi = {
     ipcRenderer.invoke(IPC_CHANNELS.abortOperation, repo) as Promise<IpcResult<OperationOutcome>>,
   readMergeMessage: (repo: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.readMergeMessage, repo) as Promise<IpcResult<string>>,
+  readPushState: (repo: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.readPushState, repo) as Promise<IpcResult<PushState>>,
+  push: (request: PushRequest) =>
+    ipcRenderer.invoke(IPC_CHANNELS.runPush, request) as Promise<IpcResult<PushOutcome>>,
+  cancelPush: (repo: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.cancelPush, repo) as Promise<IpcResult<null>>,
+  updateForPush: (request: PushUpdateRequest) =>
+    ipcRenderer.invoke(IPC_CHANNELS.updateForPush, request) as Promise<
+      IpcResult<PushUpdateOutcome>
+    >,
+  onPushProgress: (listener: (progress: PushProgress) => void) => {
+    const handler = (_event: IpcRendererEvent, progress: PushProgress): void => listener(progress)
+    ipcRenderer.on(IPC_CHANNELS.pushProgress, handler)
+    return () => {
+      ipcRenderer.removeListener(IPC_CHANNELS.pushProgress, handler)
+    }
+  },
   writeClipboardText: (text: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.writeClipboardText, text) as Promise<IpcResult<null>>,
   onRepositoryChanged: (listener: (repo: string) => void) => {

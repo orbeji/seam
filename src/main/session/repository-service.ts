@@ -23,6 +23,7 @@ import {
   readIdentity,
   readMergeEditor as readMergeEditorModel,
   readMergeMessage as readMergeMessageFromRepo,
+  readPushState as readPushStateFromRepo,
   readStatus,
   removeIndexPaths,
   resolveSimpleConflicts as resolveSimple,
@@ -31,11 +32,15 @@ import {
   stagePaths,
   summarizeChanges,
   unstagePaths,
+  updateForPush as updateForPushInRepo,
+  push as pushToRemote,
   writeIdentity,
   writeIndexEntry,
   writeWorktreeFile,
   type CommitOptions,
   type HeadCommit,
+  type PushOptions,
+  type PushUpdateStrategy,
   type VersionSource
 } from '../../core/git'
 import type {
@@ -56,6 +61,9 @@ import type {
   Identity,
   IdentityScope,
   OperationOutcome,
+  PushOutcome,
+  PushState,
+  PushUpdateOutcome,
   ResolveSimpleOutcome
 } from '../../shared/git'
 import { GitWatcher } from './git-watcher'
@@ -105,6 +113,8 @@ export class RepositoryService {
   /** The commit running right now, so a hook that will not end can be stopped. */
   private commitInFlight: { readonly repo: string; readonly controller: AbortController } | null =
     null
+  /** The push running right now, so a remote that will not answer can be stopped. */
+  private pushInFlight: { readonly repo: string; readonly controller: AbortController } | null = null
 
   constructor(private readonly runner: GitRunner = new GitRunner()) {}
 
@@ -495,6 +505,75 @@ export class RepositoryService {
 
     try {
       return { ok: true, value: await readMergeMessageFromRepo(this.runner, repo) }
+    } catch (error) {
+      return failureFrom(error)
+    }
+  }
+
+  /** Reads the branch, its upstream, the remotes and the commits to push. */
+  async readPushState(repo: string): Promise<IpcResult<PushState>> {
+    const opened = await this.open(repo)
+    if (!opened.ok) return opened
+
+    try {
+      return { ok: true, value: await readPushStateFromRepo(this.runner, repo) }
+    } catch (error) {
+      return failureFrom(error)
+    }
+  }
+
+  /**
+   * Runs the push. `onProgress` receives Git's output as it arrives, so the
+   * dialog can show it while the remote answers. The push is tracked while it
+   * runs, so `cancelPush` can kill a remote that never answers.
+   */
+  async push(
+    repo: string,
+    options: Omit<PushOptions, 'signal' | 'onProgress'>,
+    onProgress?: (text: string) => void
+  ): Promise<IpcResult<PushOutcome>> {
+    const opened = await this.open(repo)
+    if (!opened.ok) return opened
+
+    const controller = new AbortController()
+    this.pushInFlight = { repo: resolve(repo), controller }
+    try {
+      const outcome = await pushToRemote(this.runner, repo, {
+        ...options,
+        signal: controller.signal,
+        ...(onProgress === undefined ? {} : { onProgress })
+      })
+      return { ok: true, value: outcome }
+    } catch (error) {
+      return failureFrom(error)
+    } finally {
+      if (this.pushInFlight?.controller === controller) this.pushInFlight = null
+    }
+  }
+
+  /** Stops the push running in a repository, for a remote that will not answer. */
+  cancelPush(repo: string): IpcResult<null> {
+    if (this.pushInFlight?.repo === resolve(repo)) {
+      const controller = this.pushInFlight.controller
+      this.pushInFlight = null
+      controller.abort()
+    }
+    return { ok: true, value: null }
+  }
+
+  /**
+   * Fetches and integrates the upstream before a retry. A conflict leaves the
+   * operation in progress, so the interface hands over to the conflict list.
+   */
+  async updateForPush(
+    repo: string,
+    strategy: PushUpdateStrategy
+  ): Promise<IpcResult<PushUpdateOutcome>> {
+    const opened = await this.open(repo)
+    if (!opened.ok) return opened
+
+    try {
+      return { ok: true, value: await updateForPushInRepo(this.runner, repo, strategy) }
     } catch (error) {
       return failureFrom(error)
     }
