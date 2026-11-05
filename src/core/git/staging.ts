@@ -73,6 +73,23 @@ export function stagePaths(
 }
 
 /**
+ * Restores the given paths in the working tree from the index, throwing away
+ * the pending changes to them. The index and HEAD are left alone, so a file
+ * that also has a prepared change keeps it.
+ */
+export function discardPaths(
+  runner: GitRunner,
+  repo: string,
+  paths: readonly string[]
+): Promise<GitRunResult> {
+  if (paths.length === 0) return Promise.resolve(nothing())
+  return runner.runOrThrow(specArgs('restore', '--worktree'), {
+    cwd: repo,
+    stdin: pathspecInput(paths)
+  })
+}
+
+/**
  * Removes the given paths from the index, leaving the working tree untouched.
  * A repository without a commit cannot resolve `HEAD`, so `restore --staged`
  * fails there; `rm --cached` takes the entries out of the index instead. Its

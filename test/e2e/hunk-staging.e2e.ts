@@ -151,4 +151,96 @@ describe('preparing a hunk in the viewer', () => {
     await expect.poll(() => page.locator(BACK).count(), { timeout: WAIT_MS }).toBe(1)
     expect(await page.locator(FORWARD).count()).toBe(1)
   })
+
+  it('unstages a staged hunk from the side-by-side margin', async () => {
+    await openFile()
+    await page.locator(FORWARD).first().click()
+    await page.waitForSelector('[data-testid=hunk-stage]')
+    await page.locator('[data-testid=hunk-stage]').click()
+    await expect.poll(() => page.locator(BACK).count(), { timeout: WAIT_MS }).toBe(1)
+
+    // The staged row opens the same viewer, still side by side. Its index side
+    // carries a hollow marker, and the menu offers only the unstage action.
+    await page.locator('[data-testid=staged] [data-testid=entry]', { hasText: 'f.txt' }).click()
+    await page.waitForSelector(PANES)
+    await expect.poll(() => page.locator(BACK).count(), { timeout: WAIT_MS }).toBe(1)
+    await page.locator(BACK).first().click()
+    await page.waitForSelector('[data-testid=hunk-unstage]')
+    expect(await page.locator('[data-testid=hunk-revert]').count()).toBe(0)
+    await page.locator('[data-testid=hunk-unstage]').click()
+
+    await expect
+      .poll(async () => (await repository.git(['diff', '--cached', '--', 'f.txt'])).trim(), {
+        timeout: WAIT_MS
+      })
+      .toBe('')
+  })
+
+  it('opens the staged list as HEAD against the index and unstages from it', async () => {
+    await openFile()
+    await page.selectOption('[data-testid=diff-layout]', 'unified')
+    await page.waitForSelector('[data-testid=chunk-stage]')
+    expect(await page.locator('[data-testid=chunk-stage]').count()).toBeGreaterThan(0)
+    expect(await page.locator('[data-testid=chunk-discard]').count()).toBeGreaterThan(0)
+
+    // Prepare the first change from the working-tree view.
+    await page.locator('[data-testid=chunk-stage]').first().click()
+    await expect.poll(() => page.locator(BACK).count(), { timeout: WAIT_MS }).toBe(1)
+
+    // The file is now in both lists. The staged row must show HEAD against the
+    // index, not the index against the working copy.
+    await page.locator('[data-testid=staged] [data-testid=entry]', { hasText: 'f.txt' }).click()
+    await page.waitForSelector('[data-testid=chunk-unstage]')
+    // The staging model arrives separately from the comparison, and the button
+    // needs it to know which hunk it is looking at.
+    await expect.poll(() => page.locator(BACK).count(), { timeout: WAIT_MS }).toBe(1)
+    expect(await page.locator('[data-testid=chunk-unstage]').count()).toBe(1)
+    expect(await page.locator('[data-testid=chunk-discard]').count()).toBe(0)
+
+    const stagedText = await page.locator(PANES).innerText()
+    expect(stagedText).toContain('TWO')
+    expect(stagedText).not.toContain('FOUR')
+
+    await page.locator('[data-testid=chunk-unstage]').click()
+    await expect
+      .poll(async () => (await repository.git(['diff', '--cached', '--', 'f.txt'])).trim(), {
+        timeout: WAIT_MS
+      })
+      .toBe('')
+    await expect.poll(() => page.locator(BACK).count(), { timeout: WAIT_MS }).toBe(0)
+  })
+
+  it('stages one unified-view change and commits only that change', async () => {
+    await repository.git(['config', 'user.name', 'Seam Test'])
+    await repository.git(['config', 'user.email', 'seam@example.com'])
+    await repository.git(['config', 'commit.gpgsign', 'false'])
+
+    await openFile()
+    await page.selectOption('[data-testid=diff-layout]', 'unified')
+    await page.waitForSelector('.cm-chunkButtons button[name=accept]')
+
+    // Accept is a Git operation: it prepares this chunk in the index, unlike
+    // CodeMirror's default action, which only edits its in-memory original.
+    await page.locator('.cm-chunkButtons button[name=accept]').first().click()
+    await expect
+      .poll(
+        async () => (await repository.git(['diff', '--cached', '--', 'f.txt'])).includes('+TWO'),
+        { timeout: WAIT_MS }
+      )
+      .toBe(true)
+
+    const cached = await repository.git(['diff', '--cached', '--', 'f.txt'])
+    expect(cached).toContain('+TWO')
+    expect(cached).not.toContain('+FOUR')
+
+    await page.fill('[data-testid=commit-message]', 'Stage one change')
+    await page.locator('[data-testid=commit-button]').click()
+    await expect
+      .poll(async () => repository.git(['show', 'HEAD:f.txt']), { timeout: WAIT_MS })
+      .toBe('one\nTWO\nthree\nfour\nfive\nsix\n')
+
+    const pending = await repository.git(['diff', '--', 'f.txt'])
+    expect(pending).toContain('+FOUR')
+    expect(pending).not.toContain('+TWO')
+  })
 })

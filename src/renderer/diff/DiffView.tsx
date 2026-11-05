@@ -3,48 +3,65 @@
 import { history, defaultKeymap, historyKeymap } from '@codemirror/commands'
 import { bracketMatching } from '@codemirror/language'
 import { Change, MergeView, getChunks, unifiedMergeView } from '@codemirror/merge'
-import { Compartment, EditorState, type Extension } from '@codemirror/state'
+import {
+  Compartment,
+  EditorState,
+  StateEffect,
+  StateField,
+  type Extension
+} from '@codemirror/state'
 import { oneDark } from '@codemirror/theme-one-dark'
-import { EditorView, drawSelection, keymap, lineNumbers } from '@codemirror/view'
+import {
+  Decoration,
+  type DecorationSet,
+  EditorView,
+  drawSelection,
+  keymap,
+  lineNumbers
+} from '@codemirror/view'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { WHITESPACE_MODES, type WhitespaceMode } from '../../core/diff'
+import type { HighlightGranularity } from './changes'
+import type { WhitespaceMode } from '../../core/diff/lines'
 import type {
   DiffSide,
   FileComparison,
   FileVersionSource,
   HunkRange,
   IpcErrorCode,
-  StagingModel
+  StagingModel,
+  SyntaxThemePreference
 } from '../../shared/ipc'
 import { ERROR_KEYS } from '../errors'
-import { computeChanges, type HighlightGranularity } from './changes'
+import { computeChanges } from './changes'
 import { selectedLines } from './line-selection'
 import { detectLanguageId, languageName, loadLanguage } from './languages'
 import {
   hunksAt,
   markerLines,
   selectionAt,
+  stagedHunksAt,
+  stagedMarkerLines,
   type HunkSelection,
   type MarkerLine,
   type MarkerHunks
 } from './staging-markers'
 import { stagingGutter } from './staging-gutter'
+import { lightSyntax, oneLight, readsLight } from './theme'
+import { SETTINGS_CHANGED } from '../settings-events'
 import ThreePaneView from './ThreePaneView'
 
 /** Above these limits the viewer drops inline highlighting, per the spec. */
 const LARGE_BYTES = 5 * 1024 * 1024
 const LARGE_LINES = 50_000
 
-const GRANULARITIES: readonly HighlightGranularity[] = [
-  'words',
-  'lines',
-  'split',
-  'characters',
-  'none'
-]
-
 export type DiffLayout = 'side-by-side' | 'unified' | 'three-pane'
+
+/**
+ * A version the history view can show. It adds the two sides of a commit to the
+ * working-tree sources, since a commit's file has no index or working copy.
+ */
+export type DiffSource = FileVersionSource | 'commitParent' | 'commit'
 
 /** What the window's status bar shows about the file that is open. */
 export interface DiffInfo {
@@ -56,8 +73,15 @@ export interface DiffInfo {
 interface DiffViewProps {
   readonly repo: string
   readonly path: string
-  readonly from: FileVersionSource
-  readonly to: FileVersionSource
+  readonly from: DiffSource
+  readonly to: DiffSource
+  /**
+   * The commit to read the file from, for the history view. When set, `from` is
+   * the parent's version and `to` the commit's, and the viewer is read-only.
+   */
+  readonly commit?: string
+  /** The file's path in the parent, for a rename or a copy. */
+  readonly previousPath?: string | null
   /** Called when navigation runs off the end, so the caller can open the next file. */
   readonly onEdge?: (direction: 1 | -1) => void
   /** Called after a hunk write, so the caller can refresh the lists. */
@@ -77,65 +101,11 @@ function firstLine(side: DiffSide | null): string {
   return side?.lines[0] ?? ''
 }
 
-/** The small chevron that marks a native select as a toolbar dropdown. */
-function ToolbarChevron() {
-  return (
-    <svg
-      width="10"
-      height="10"
-      viewBox="0 0 10 10"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      aria-hidden="true"
-    >
-      <path d="M2 3.5l3 3 3-3" />
-    </svg>
-  )
-}
-
-/** The check mark inside the Collapse unchanged control. */
-function CheckMark() {
-  return (
-    <svg
-      width="10"
-      height="10"
-      viewBox="0 0 10 10"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.6"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M1.5 5.2 4 7.5l4.5-5" />
-    </svg>
-  )
-}
-
-/** The up and down arrows that move between differences. */
-function NavArrow({ direction }: { direction: 'previous' | 'next' }) {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 14 14"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.6"
-      strokeLinecap="round"
-      aria-hidden="true"
-    >
-      {direction === 'previous' ? <path d="M3 9l4-4 4 4" /> : <path d="M3 5l4 4 4-4" />}
-    </svg>
-  )
-}
-
 /**
- * Change colours: the side that only has the old text reads as grey, the side
- * that only has the new text as green, and the words that changed inside a line
- * get a stronger blue so they stand out from the line's own tint. It is a theme
- * extension rather than plain CSS so it outranks CodeMirror's own base theme.
+ * Change colours: the side that only has the old text reads as a pastel red,
+ * the side that only has the new text as a pastel green, and modified lines get
+ * a pastel green wash over the file's white text background. It is a theme
+ * extension rather than plain CSS so it outranks CodeMirror's base theme.
  */
 const changeTheme = EditorView.theme({
   '&': { backgroundColor: '#17181b', color: '#e6e7ea' },
@@ -150,23 +120,58 @@ const changeTheme = EditorView.theme({
   '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection': {
     backgroundColor: 'rgba(91, 156, 240, 0.25)'
   },
-  '&.cm-merge-a .cm-changedLine, &.cm-merge-a .cm-changedLineGutter': {
-    backgroundColor: 'rgba(139, 144, 154, 0.22)'
+  // One background per kind of line: old text red, new text green. The base
+  // theme also tints the deleted block and the changed words, which stacked
+  // into a double shade, so those extra layers are turned off below.
+  '&.cm-merge-a .cm-changedLine': {
+    backgroundColor: 'rgba(240, 160, 160, 0.18)'
   },
-  '&.cm-merge-b .cm-changedLine, &.cm-merge-b .cm-changedLineGutter, .cm-inlineChangedLine': {
-    backgroundColor: 'rgba(91, 156, 240, 0.18)'
+  '&.cm-merge-b .cm-changedLine, .cm-inlineChangedLine': {
+    backgroundColor: 'rgba(159, 227, 189, 0.16)'
   },
-  '&.cm-merge-b .cm-insertedLine, .cm-insertedLine': {
-    backgroundColor: 'rgba(63, 178, 127, 0.3)',
-    borderRadius: '2px'
+  '&.cm-merge-a .cm-changedLineGutter': {
+    backgroundColor: 'rgba(240, 160, 160, 0.62)'
   },
-  '&.cm-merge-a .cm-deletedLine, .cm-deletedLine': {
-    backgroundColor: 'rgba(139, 144, 154, 0.36)',
-    borderRadius: '2px'
+  '&.cm-merge-b .cm-changedLineGutter': {
+    backgroundColor: 'rgba(159, 227, 189, 0.62)'
   },
-  '.cm-changedText': { background: 'rgba(91, 156, 240, 0.5)', borderRadius: '2px' },
-  '.cm-deletedText': { background: 'rgba(139, 144, 154, 0.5)', borderRadius: '2px' }
+  '.cm-deletedLineGutter': {
+    backgroundColor: 'rgba(240, 160, 160, 0.62)'
+  },
+  '.cm-inlineChangedLineGutter': {
+    backgroundColor: 'rgba(159, 227, 189, 0.62)'
+  },
+  '& .cm-deletedChunk': {
+    backgroundColor: 'rgba(240, 160, 160, 0.14)'
+  },
+  // The words inside a changed line only keep the line's own background; these
+  // selectors outrank the merge package's base gradient.
+  '&.cm-merge-a .cm-changedText, &.cm-merge-b .cm-changedText, & .cm-deletedChunk .cm-deletedText, .cm-changedText, .cm-deletedText':
+    {
+      background: 'none'
+    }
 })
+
+/** The effect that paints the navigation flash, and the field that keeps it. */
+const flashEffect = StateEffect.define<DecorationSet>()
+
+const flashField = StateField.define<DecorationSet>({
+  create() {
+    return Decoration.none
+  },
+  update(value, transaction) {
+    for (const effect of transaction.effects) {
+      if (effect.is(flashEffect)) return effect.value
+    }
+    return value
+  },
+  provide: (field) => EditorView.decorations.from(field)
+})
+
+/** A CodeMirror merge view keeps the editor of its other side on the view. */
+interface MergeViewHost extends EditorView {
+  readonly mergeView?: { readonly a: EditorView }
+}
 
 function isLarge(comparison: FileComparison): boolean {
   return (
@@ -184,11 +189,19 @@ export default function DiffView({
   path,
   from,
   to,
+  commit,
+  previousPath = null,
   onEdge,
   onChanged,
   onInfoChange
 }: DiffViewProps) {
   const { t } = useTranslation()
+  // Reads and errors are keyed by the request, so a stale answer for a file the
+  // user has already left is ignored rather than shown.
+  const requestKey =
+    commit === undefined
+      ? `${repo}\u0000${path}\u0000${from}\u0000${to}`
+      : `${repo}\u0000${path}\u0000${from}\u0000${to}\u0000${commit}\u0000${previousPath ?? ''}`
   // The comparison and the staging model are read by two effects. Splitting them
   // lets a revert read only the model again: the comparison keeps its identity,
   // so the editors are not rebuilt and their undo history survives.
@@ -202,14 +215,31 @@ export default function DiffView({
     model: StagingModel | null
   } | null>(null)
 
-  const [layout, setLayout] = useState<DiffLayout>('side-by-side')
+  // The changes panel opens in the unified view. Only a conflict preview offers
+  // another layout, and its switch is the only place the choice is visible. The
+  // choice belongs to the file, so changing files starts unified again.
+  const [layoutState, setLayoutState] = useState<{ key: string; layout: DiffLayout }>({
+    key: requestKey,
+    layout: 'unified'
+  })
+  const layout = layoutState.key === requestKey ? layoutState.layout : 'unified'
+  const setLayout = useCallback(
+    (next: DiffLayout) => setLayoutState({ key: requestKey, layout: next }),
+    [requestKey]
+  )
   // The difference the viewer last moved to, 0 until navigation is used.
   const [currentDifference, setCurrentDifference] = useState(0)
+  const [language, setLanguage] = useState<Extension | null>(null)
+  // Viewer options from settings (with defaults)
   const [granularity, setGranularity] = useState<HighlightGranularity>('words')
   const [whitespace, setWhitespace] = useState<WhitespaceMode>('none')
   const [collapse, setCollapse] = useState(false)
   const [context, setContext] = useState(3)
-  const [language, setLanguage] = useState<Extension | null>(null)
+  // The palette the light scheme paints syntax with, from the settings.
+  const [syntaxTheme, setSyntaxTheme] = useState<SyntaxThemePreference>('seam')
+  // Whether the window wears the light scheme, which picks which palette is
+  // used at all: the dark scheme always keeps its own.
+  const [light, setLight] = useState(() => readsLight())
   // The hunk menu opened by clicking a marker, if any, and where it sits. It
   // remembers the file it belongs to, so moving on closes it without an effect.
   const [menu, setMenu] = useState<{
@@ -227,8 +257,6 @@ export default function DiffView({
   // Bumped after a revert. A revert writes the working copy but not the index,
   // so only the staging model is read again and the editors are left alone.
   const [modelRevision, setModelRevision] = useState(0)
-  // The hunks waiting for the revert confirmation, if any.
-  const [confirm, setConfirm] = useState<{ key: string; hunks: readonly HunkRange[] } | null>(null)
   // The working-copy text the toolbar counts differences on after a revert. The
   // comparison is not read again, so the count would otherwise show the numbers
   // from before the revert. Null means "use the comparison that was read".
@@ -249,6 +277,9 @@ export default function DiffView({
   const chunkIndexRef = useRef(-1)
   const editableTextRef = useRef('')
   const editKeyRef = useRef('')
+  // The comparison the editors currently show, so a reread that found the same
+  // two sides leaves the editor - and any typing in it - alone.
+  const displayedRef = useRef<{ key: string; comparison: FileComparison | null } | null>(null)
   // The parent re-renders for reasons of its own - a status refresh after a
   // write, for instance - which would reach the editor through `navigate` and
   // rebuild it, dropping the undo history. Keeping the edge callback in a ref
@@ -265,9 +296,6 @@ export default function DiffView({
   // rebuilds the editor but does not throw the selection away.
   const docRef = useRef('')
 
-  // Reads and errors are keyed by the request, so a stale answer for a file the
-  // user has already left is ignored rather than shown.
-  const requestKey = `${repo}\u0000${path}\u0000${from}\u0000${to}`
   const comparison = fileState?.key === requestKey ? fileState.comparison : null
   const model = stagingState?.key === requestKey ? stagingState.model : null
   const error = fileState?.key === requestKey ? fileState.error : null
@@ -276,11 +304,37 @@ export default function DiffView({
   // to the request and not to the revision, so a refresh that arrives while the
   // menu is open does not unmount it from under the click.
   const openMenu = menu !== null && menu.key === requestKey ? menu : null
-  const openConfirm = confirm !== null && confirm.key === requestKey ? confirm : null
 
   const fromText = useMemo(() => sideText(comparison?.from ?? null), [comparison])
   const toText = useMemo(() => sideText(comparison?.to ?? null), [comparison])
+  const worktreeView = to === 'worktree' && commit === undefined
+  // The staged list compares HEAD with the index: the change a commit would
+  // record. The viewer can show it and take individual hunks back out.
+  const stagedView = from === 'head' && to === 'index' && commit === undefined
+  // The two sides of an unresolved conflict are Git's stage 2 and stage 3.
+  const resolvingConflict =
+    from === 'stage1' ||
+    from === 'stage2' ||
+    from === 'stage3' ||
+    to === 'stage1' ||
+    to === 'stage2' ||
+    to === 'stage3'
   const markers = useMemo(() => (model === null ? [] : markerLines(model)), [model])
+  const stagedMarkers = useMemo(
+    () => (model === null || !stagedView ? [] : stagedMarkerLines(model)),
+    [model, stagedView]
+  )
+  // The chunk buttons CodeMirror builds outlive a model refresh, so their
+  // handlers read the current model through a ref instead of a stale closure.
+  const modelRef = useRef<StagingModel | null>(null)
+  useEffect(() => {
+    modelRef.current = model
+  }, [model])
+  // The text Seam itself wrote when it reverted hunks. The watcher reports that
+  // write back like any other working-tree change, and this lets the viewer
+  // ignore its own change so the editor keeps the undo history that can bring
+  // the reverted lines back.
+  const revertedRef = useRef<{ key: string; text: string } | null>(null)
   const languageId = useMemo(
     () => detectLanguageId(path, firstLine(comparison?.to ?? comparison?.from ?? null)),
     [path, comparison]
@@ -310,7 +364,8 @@ export default function DiffView({
   // reads "Difference 1 of 6" rather than "0 of 6".
   const shownDifference =
     totalDifferences === 0 ? 0 : Math.min(Math.max(currentDifference, 1), totalDifferences)
-  const threePaneAvailable = !from.startsWith('stage') && !to.startsWith('stage')
+  const threePaneAvailable =
+    commit === undefined && !from.startsWith('stage') && !to.startsWith('stage')
 
   // The shell's status bar follows the open file: its language and the hunks
   // in either direction. Clearing on unmount keeps the previous file's data
@@ -328,13 +383,55 @@ export default function DiffView({
   // is set synchronously and a superseded request leaves no trace.
   useEffect(() => {
     let active = true
-    void window.seam.readFileComparison({ repo, path, from, to }).then((result) => {
+    const request =
+      commit === undefined
+        ? window.seam.readFileComparison({
+            repo,
+            path,
+            from: from as FileVersionSource,
+            to: to as FileVersionSource
+          })
+        : window.seam.readCommitFileComparison({ repo, commit, path, previousPath })
+    void request.then((result) => {
       if (!active) return
-      setFileState(
-        result.ok
-          ? { key: requestKey, comparison: result.value, error: null }
-          : { key: requestKey, comparison: null, error: result.message }
-      )
+      const reverted = revertedRef.current
+      if (
+        result.ok &&
+        reverted !== null &&
+        reverted.key === requestKey &&
+        sideText(result.value.to) === reverted.text
+      ) {
+        // The working copy already shows what was just read; a rebuild would
+        // throw away the undo entry the revert added.
+        return
+      }
+      revertedRef.current = null
+      if (!result.ok) {
+        displayedRef.current = { key: requestKey, comparison: null }
+        setFileState({ key: requestKey, comparison: null, error: result.message })
+        setCountedText(null)
+        return
+      }
+      const previous = displayedRef.current
+      if (
+        previous !== null &&
+        previous.key === requestKey &&
+        previous.comparison !== null &&
+        previous.comparison.binary === result.value.binary &&
+        sideText(previous.comparison.from) === sideText(result.value.from) &&
+        sideText(previous.comparison.to) === sideText(result.value.to)
+      ) {
+        // The two sides read back unchanged - a refresh caused by a change Seam
+        // already applied, for instance. Keeping the previous state leaves the
+        // editor, and the undo history that makes a revert undoable, untouched.
+        return
+      }
+      displayedRef.current = { key: requestKey, comparison: result.value }
+      // The working copy changed under the viewer - an external save or a file
+      // discarded from the list. The editable pane adopts the new text so the
+      // diff, its chunk buttons and the difference count follow it.
+      editableTextRef.current = sideText(result.value.to)
+      setFileState({ key: requestKey, comparison: result.value, error: null })
       // A freshly read comparison is the working-copy text again, so the count a
       // revert kept up to date is no longer needed.
       setCountedText(null)
@@ -342,13 +439,16 @@ export default function DiffView({
     return () => {
       active = false
     }
-  }, [repo, path, from, to, requestKey, revision])
+  }, [repo, path, from, to, commit, previousPath, requestKey, revision])
 
-  // Load the staging model, which only the working-copy side uses. It is read on
-  // its own so a revert, which bumps `modelRevision`, refreshes the markers
-  // without rereading the comparison and rebuilding the editors.
+  // Load the staging model. The working-copy side uses it for its margin
+  // markers; the staged side uses it to find the prepared hunk under a chunk.
+  // It is read on its own so a revert, which bumps `modelRevision`, refreshes
+  // the markers without rereading the comparison and rebuilding the editors.
   useEffect(() => {
-    if (to !== 'worktree') return
+    const wanted =
+      commit === undefined && (to === 'worktree' || (from === 'head' && to === 'index'))
+    if (!wanted) return
     let active = true
     void window.seam.readStagingModel({ repo, path }).then((result) => {
       if (!active) return
@@ -357,7 +457,7 @@ export default function DiffView({
     return () => {
       active = false
     }
-  }, [repo, path, to, requestKey, revision, modelRevision])
+  }, [repo, path, from, to, commit, requestKey, revision, modelRevision])
 
   // A change Git makes on disk - an `add` from the terminal, a commit, a
   // checkout - re-reads the file, so a hunk prepared elsewhere becomes a hollow
@@ -381,14 +481,50 @@ export default function DiffView({
     }
   }, [languageId])
 
+  // Read viewer options from settings, and read them again when the colour
+  // scheme flips: the light scheme changes which syntax palette is in use.
+  useEffect(() => {
+    let active = true
+    const read = (): void => {
+      void window.seam.readSettings().then((result) => {
+        if (!active || !result.ok) return
+        setGranularity(result.value.highlight)
+        setWhitespace(result.value.whitespace)
+        setCollapse(result.value.collapse)
+        setSyntaxTheme(result.value.syntaxTheme)
+        setContext(3) // context is not in settings yet, use default
+      })
+    }
+    read()
+    const observer = new MutationObserver(() => {
+      setLight(readsLight())
+      read()
+    })
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-theme']
+    })
+    window.addEventListener(SETTINGS_CHANGED, read)
+    return () => {
+      active = false
+      window.removeEventListener(SETTINGS_CHANGED, read)
+      observer.disconnect()
+    }
+  }, [])
+
   const handleMarker = useCallback(
     (marker: MarkerLine, event: MouseEvent) => {
-      const hunks = model === null ? { staged: [], unstaged: [] } : hunksAt(model, marker.line)
+      const hunks =
+        model === null
+          ? { staged: [], unstaged: [] }
+          : stagedView
+            ? { staged: stagedHunksAt(model, marker.line), unstaged: [] }
+            : hunksAt(model, marker.line)
       const selection =
-        model === null ? null : selectionAt(model, marker.line, selectionRef.current)
+        model === null || stagedView ? null : selectionAt(model, marker.line, selectionRef.current)
       setMenu({ key: requestKey, marker, hunks, selection, x: event.clientX, y: event.clientY })
     },
-    [requestKey, model]
+    [requestKey, model, stagedView]
   )
 
   // Prepare or remove the hunks a marker stands for. The index's text is rebuilt
@@ -424,40 +560,55 @@ export default function DiffView({
     },
     [repo, path, onChanged]
   )
+  // The editor's chunk buttons keep the handler they were built with; the ref
+  // makes them call the newest write function after the file changes.
+  const writeHunkRef = useRef(writeHunk)
+  useEffect(() => {
+    writeHunkRef.current = writeHunk
+  }, [writeHunk])
 
   // Throw a pending change away: the working copy's lines inside the hunks go
-  // back to the index's. It is destructive, so the viewer asks first and this
-  // only runs once the user confirms. The new text is applied to the editable
-  // pane as one change, so the editor's undo can bring the lines back while the
-  // viewer is open; only the markers are read again.
-  const revert = useCallback(async () => {
-    if (openConfirm === null) return
-    const hunks = openConfirm.hunks
-    setWriteError(null)
-    setWriting(true)
-    try {
-      const result = await window.seam.revertHunks({ repo, path, hunks })
-      if (!result.ok) {
-        setWriteError({ code: result.code, message: result.message })
-        return
-      }
-      const text = result.value
-      editableTextRef.current = text
-      const view = viewRef.current
-      if (view !== null && to === 'worktree') {
-        const length = view.state.doc.length
-        if (view.state.doc.toString() !== text) {
-          view.dispatch({ changes: { from: 0, to: length, insert: text } })
+  // back to the index's. It is destructive, but the editor's undo can bring the
+  // lines back while the viewer is open, so the viewer reverts straight away
+  // and only the markers are read again. The new text is applied to the
+  // editable pane as one change.
+  const revert = useCallback(
+    async (hunks: readonly HunkRange[]) => {
+      if (hunks.length === 0) return
+      setMenu(null)
+      setWriteError(null)
+      setWriting(true)
+      try {
+        const result = await window.seam.revertHunks({ repo, path, hunks })
+        if (!result.ok) {
+          setWriteError({ code: result.code, message: result.message })
+          return
         }
+        const text = result.value
+        revertedRef.current = { key: requestKey, text }
+        editableTextRef.current = text
+        const view = viewRef.current
+        if (view !== null && to === 'worktree') {
+          const length = view.state.doc.length
+          if (view.state.doc.toString() !== text) {
+            view.dispatch({ changes: { from: 0, to: length, insert: text } })
+          }
+        }
+        setCountedText(text)
+        setModelRevision((value) => value + 1)
+        onChanged?.()
+      } finally {
+        setWriting(false)
       }
-      setCountedText(text)
-      setModelRevision((value) => value + 1)
-      setConfirm(null)
-      onChanged?.()
-    } finally {
-      setWriting(false)
-    }
-  }, [openConfirm, repo, path, to, onChanged])
+    },
+    [repo, path, to, requestKey, onChanged]
+  )
+  // The editor's chunk buttons keep the handler they were built with; the ref
+  // makes them call the newest revert function after the file changes.
+  const revertRef = useRef(revert)
+  useEffect(() => {
+    revertRef.current = revert
+  }, [revert])
 
   // A click outside the gutter and the menu itself closes it, so the popup never
   // lingers over a file the user has moved on from.
@@ -478,9 +629,13 @@ export default function DiffView({
 
   const navigate = useCallback((direction: 1 | -1) => {
     const view = viewRef.current
-    const info = view ? getChunks(view.state) : null
+    if (view === null) {
+      onEdgeRef.current?.(direction)
+      return
+    }
+    const info = getChunks(view.state)
     const chunks = info?.chunks ?? []
-    if (view === null || chunks.length === 0) {
+    if (chunks.length === 0) {
       onEdgeRef.current?.(direction)
       return
     }
@@ -499,11 +654,52 @@ export default function DiffView({
     }
     const anchor = info?.side === 'b' ? chunk.fromB : chunk.fromA
     const end = info?.side === 'b' ? chunk.toB : chunk.toA
+    const from = info?.side === 'b' ? chunk.fromB : chunk.fromA
+    const to = info?.side === 'b' ? chunk.toB : chunk.toA
+    // Scroll so the difference appears in the center of the visible area
     view.dispatch({
       selection: { anchor },
-      effects: EditorView.scrollIntoView(end),
+      effects: EditorView.scrollIntoView(end, { y: 'center' }),
       userEvent: 'select.byChunk'
     })
+    // Flash the chunk by adding a temporary decoration via StateEffect
+    // Apply to the current view
+    const flashDecoration = Decoration.mark({
+      class: 'diff__flash',
+      inclusiveStart: false,
+      inclusiveEnd: false
+    }).range(from, to)
+    view.dispatch({
+      effects: [flashEffect.of(Decoration.set([flashDecoration]))]
+    })
+    // Also flash the other editor in side-by-side mode
+    const mergeView = (view as MergeViewHost).mergeView
+    if (mergeView && mergeView.a && mergeView.a !== view) {
+      const otherFrom = info?.side === 'b' ? chunk.fromA : chunk.fromB
+      const otherTo = info?.side === 'b' ? chunk.toA : chunk.toB
+      const otherFlashDecoration = Decoration.mark({
+        class: 'diff__flash',
+        inclusiveStart: false,
+        inclusiveEnd: false
+      }).range(otherFrom, otherTo)
+      mergeView.a.dispatch({
+        effects: [flashEffect.of(Decoration.set([otherFlashDecoration]))]
+      })
+    }
+    // Remove the flash after a short delay
+    setTimeout(() => {
+      if (viewRef.current) {
+        viewRef.current.dispatch({
+          effects: [flashEffect.of(Decoration.none)]
+        })
+        const merged = (viewRef.current as MergeViewHost).mergeView
+        if (merged?.a) {
+          merged.a.dispatch({
+            effects: [flashEffect.of(Decoration.none)]
+          })
+        }
+      }
+    }, 400)
   }, [])
 
   // Build or rebuild the merge view whenever the content or the options change.
@@ -522,7 +718,7 @@ export default function DiffView({
       editKeyRef.current = requestKey
     }
 
-    const editable = to === 'worktree'
+    const editable = worktreeView
     // Drop the selection only when the text it was made on is gone.
     const doc = editable ? editableTextRef.current : toText
     if (docRef.current !== doc) {
@@ -535,7 +731,9 @@ export default function DiffView({
         (change) => new Change(change.fromA, change.toA, change.fromB, change.toB)
       )
     const diffConfig = { override }
-    const collapseOption = collapse ? { margin: context, minSize: 1 } : undefined
+    // Large unchanged gaps are folded so the file reads as a series of blocks.
+    // The setting folds every gap, however small it is.
+    const collapseOption = { margin: context, minSize: collapse ? 1 : 13 }
 
     const common: Extension[] = [
       lineNumbers(),
@@ -560,8 +758,11 @@ export default function DiffView({
       ]),
       EditorView.lineWrapping,
       bracketMatching(),
-      oneDark,
-      changeTheme
+      // The light scheme paints its own syntax and chrome; the dark one keeps
+      // the palette that ships with CodeMirror, with the viewer's change tints
+      // layered on top. The light palette already carries the light tints.
+      ...(light ? [oneLight, lightSyntax(syntaxTheme)] : [oneDark, changeTheme]),
+      flashField
     ]
 
     const editableExtensions: Extension[] = [
@@ -569,7 +770,7 @@ export default function DiffView({
       history(),
       EditorState.readOnly.of(false),
       EditorView.editable.of(true),
-      gutter.of(editable && markers.length > 0 ? stagingGutter(markers, handleMarker) : []),
+      gutter.of(worktreeView && markers.length > 0 ? stagingGutter(markers, handleMarker) : []),
       EditorView.updateListener.of((update) => {
         if (update.docChanged) editableTextRef.current = update.state.doc.toString()
         if (update.selectionSet || update.docChanged) {
@@ -584,9 +785,75 @@ export default function DiffView({
       EditorView.editable.of(false)
     ]
 
+    // The staged view is read-only, but its index side still carries a hollow
+    // dot on every prepared hunk so the marker menu can take it back out.
+    const stagedExtensions: Extension[] = [
+      ...readOnlyExtensions,
+      gutter.of(
+        stagedView && stagedMarkers.length > 0 ? stagingGutter(stagedMarkers, handleMarker) : []
+      )
+    ]
+
     if (language) {
       editableExtensions.push(language)
       readOnlyExtensions.push(language)
+      stagedExtensions.push(language)
+    }
+
+    // CodeMirror's default Accept/Reject buttons only move a chunk between the
+    // two documents it keeps in memory. Seam's buttons stand for Git instead:
+    // Stage prepares the chunk in the index, Discard restores the staged
+    // version, and Unstage takes a prepared chunk back out.
+    const chunkLine = (event: MouseEvent): number | null => {
+      const target = event.currentTarget
+      if (!(target instanceof Element)) return null
+      const chunk = target.closest('.cm-deletedChunk')
+      const current = viewRef.current
+      if (chunk === null || current === null) return null
+      return current.state.doc.lineAt(current.posAtDOM(chunk)).number - 1
+    }
+    const handleChunk = (type: 'accept' | 'reject', event: MouseEvent): void => {
+      const currentModel = modelRef.current
+      const line = chunkLine(event)
+      if (currentModel === null || line === null) return
+      if (stagedView) {
+        const hunk = stagedHunksAt(currentModel, line)[0]
+        if (hunk === undefined) return
+        event.preventDefault()
+        event.stopPropagation()
+        void writeHunkRef.current('unstage', [hunk])
+        return
+      }
+      const hunk = hunksAt(currentModel, line).unstaged[0]
+      if (hunk === undefined) return
+      event.preventDefault()
+      event.stopPropagation()
+      if (type === 'accept') {
+        void writeHunkRef.current('stage', [hunk])
+      } else {
+        void revertRef.current([hunk])
+      }
+    }
+    const chunkButton = (type: 'accept' | 'reject'): HTMLElement => {
+      // A staged diff only has one direction: the index back to HEAD's version.
+      if (stagedView && type === 'reject') {
+        const hidden = document.createElement('span')
+        hidden.hidden = true
+        return hidden
+      }
+      const action = stagedView ? 'unstage' : type === 'accept' ? 'stage' : 'discard'
+      const button = document.createElement('button')
+      button.type = 'button'
+      button.name = type
+      button.className = `diff__chunk-button diff__chunk-button--${action}`
+      button.dataset.testid = `chunk-${action}`
+      button.textContent = t(`diff.chunk.${action}`)
+      button.onmousedown = (event) => handleChunk(type, event)
+      button.onclick = (event) => {
+        // Keyboard activation arrives as a click without a mouse's detail.
+        if (event.detail === 0) handleChunk(type, event)
+      }
+      return button
     }
 
     if (layout === 'unified') {
@@ -595,12 +862,17 @@ export default function DiffView({
         state: EditorState.create({
           doc: editable ? editableTextRef.current : toText,
           extensions: [
-            ...(editable ? editableExtensions : readOnlyExtensions),
+            ...(editable ? editableExtensions : stagedView ? stagedExtensions : readOnlyExtensions),
             unifiedMergeView({
               original: fromText,
               highlightChanges: effectiveGranularity !== 'none',
               gutter: true,
-              ...(collapseOption ? { collapseUnchanged: collapseOption } : {}),
+              // A commit's diff is history and an unresolved conflict's stages
+              // are read-only: neither has changes Seam can stage, discard or
+              // unstage. The working-tree and staged views keep the buttons.
+              mergeControls:
+                !resolvingConflict && (worktreeView || stagedView) ? chunkButton : false,
+              collapseUnchanged: collapseOption,
               diffConfig
             })
           ]
@@ -615,13 +887,20 @@ export default function DiffView({
 
     const merge = new MergeView({
       a: { doc: fromText, extensions: readOnlyExtensions },
-      b: { doc: editable ? editableTextRef.current : toText, extensions: editableExtensions },
+      b: {
+        doc: editable ? editableTextRef.current : toText,
+        extensions: editable
+          ? editableExtensions
+          : stagedView
+            ? stagedExtensions
+            : readOnlyExtensions
+      },
       parent: container,
       orientation: 'a-b',
       ...(editable ? { revertControls: 'a-to-b' as const } : {}),
       highlightChanges: effectiveGranularity !== 'none',
       gutter: true,
-      ...(collapseOption ? { collapseUnchanged: collapseOption } : {}),
+      collapseUnchanged: collapseOption,
       diffConfig
     })
     viewRef.current = merge.b
@@ -641,12 +920,17 @@ export default function DiffView({
     collapse,
     context,
     language,
+    light,
+    syntaxTheme,
+    from,
     to,
+    commit,
     fromText,
     toText,
     requestKey,
     gutter,
-    navigate
+    navigate,
+    t
   ])
 
   // Refresh the margin markers in place. A revert changes the staging model but
@@ -655,15 +939,12 @@ export default function DiffView({
   useEffect(() => {
     const view = viewRef.current
     if (view === null) return
+    const current = stagedView ? stagedMarkers : worktreeView ? markers : []
     view.dispatch({
-      effects: gutter.reconfigure(
-        to === 'worktree' && markers.length > 0 ? stagingGutter(markers, handleMarker) : []
-      )
+      effects: gutter.reconfigure(current.length > 0 ? stagingGutter(current, handleMarker) : [])
     })
-  }, [gutter, to, markers, handleMarker])
+  }, [gutter, stagedView, worktreeView, markers, stagedMarkers, handleMarker])
 
-  const nextDifference = useCallback(() => navigate(1), [navigate])
-  const previousDifference = useCallback(() => navigate(-1), [navigate])
   const menuTitle =
     openMenu === null
       ? ''
@@ -680,168 +961,96 @@ export default function DiffView({
       data-language={languageId ?? ''}
     >
       <div className="diff__toolbar" data-testid="diff-toolbar">
-        <div className="diff__layout" role="group" aria-label={t('diff.layout.label')}>
-          <button
-            type="button"
-            className={`diff__layout-button${layout === 'side-by-side' ? ' is-active' : ''}`}
-            aria-pressed={layout === 'side-by-side'}
-            onClick={() => setLayout('side-by-side')}
-          >
-            {t('diff.layout.side-by-side')}
-          </button>
-          <button
-            type="button"
-            className={`diff__layout-button${layout === 'unified' ? ' is-active' : ''}`}
-            aria-pressed={layout === 'unified'}
-            onClick={() => setLayout('unified')}
-          >
-            {t('diff.layout.unified')}
-          </button>
-          <button
-            type="button"
-            className={`diff__layout-button diff__layout-button--icon${
-              layout === 'three-pane' ? ' is-active' : ''
-            }`}
-            data-testid="diff-layout-three"
-            aria-label={t('diff.layout.three-pane')}
-            aria-pressed={layout === 'three-pane'}
-            title={t('diff.layout.three-pane')}
-            disabled={!threePaneAvailable}
-            onClick={() => setLayout('three-pane')}
-          >
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 14 14"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.2"
-              aria-hidden="true"
+        {/* The changes panel always shows the unified view. A conflict preview
+            is the one place the two layouts are worth choosing between. */}
+        {resolvingConflict && (
+          <div className="diff__layout" role="group" aria-label={t('diff.layout.label')}>
+            <button
+              type="button"
+              className={`diff__layout-button${layout === 'side-by-side' ? ' is-active' : ''}`}
+              aria-pressed={layout === 'side-by-side'}
+              onClick={() => setLayout('side-by-side')}
             >
-              <rect x="2" y="2" width="3" height="10" rx="0.5" />
-              <rect x="5.5" y="2" width="3" height="10" rx="0.5" />
-              <rect x="9" y="2" width="3" height="10" rx="0.5" />
-            </svg>
-          </button>
-          {/* The tests and assistive tech keep the native control; the visible
-              segment buttons are the pointer's way into the same state. */}
-          <select
-            className="diff__compat-select"
-            data-testid="diff-layout"
-            aria-hidden="true"
-            tabIndex={-1}
-            value={layout}
-            onChange={(event) => setLayout(event.target.value as DiffLayout)}
-          >
-            <option value="side-by-side">{t('diff.layout.side-by-side')}</option>
-            <option value="unified">{t('diff.layout.unified')}</option>
-            <option value="three-pane" disabled={!threePaneAvailable}>
-              {t('diff.layout.three-pane')}
-            </option>
-          </select>
-        </div>
+              {t('diff.layout.side-by-side')}
+            </button>
+            <button
+              type="button"
+              className={`diff__layout-button${layout === 'unified' ? ' is-active' : ''}`}
+              aria-pressed={layout === 'unified'}
+              onClick={() => setLayout('unified')}
+            >
+              {t('diff.layout.unified')}
+            </button>
+          </div>
+        )}
+        {/* The tests keep the native control; it is never visible, so the
+            layout switch cannot be reached outside a conflict. */}
+        <select
+          className="diff__compat-select"
+          data-testid="diff-layout"
+          aria-hidden="true"
+          tabIndex={-1}
+          value={layout}
+          onChange={(event) => setLayout(event.target.value as DiffLayout)}
+        >
+          <option value="side-by-side">{t('diff.layout.side-by-side')}</option>
+          <option value="unified">{t('diff.layout.unified')}</option>
+          <option value="three-pane" disabled={!threePaneAvailable}>
+            {t('diff.layout.three-pane')}
+          </option>
+        </select>
 
-        {layout !== 'three-pane' && (
-          <>
-            <label className="diff__control diff__control--granularity">
-              <span className="diff__control-label">{t('diff.granularity.label')}:</span>
-              <select
-                className="diff__control-select"
-                data-testid="diff-granularity"
-                value={effectiveGranularity}
-                disabled={binary || large}
-                onChange={(event) => setGranularity(event.target.value as HighlightGranularity)}
-              >
-                {GRANULARITIES.map((value) => (
-                  <option key={value} value={value}>
-                    {t(`diff.granularity.${value}`)}
-                  </option>
-                ))}
-              </select>
-              <ToolbarChevron />
-            </label>
+        <div className="diff__toolbar-spacer" />
 
-            <label className="diff__control diff__control--whitespace">
-              <span className="diff__control-label">{t('diff.whitespace.label')}:</span>
-              <select
-                className="diff__control-select"
-                data-testid="diff-whitespace"
-                value={whitespace}
-                onChange={(event) => setWhitespace(event.target.value as WhitespaceMode)}
-              >
-                {WHITESPACE_MODES.map((mode) => (
-                  <option key={mode} value={mode}>
-                    {t(`diff.whitespace.${mode}`)}
-                  </option>
-                ))}
-              </select>
-              <ToolbarChevron />
-            </label>
-
-            <label className="diff__control diff__control--check" title={t('diff.collapseHint')}>
-              <input
-                className="diff__check-input"
-                type="checkbox"
-                data-testid="diff-collapse"
-                checked={collapse}
-                onChange={(event) => setCollapse(event.target.checked)}
-              />
-              <span className="diff__check-box" aria-hidden="true">
-                <CheckMark />
-              </span>
-              <span>{t('diff.collapse')}</span>
-            </label>
-
-            {collapse && (
-              <label className="diff__control diff__control--context">
-                <input
-                  className="diff__number"
-                  data-testid="diff-context"
-                  type="number"
-                  min={0}
-                  max={50}
-                  value={context}
-                  aria-label={t('diff.context')}
-                  title={t('diff.context')}
-                  onChange={(event) => setContext(Math.max(0, Number(event.target.value) || 0))}
-                />
-              </label>
-            )}
-
-            <div className="diff__toolbar-spacer" />
-
-            {differenceCount !== null && (
-              <span className="diff__difference" aria-live="polite">
-                {t('diff.differenceOf', {
-                  current: shownDifference,
-                  total: differenceCount
-                })}
-              </span>
-            )}
-            <span className="sr-only" data-testid="diff-count" aria-hidden="true">
-              {totalDifferences}
+        {differenceCount !== null && (
+          <div className="diff__difference-nav" aria-live="polite">
+            <span className="diff__difference">
+              {t('diff.differenceOf', {
+                current: shownDifference,
+                total: differenceCount
+              })}
             </span>
-            <button
-              type="button"
-              className="icon-button"
-              data-testid="diff-previous"
-              aria-label={t('diff.navigation.previous')}
-              title={t('diff.navigation.previous')}
-              onClick={previousDifference}
-            >
-              <NavArrow direction="previous" />
-            </button>
-            <button
-              type="button"
-              className="icon-button"
-              data-testid="diff-next"
-              aria-label={t('diff.navigation.next')}
-              title={t('diff.navigation.next')}
-              onClick={nextDifference}
-            >
-              <NavArrow direction="next" />
-            </button>
-          </>
+            <div className="diff__nav-buttons">
+              <button
+                type="button"
+                className="icon-button diff__nav-button"
+                aria-label={t('diff.navigation.previous')}
+                disabled={shownDifference <= 1 || totalDifferences === 0}
+                onClick={() => navigate(-1)}
+              >
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 12 12"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  aria-hidden="true"
+                >
+                  <path d="M6 2L2 6L6 10" />
+                </svg>
+              </button>
+              <button
+                type="button"
+                className="icon-button diff__nav-button"
+                aria-label={t('diff.navigation.next')}
+                disabled={shownDifference >= totalDifferences || totalDifferences === 0}
+                onClick={() => navigate(1)}
+              >
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 12 12"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  aria-hidden="true"
+                >
+                  <path d="M6 10L10 6L6 2" />
+                </svg>
+              </button>
+            </div>
+          </div>
         )}
       </div>
 
@@ -862,29 +1071,6 @@ export default function DiffView({
         <p className="diff__error" role="alert" data-testid="diff-write-error">
           {t(ERROR_KEYS[writeError.code])} {writeError.message}
         </p>
-      )}
-      {openConfirm !== null && (
-        <div className="diff__confirm" role="alertdialog" data-testid="revert-confirm">
-          <span className="diff__confirm-text">{t('diff.hunk.revertConfirm')}</span>
-          <button
-            type="button"
-            className="diff__button diff__button--danger"
-            data-testid="revert-accept"
-            disabled={writing}
-            onClick={() => void revert()}
-          >
-            {t('diff.hunk.revertAccept')}
-          </button>
-          <button
-            type="button"
-            className="diff__button"
-            data-testid="revert-cancel"
-            disabled={writing}
-            onClick={() => setConfirm(null)}
-          >
-            {t('diff.hunk.revertCancel')}
-          </button>
-        </div>
       )}
       {binary && (
         <p className="diff__notice" data-testid="diff-binary">
@@ -911,7 +1097,7 @@ export default function DiffView({
               <button
                 type="button"
                 role="menuitem"
-                className="diff__hunk-action diff__hunk-action--primary"
+                className="diff__hunk-action diff__hunk-action--stage"
                 data-testid="hunk-stage"
                 disabled={writing || openMenu.hunks.unstaged.length === 0}
                 onClick={() => void writeHunk('stage', openMenu.hunks.unstaged)}
@@ -923,7 +1109,7 @@ export default function DiffView({
               <button
                 type="button"
                 role="menuitem"
-                className="diff__hunk-action"
+                className="diff__hunk-action diff__hunk-action--stage diff__hunk-action--quiet"
                 data-testid="hunk-stage-selection"
                 disabled={writing || openMenu.selection === null}
                 onClick={() => {
@@ -938,7 +1124,7 @@ export default function DiffView({
               <button
                 type="button"
                 role="menuitem"
-                className="diff__hunk-action diff__hunk-action--primary"
+                className="diff__hunk-action diff__hunk-action--unstage"
                 data-testid="hunk-unstage"
                 disabled={writing || openMenu.hunks.staged.length === 0}
                 onClick={() => void writeHunk('unstage', openMenu.hunks.staged)}
@@ -946,19 +1132,18 @@ export default function DiffView({
                 {t('diff.hunk.unstage')}
               </button>
             )}
-            <button
-              type="button"
-              role="menuitem"
-              className="diff__hunk-action"
-              data-testid="hunk-revert"
-              disabled={writing || openMenu.hunks.unstaged.length === 0}
-              onClick={() => {
-                setConfirm({ key: requestKey, hunks: openMenu.hunks.unstaged })
-                setMenu(null)
-              }}
-            >
-              {t('diff.hunk.revert')}
-            </button>
+            {openMenu.marker.unstaged && (
+              <button
+                type="button"
+                role="menuitem"
+                className="diff__hunk-action diff__hunk-action--discard"
+                data-testid="hunk-revert"
+                disabled={writing || openMenu.hunks.unstaged.length === 0}
+                onClick={() => void revert(openMenu.hunks.unstaged)}
+              >
+                {t('diff.hunk.revert')}
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -969,7 +1154,7 @@ export default function DiffView({
           path={path}
           language={languageName(languageId)}
           {...(onChanged === undefined ? {} : { onChanged })}
-          onExit={() => setLayout('side-by-side')}
+          onExit={() => setLayout(resolvingConflict ? 'side-by-side' : 'unified')}
         />
       ) : (
         <div className="diff__panes" data-testid="diff-panes" ref={containerRef} />

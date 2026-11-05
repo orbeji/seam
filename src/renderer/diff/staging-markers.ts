@@ -41,10 +41,13 @@ export interface MarkerHunks {
   readonly unstaged: readonly HunkRange[]
 }
 
-/** Whether a marker at `start`, covering `count` lines, sits on `line`. */
+/** Whether a hunk at `start`, covering `count` lines, sits on `line`. */
 function covers(start: number, count: number, line: number, total: number): boolean {
   if (count > 0) return line >= start && line < start + count
-  return total > 0 && pointLine(start, total) === line
+  // A pure deletion is a point between two lines. An empty side has only one
+  // point, the first line of the empty document, which is where the viewer
+  // draws the change.
+  return (total === 0 ? 0 : pointLine(start, total)) === line
 }
 
 /** One unstaged hunk with the lines of it a partial preparation takes. */
@@ -102,12 +105,24 @@ export function hunksAt(model: StagingModel, line: number): MarkerHunks {
 }
 
 /**
- * The working-copy lines that carry a marker, in order. When a prepared and a
- * pending change cover the same line, one marker carries both flags rather than
- * two markers fighting for the same slot.
+ * The prepared hunks under a line of the index side. It is the staged view's
+ * counterpart to hunksAt: that side shows HEAD against the index, so the hunk's
+ * index lines are the ones the viewer draws and the button can reach.
  */
-export function markerLines(model: StagingModel): MarkerLine[] {
-  const total = model.worktree?.lines.length ?? 0
+export function stagedHunksAt(model: StagingModel, line: number): HunkRange[] {
+  const total = model.index?.lines.length ?? 0
+  return model.staged.filter((hunk) => covers(hunk.bStart, hunk.bLines, line, total))
+}
+
+/** One line that carries a marker, with the flags the renderer draws. */
+interface MarkerEntry {
+  readonly start: number
+  readonly lines: number
+  readonly staged: boolean
+}
+
+/** Builds the markers of one side from the hunks that sit on its lines. */
+function collectMarkers(total: number, entries: readonly MarkerEntry[]): MarkerLine[] {
   const byLine = new Map<number, Flags>()
 
   const mark = (line: number, staged: boolean): void => {
@@ -128,10 +143,43 @@ export function markerLines(model: StagingModel): MarkerLine[] {
     }
   }
 
-  for (const hunk of model.unstaged) cover(hunk.bStart, hunk.bLines, false)
-  for (const placed of model.stagedInWorktree) cover(placed.start, placed.lines, true)
+  for (const entry of entries) cover(entry.start, entry.lines, entry.staged)
 
   return [...byLine.entries()]
     .sort(([left], [right]) => left - right)
     .map(([line, flags]) => ({ line, staged: flags.staged, unstaged: flags.unstaged }))
+}
+
+/**
+ * The working-copy lines that carry a marker, in order. When a prepared and a
+ * pending change cover the same line, one marker carries both flags rather than
+ * two markers fighting for the same slot.
+ */
+export function markerLines(model: StagingModel): MarkerLine[] {
+  const total = model.worktree?.lines.length ?? 0
+  return collectMarkers(total, [
+    ...model.unstaged.map((hunk) => ({
+      start: hunk.bStart,
+      lines: hunk.bLines,
+      staged: false
+    })),
+    ...model.stagedInWorktree.map((placed) => ({
+      start: placed.start,
+      lines: placed.lines,
+      staged: true
+    }))
+  ])
+}
+
+/**
+ * The index lines that hold a prepared change, for the staged view. Only hollow
+ * prepared markers appear there: the viewer is showing what the next commit
+ * would record, so every change on screen can be taken back out of the index.
+ */
+export function stagedMarkerLines(model: StagingModel): MarkerLine[] {
+  const total = model.index?.lines.length ?? 0
+  return collectMarkers(
+    total,
+    model.staged.map((hunk) => ({ start: hunk.bStart, lines: hunk.bLines, staged: true }))
+  )
 }

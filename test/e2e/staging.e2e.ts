@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { _electron as electron, type ElectronApplication, type Page } from 'playwright-core'
@@ -57,6 +57,35 @@ async function waitFor(condition: () => Promise<boolean>, what: string): Promise
 }
 
 describe('staging from the lists', () => {
+  it('discards a file from its row context menu', async () => {
+    const row = page.locator('[data-testid=unstaged] [data-testid=entry]', {
+      hasText: 'tracked.txt'
+    })
+    // Open it first: discarding must also clear the viewer, not only the row.
+    await row.click()
+    await page.waitForSelector('[data-testid=diff-panes] .cm-chunkButtons button[name=accept]')
+
+    await row.click({ button: 'right' })
+    await page.waitForSelector('[data-testid=file-menu]')
+    await page.locator('[data-testid=file-discard]').click()
+
+    await waitFor(
+      async () => readFileSync(join(samples.mixed, 'tracked.txt'), 'utf8') === 'tracked\n',
+      'tracked.txt to go back to the index version'
+    )
+    await waitFor(
+      async () => (await page.locator('[data-testid=unstaged] [data-testid=entry]').count()) === 7,
+      'the unstaged list to drop the discarded row'
+    )
+    await waitFor(
+      async () => (await page.locator('[data-testid=diff-close]').count()) === 0,
+      'the viewer tab to close'
+    )
+    expect(await page.locator('[data-testid=diff-panes]').count()).toBe(0)
+    expect(await page.locator('[data-testid=file-menu]').count()).toBe(0)
+    expect(await count('staged')).toBe(4)
+  })
+
   it('stages a file from its row, then unstages the staged section', async () => {
     expect(await count('staged')).toBe(4)
     expect(await count('untracked')).toBe(1)

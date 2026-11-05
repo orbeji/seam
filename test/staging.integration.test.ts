@@ -3,7 +3,7 @@
 import { mkdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { GitRunner, stagePaths, unstagePaths } from '../src/core/git'
+import { GitRunner, discardPaths, stagePaths, unstagePaths } from '../src/core/git'
 import { createRepository, type SampleRepository } from './fixtures/repository'
 
 const runner = new GitRunner()
@@ -74,8 +74,33 @@ describe('staging one file', () => {
 
     await stagePaths(runner, repo.path, [])
     await unstagePaths(runner, repo.path, [])
+    await discardPaths(runner, repo.path, [])
 
     expect(await porcelain(repo)).toEqual([' M tracked.txt'])
+  })
+})
+
+describe('discarding working-tree changes', () => {
+  it('restores a modified file from the index and keeps the prepared change', async () => {
+    const repo = await committed()
+    repo.write('tracked.txt', 'prepared\n')
+    await stagePaths(runner, repo.path, ['tracked.txt'])
+    repo.write('tracked.txt', 'pending\n')
+
+    await discardPaths(runner, repo.path, ['tracked.txt'])
+
+    expect(repo.read('tracked.txt')).toBe('prepared\n')
+    expect(await porcelain(repo)).toEqual(['M  tracked.txt'])
+  })
+
+  it('restores a file deleted from the working tree', async () => {
+    const repo = await committed()
+    repo.remove('tracked.txt')
+
+    await discardPaths(runner, repo.path, ['tracked.txt'])
+
+    expect(repo.read('tracked.txt')).toBe('base\n')
+    expect(await porcelain(repo)).toEqual([])
   })
 })
 

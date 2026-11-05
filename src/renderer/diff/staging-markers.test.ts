@@ -3,7 +3,14 @@
 import { describe, expect, it } from 'vitest'
 import { buildFileModel } from '../../core/diff'
 import type { TextLines } from '../../core/text'
-import { hunkPatchLines, markerLines, selectionAt, type MarkerLine } from './staging-markers'
+import {
+  hunkPatchLines,
+  markerLines,
+  selectionAt,
+  stagedHunksAt,
+  stagedMarkerLines,
+  type MarkerLine
+} from './staging-markers'
 
 function lines(contents: readonly string[]): TextLines {
   return { lines: [...contents], finalNewline: false }
@@ -81,6 +88,43 @@ describe('the staging margin markers', () => {
     expect(markers(['a'], ['a', 'b'], ['a', 'b'])).toEqual([
       { line: 1, staged: true, unstaged: false }
     ])
+  })
+})
+
+describe('the staged view markers', () => {
+  it('draws hollow markers on the index lines of prepared hunks', () => {
+    const model = buildFileModel(
+      lines(['a', 'b', 'c']),
+      lines(['a', 'X', 'Y', 'c']),
+      lines(['a', 'X', 'Y', 'c'])
+    )
+
+    expect(stagedMarkerLines(model)).toEqual([
+      { line: 1, staged: true, unstaged: false },
+      { line: 2, staged: true, unstaged: false }
+    ])
+  })
+
+  it('finds the prepared hunk under an index line', () => {
+    const model = buildFileModel(
+      lines(['a', 'b', 'c']),
+      lines(['a', 'X', 'c']),
+      lines(['a', 'X', 'c'])
+    )
+    const hunk = model.staged[0]
+    expect(hunk).toBeDefined()
+
+    expect(stagedHunksAt(model, 1)).toEqual([hunk])
+    expect(stagedHunksAt(model, 0)).toEqual([])
+  })
+
+  it('finds a prepared deletion when the index is empty', () => {
+    const model = buildFileModel(lines(['a']), lines([]), lines([]))
+    const hunk = model.staged[0]
+    expect(hunk).toBeDefined()
+
+    expect(stagedHunksAt(model, 0)).toEqual([hunk])
+    expect(stagedMarkerLines(model)).toEqual([])
   })
 })
 

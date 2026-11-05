@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-import { writeFileSync } from 'node:fs'
+import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { GitWatcher } from '../src/main/session/git-watcher'
@@ -43,19 +43,42 @@ describe('GitWatcher', () => {
     }
   })
 
-  it('ignores edits to the working tree', async () => {
+  it('reports an edit to the working tree', async () => {
     const repo = await repository()
     let changes = 0
-    const watcher = new GitWatcher(gitDir(repo), () => {
-      changes += 1
-    })
+    const watcher = new GitWatcher(
+      gitDir(repo),
+      () => {
+        changes += 1
+      },
+      { workingTree: repo.path }
+    )
 
     try {
-      // Writing a tracked file changes only the working tree, which is not
-      // watched: the interface refreshes those on window focus instead.
+      // Writing a tracked file changes only the working tree; an editor's save
+      // must reach the interface just like a Git command would.
       repo.write('a.txt', 'two\n')
-      await new Promise((resolve) => setTimeout(resolve, 400))
-      expect(changes).toBe(0)
+      await vi.waitFor(() => expect(changes).toBeGreaterThan(0), { timeout: 5000 })
+    } finally {
+      watcher.close()
+    }
+  })
+
+  it('reports an edit below the working tree root', async () => {
+    const repo = await repository()
+    mkdirSync(join(repo.path, 'nested'))
+    let changes = 0
+    const watcher = new GitWatcher(
+      gitDir(repo),
+      () => {
+        changes += 1
+      },
+      { workingTree: repo.path }
+    )
+
+    try {
+      writeFileSync(join(repo.path, 'nested', 'new.txt'), 'new\n')
+      await vi.waitFor(() => expect(changes).toBeGreaterThan(0), { timeout: 5000 })
     } finally {
       watcher.close()
     }

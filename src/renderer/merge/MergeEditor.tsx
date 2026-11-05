@@ -3,6 +3,8 @@
 import { MergeView } from '@codemirror/merge'
 import { EditorState } from '@codemirror/state'
 import { oneDark } from '@codemirror/theme-one-dark'
+import { oneLight, lightSyntax, readsLight } from '../diff/theme'
+import { SETTINGS_CHANGED } from '../settings-events'
 import { EditorView, drawSelection, lineNumbers } from '@codemirror/view'
 import {
   useEffect,
@@ -21,7 +23,7 @@ import {
   type MergeState,
   type NonConflictingSelection
 } from '../../core/merge'
-import type { IpcErrorCode, MergeEditorModel } from '../../shared/ipc'
+import type { IpcErrorCode, MergeEditorModel, SyntaxThemePreference } from '../../shared/ipc'
 import { ERROR_KEYS } from '../errors'
 import { detectLanguageId, languageName } from '../diff/languages'
 import { splitPath } from '../paths'
@@ -185,17 +187,46 @@ function CompareOverlay({
 }): ReactNode {
   const { t } = useTranslation()
   const container = useRef<HTMLDivElement | null>(null)
+  // The light palette the comparison wears, from the settings, and whether the
+  // window is in the light scheme at all.
+  const [syntaxTheme, setSyntaxTheme] = useState<SyntaxThemePreference>('seam')
+  const [light, setLight] = useState(() => readsLight())
+
+  useEffect(() => {
+    let active = true
+    const read = (): void => {
+      void window.seam.readSettings().then((result) => {
+        if (active && result.ok) setSyntaxTheme(result.value.syntaxTheme)
+      })
+    }
+    read()
+    const observer = new MutationObserver(() => {
+      setLight(readsLight())
+      read()
+    })
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-theme']
+    })
+    window.addEventListener(SETTINGS_CHANGED, read)
+    return () => {
+      active = false
+      window.removeEventListener(SETTINGS_CHANGED, read)
+      observer.disconnect()
+    }
+  }, [])
 
   useEffect(() => {
     const parent = container.current
     if (parent === null) return
     parent.replaceChildren()
+    const codeMirrorTheme = light ? [oneLight, lightSyntax(syntaxTheme)] : [oneDark]
     const extensions = [
       lineNumbers(),
       drawSelection(),
       EditorState.readOnly.of(true),
       EditorView.editable.of(false),
-      oneDark
+      ...codeMirrorTheme
     ]
     const merge = new MergeView({
       a: { doc: left, extensions },
@@ -206,7 +237,7 @@ function CompareOverlay({
     return () => {
       merge.destroy()
     }
-  }, [left, right])
+  }, [left, right, light, syntaxTheme])
 
   return (
     <div className="merge__overlay" role="dialog" aria-modal="true" data-testid="merge-compare">

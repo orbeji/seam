@@ -45,6 +45,25 @@
   --green: #3fb27f;
   --blue: #5b9cf0;
   --purple: #c4a0ee;
+  --teal: #47b8c4;
+  --action: #5b9cf0;
+  --action-hover: #79b0f7;
+  --action-ink: #0f1114;
+  --action-badge: rgb(255 255 255 / 28%);
+  --diff-add: #8fdbb0;
+  --diff-del: #f0a0a0;
+  --diff-mod: #9fe3bd;
+  --diff-mod-bg: rgba(159, 227, 189, 0.16);
+  --diff-bg: #17181b;
+  --discard: #f0a0a0;
+  --graph-0: #e8a33d;
+  --graph-1: #5b9cf0;
+  --graph-2: #3fb27f;
+  --graph-3: #c4a0ee;
+  --graph-4: #f0674f;
+  --graph-5: #47b8c4;
+  --graph-6: #d17fb4;
+  --graph-7: #9aa56a;
   font-family:
     'IBM Plex Sans',
     system-ui,
@@ -54,6 +73,138 @@
     sans-serif;
   font-size: 13px;
   line-height: 1.4;
+}
+
+/* System preference fallback - only when no explicit theme is set */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    color-scheme: light;
+    --bg: #f5f5f7;
+    --background: #f5f5f7;
+    --panel: #ffffff;
+    --bar: #e8e8ed;
+    --surface: #ffffff;
+    --surface-raised: #f5f5f7;
+    --control: #e8e8ed;
+    --surface-hover: #d1d1d6;
+    --border: #d1d1d6;
+    --border-strong: #b4b4bb;
+    --text: #1d1d1f;
+    --text-muted: #6e6e73;
+    --text-dim: #86868b;
+    --accent: #b8860b;
+    --accent-hover: #996e09;
+    --accent-ink: #ffffff;
+    --conflict: #c0392b;
+    --red: #c0392b;
+    --green: #2e7d32;
+    --blue: #1a73e8;
+    --purple: #7b2dbf;
+    --teal: #0f7c86;
+    --action: #1a73e8;
+    --action-hover: #1663c8;
+    --action-ink: #ffffff;
+    --action-badge: rgb(0 0 0 / 20%);
+    --diff-add: #4e946a;
+    --diff-del: #c06a6a;
+    --diff-mod: #5b9d78;
+    --diff-mod-bg: rgba(91, 157, 120, 0.14);
+    --diff-bg: #ffffff;
+    --discard: #c06a6a;
+    --graph-0: #b8860b;
+    --graph-1: #1a73e8;
+    --graph-2: #2e7d32;
+    --graph-3: #7b2dbf;
+    --graph-4: #c0392b;
+    --graph-5: #0f7c86;
+    --graph-6: #a13e7c;
+    --graph-7: #6d763a;
+    --selection: #e8eef7;
+  }
+}
+
+/* Explicit dark theme via data-theme attribute (forces dark regardless of system) */
+[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #17181b;
+  --background: #17181b;
+  --panel: #1b1c20;
+  --bar: #1e2024;
+  --surface: #1b1c20;
+  --surface-raised: #1e2024;
+  --control: #25272c;
+  --surface-hover: #33363d;
+  --border: #2a2c32;
+  --border-strong: #3a3d44;
+  --text: #e6e7ea;
+  --text-muted: #9a9ea8;
+  --text-dim: #8b909a;
+  --accent: #e8a33d;
+  --accent-hover: #f0b355;
+  --accent-ink: #17181b;
+  --conflict: #f0674f;
+  --red: #f0674f;
+  --green: #3fb27f;
+  --blue: #5b9cf0;
+  --purple: #c4a0ee;
+  --teal: #47b8c4;
+  --action: #5b9cf0;
+  --action-hover: #79b0f7;
+  --action-ink: #0f1114;
+  --action-badge: rgb(255 255 255 / 28%);
+  --diff-add: #8fdbb0;
+  --diff-del: #f0a0a0;
+  --diff-mod: #9fe3bd;
+  --diff-mod-bg: rgba(159, 227, 189, 0.16);
+  --diff-bg: #17181b;
+  --discard: #f0a0a0;
+  --selection: #2b2e35;
+}
+
+/* Explicit light theme via data-theme attribute */
+[data-theme='light'] {
+  color-scheme: light;
+  --bg: #f5f5f7;
+  --background: #f5f5f7;
+  --panel: #ffffff;
+  --bar: #e8e8ed;
+  --surface: #ffffff;
+  --surface-raised: #f5f5f7;
+  --control: #e8e8ed;
+  --surface-hover: #d1d1d6;
+  --border: #d1d1d6;
+  --border-strong: #b4b4bb;
+  --text: #1d1d1f;
+  --text-muted: #6e6e73;
+  --text-dim: #86868b;
+  --accent: #b8860b;
+  --accent-hover: #996e09;
+  --accent-ink: #ffffff;
+  --conflict: #c0392b;
+  --red: #c0392b;
+  --green: #2e7d32;
+  --blue: #1a73e8;
+  --purple: #7b2dbf;
+  --teal: #0f7c86;
+  --action: #1a73e8;
+  --action-hover: #1663c8;
+  --action-ink: #ffffff;
+  --action-badge: rgb(0 0 0 / 20%);
+  --diff-add: #4e946a;
+  --diff-del: #c06a6a;
+  --diff-mod: #5b9d78;
+  --diff-mod-bg: rgba(91, 157, 120, 0.14);
+  --diff-bg: #ffffff;
+  --discard: #c06a6a;
+  --graph-0: #b8860b;
+  --graph-1: #1a73e8;
+  --graph-2: #2e7d32;
+  --graph-3: #7b2dbf;
+  --graph-4: #c0392b;
+  --graph-5: #0f7c86;
+  --graph-6: #a13e7c;
+  --graph-7: #6d763a;
+  --selection: #e8eef7;
 }
 
 * {
@@ -142,7 +293,8 @@ textarea {
   border-bottom: 1px solid var(--border);
 }
 
-.topbar__brand {
+.repobar__brand {
+  flex: none;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -151,63 +303,9 @@ textarea {
   color: var(--text);
 }
 
-.topbar__logo {
+.repobar__logo {
   color: var(--accent);
   flex: none;
-}
-
-.topbar__picker {
-  position: relative;
-  min-width: 0;
-}
-
-.topbar__repo {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  max-width: 260px;
-  height: 28px;
-  padding: 0 10px;
-  background: var(--control);
-  border: 1px solid var(--border-strong);
-  border-radius: 6px;
-  color: var(--text);
-  cursor: pointer;
-}
-
-.topbar__repo:hover {
-  background: var(--surface-hover);
-  border-color: var(--border-strong);
-}
-
-.topbar__repo:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-}
-
-.topbar__repo-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.topbar__menu {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 0;
-  z-index: 30;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 280px;
-  max-width: 440px;
-  max-height: 320px;
-  overflow-y: auto;
-  padding: 6px;
-  background: var(--control);
-  border: 1px solid var(--border-strong);
-  border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
 }
 
 .topbar__menu-title {
@@ -274,17 +372,268 @@ textarea {
   white-space: nowrap;
 }
 
+.topbar__branch-picker {
+  position: relative;
+}
+
+.topbar__branch:hover:not(:disabled) {
+  background: var(--surface-hover);
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.topbar__branch:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.topbar__branch-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 240px;
+  max-width: 400px;
+  max-height: 400px;
+  overflow-y: auto;
+  padding: 6px;
+  background: var(--control);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+.topbar__menu-item--branch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-direction: row;
+}
+
+/* Folder groups: a row with the fold toggle and the folder name, and the
+   nested rows under it. Each nesting level indents once more. */
+.topbar__branch-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.topbar__branch-folder {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 6px 3px 2px;
+  color: var(--text-dim);
+}
+
+.topbar__folder-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.topbar__folder-toggle:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.topbar__folder-toggle svg {
+  transition: transform 0.12s ease;
+}
+
+.topbar__folder-toggle--folded svg {
+  transform: rotate(-90deg);
+}
+
+.topbar__folder-icon {
+  flex: none;
+  color: var(--text-dim);
+}
+
+.topbar__branch-folder-children {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-left: 14px;
+  border-left: 1px solid var(--border);
+  margin-left: 10px;
+}
+
+.topbar__menu-item--branch .topbar__menu-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.topbar__menu-item--branch .topbar__menu-path {
+  flex: none;
+  color: var(--text-dim);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+  text-align: left;
+}
+
+.topbar__menu-badge {
+  flex: none;
+  padding: 0 6px;
+  border-radius: 9px;
+  background: var(--green);
+  color: var(--accent-ink);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.topbar__menu-item--current {
+  background: var(--surface-hover);
+}
+
+.topbar__menu-item--current:hover {
+  background: var(--surface-hover);
+}
+
 .topbar__spacer {
   flex: 1;
 }
 
-/* Push sits next to refresh, compact enough for the 40px bar. */
-.topbar__push {
+/* Push, fetch and pull sit next to each other, compact enough for the 40px bar. */
+.topbar__push,
+.topbar__fetch,
+.topbar__pull,
+.topbar__merge,
+.topbar__branch-action,
+.topbar__gitflow {
   min-height: 26px;
   height: 26px;
   padding: 0 10px;
   gap: 5px;
   font-size: 12px;
+}
+
+/* Top-bar actions are grouped by what they act on: branch work is purple,
+   remote work is blue, and Git Flow is green. None of them use the amber
+   accent, which stays reserved for primary actions such as committing. */
+.button.topbar__merge,
+.button.topbar__branch-action {
+  background: var(--purple);
+  border-color: var(--purple);
+  color: var(--action-ink);
+}
+
+.button.topbar__fetch,
+.button.topbar__pull,
+.button.topbar__push {
+  background: var(--blue);
+  border-color: var(--blue);
+  color: var(--action-ink);
+}
+
+.button.topbar__gitflow {
+  background: var(--green);
+  border-color: var(--green);
+  color: var(--action-ink);
+}
+
+.button.topbar__merge:hover:not(:disabled),
+.button.topbar__branch-action:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--purple) 85%, var(--text));
+  border-color: color-mix(in srgb, var(--purple) 85%, var(--text));
+}
+
+.button.topbar__fetch:hover:not(:disabled),
+.button.topbar__pull:hover:not(:disabled),
+.button.topbar__push:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--blue) 85%, var(--text));
+  border-color: color-mix(in srgb, var(--blue) 85%, var(--text));
+}
+
+.button.topbar__gitflow:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--green) 85%, var(--text));
+  border-color: color-mix(in srgb, var(--green) 85%, var(--text));
+}
+
+/* A hairline between branch work and remote work, so the two groups read as
+   separate clusters without another label. */
+.topbar__divider {
+  flex: none;
+  width: 1px;
+  height: 18px;
+  margin: 0 2px;
+  background: var(--border-strong);
+}
+
+/* History is browsing, not a remote operation: it sits beside the repository
+   and branch pickers with its own teal, so it stands out from the neutral
+   pickers without borrowing the branch, remote, Git Flow or primary-action
+   colors. */
+.topbar__history {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  background: var(--teal);
+  border: 1px solid var(--teal);
+  border-radius: 6px;
+  color: var(--action-ink);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.topbar__history:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--teal) 85%, var(--text));
+  border-color: color-mix(in srgb, var(--teal) 85%, var(--text));
+  color: var(--action-ink);
+}
+
+.topbar__history[aria-pressed='true'] {
+  background: color-mix(in srgb, var(--teal) 75%, var(--text));
+  border-color: color-mix(in srgb, var(--teal) 75%, var(--text));
+  color: var(--action-ink);
+}
+
+.topbar__history:disabled {
+  background: var(--control);
+  border-color: var(--border);
+  color: var(--text-dim);
+  cursor: default;
+}
+
+.topbar__history:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.topbar__count {
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--action-badge);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
 }
 
 .topbar__language-select {
@@ -307,11 +656,417 @@ textarea {
   outline-offset: 1px;
 }
 
+/* The repository tab strip: one tab per open repository, then the arrow that
+   reopens a closed one and the plus that adds a new one. */
+.repobar {
+  flex: none;
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  height: 36px;
+  padding: 0 8px 0 10px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+
+.repobar__tabs {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+}
+
+.repobar__tabs::-webkit-scrollbar {
+  height: 4px;
+}
+
+.repobar__tabs::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 2px;
+}
+
+.repobar__tab {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  max-width: 240px;
+  margin-top: 5px;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: 6px 6px 0 0;
+  color: var(--text-muted);
+  transition:
+    background 120ms ease,
+    color 120ms ease;
+}
+
+.repobar__tab:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.repobar__tab--active,
+.repobar__tab--active:hover {
+  background: var(--bg);
+  border-color: var(--border-strong);
+  color: var(--text);
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+
+.repobar__tab-button {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 30px;
+  padding: 0 4px 0 10px;
+  border: 0;
+  border-radius: 6px 0 0 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.repobar__tab-button:focus-visible,
+.repobar__tab-close:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.repobar__tab-name {
+  display: block;
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.repobar__tab-close {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin-right: 4px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity 120ms ease,
+    background 120ms ease,
+    color 120ms ease;
+}
+
+.repobar__tab:hover .repobar__tab-close,
+.repobar__tab--active .repobar__tab-close,
+.repobar__tab-close:focus-visible {
+  opacity: 1;
+}
+
+.repobar__tab-close:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.repobar__empty {
+  display: flex;
+  align-items: center;
+  padding: 0 4px;
+  color: var(--text-dim);
+  font-size: 12px;
+  font-style: italic;
+  white-space: nowrap;
+}
+
+.repobar__actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.repobar__anchor {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.repobar__action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.repobar__action:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.repobar__action:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.repobar__action--add {
+  border-color: var(--border-strong);
+  background: var(--control);
+  color: var(--text);
+}
+
+.repobar__action--add:hover {
+  background: var(--surface-hover);
+}
+
+.repobar__menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 240px;
+  max-width: 440px;
+  max-height: 360px;
+  overflow-y: auto;
+  padding: 6px;
+  background: var(--control);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+.repobar__menu-title {
+  margin: 6px 8px 2px;
+  color: var(--text-dim);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.repobar__menu-item {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.repobar__menu-item:hover,
+.repobar__menu-item:focus-visible {
+  background: var(--surface-hover);
+  outline: none;
+}
+
+.repobar__menu-item--action {
+  flex-direction: row;
+  align-items: center;
+}
+
+.repobar__menu-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.repobar__menu-path {
+  color: var(--text-dim);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+  text-align: left;
+}
+
+.repobar__menu-row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  border-radius: 5px;
+  transition: background 120ms ease;
+}
+
+.repobar__menu-row:hover,
+.repobar__menu-row:focus-within {
+  background: var(--surface-hover);
+}
+
+.repobar__menu-item--recent {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* The whole row is the hover surface, so the recent button stays transparent. */
+.repobar__menu-item--recent:hover,
+.repobar__menu-item--recent:focus-visible {
+  background: transparent;
+}
+
+.repobar__menu-remove {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin: 0 4px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity 120ms ease,
+    background 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease;
+}
+
+.repobar__menu-row:hover .repobar__menu-remove,
+.repobar__menu-row:focus-within .repobar__menu-remove,
+.repobar__menu-remove:focus-visible {
+  opacity: 1;
+}
+
+.repobar__menu-remove:hover {
+  background: var(--text);
+  border-color: var(--text);
+  color: var(--bg);
+}
+
+.repobar__menu-remove:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
 .shell {
   flex: 1;
   min-height: 0;
   display: grid;
+  grid-template-columns: 300px 360px minmax(0, 1fr);
+}
+
+/* Without the history panel the file sidebar keeps the width it had before. */
+.shell--no-history {
   grid-template-columns: 400px minmax(0, 1fr);
+}
+
+/* The persistent commit graph. It is a column of its own so browsing history
+   never hides the working tree's changes. */
+.history-panel {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.history__sidebar {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.history__sidebar-header {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 12px 8px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.history__sidebar-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.history__sidebar-title {
+  font-weight: 600;
+}
+
+.history__sidebar-notice {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 11.5px;
+}
+
+.history__sidebar-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 8px 0 12px;
+}
+
+.history__sidebar-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.history__sidebar-list .history__row {
+  border-bottom: 0;
+  box-shadow: inset 0 -1px 0 var(--border);
+}
+
+.history__sidebar-list li:last-child .history__row {
+  box-shadow: none;
+}
+
+.history__row.history__row--selected {
+  background: var(--surface-hover);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.history__row.history__row--selected:hover {
+  background: var(--surface-hover);
+}
+
+.history__sidebar-note {
+  margin: 4px 14px 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.history__sidebar-note--error {
+  color: var(--conflict);
+}
+
+.history__sidebar .history__refs {
+  max-width: 52%;
 }
 
 .sidebar {
@@ -334,6 +1089,26 @@ textarea {
   padding: 0 12px 0 14px;
   border-bottom: 1px solid var(--border);
   font-weight: 600;
+}
+
+.sidebar__heading > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar__heading-actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.sidebar__heading-close {
+  width: 22px;
+  height: 22px;
+  margin-right: -4px;
 }
 
 .sidebar__count {
@@ -531,20 +1306,8 @@ textarea {
 }
 
 /* The id of the commit just made, with the button that copies it. */
-.app__notice {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0 0 10px;
-  padding: 6px 8px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--panel);
-  font-size: 12px;
-}
-
-.app__notice-copy {
-  margin-left: auto;
+.app__toast-action {
+  flex: none;
   padding: 3px 10px;
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -555,13 +1318,122 @@ textarea {
   cursor: pointer;
 }
 
-.app__notice-copy:hover {
+.app__toast-action:hover {
   background: var(--surface-hover);
 }
 
-.app__notice-copy:focus-visible {
+.app__toast-action:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
+}
+
+/* The popup for a running fetch, pull, commit or push: one quiet chip that
+   floats over the work area's corner, above the tab bar and even a dialog.
+   A success leaves by itself; a failure waits for the close button. */
+.app__toast {
+  position: absolute;
+  top: 12px;
+  right: 16px;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 480px;
+  min-width: 220px;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--green);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+  font-size: 13px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  animation: toast-in 160ms ease-out;
+}
+
+.app__toast > svg {
+  flex: none;
+  color: var(--green);
+}
+
+/* The same chip while Git is working: the accent colour and a spinner in
+   place of the tick, with no close button. */
+.app__toast--busy {
+  border-left-color: var(--accent);
+}
+
+.app__toast-spinner {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: toast-spin 700ms linear infinite;
+}
+
+/* The same chip when the operation failed: the red of a blocked road in place
+   of the green, and an alert role instead of a status. The message wraps so
+   the whole error can be read before it is dismissed. */
+.app__toast--error {
+  border-left-color: var(--conflict);
+}
+
+.app__toast--error > svg {
+  color: var(--conflict);
+}
+
+.app__toast--error .app__toast-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 40vh;
+  overflow-y: auto;
+  text-overflow: clip;
+}
+
+.app__toast-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app__toast-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.app__toast-close:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes toast-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* Stacked change sections, as in the sidebar mockup. */
@@ -651,28 +1523,48 @@ textarea {
 
 /* The "Stage all" / "Unstage all" button in a section header. */
 .changes__action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex: none;
+  height: 24px;
+  padding: 0 10px;
   border: 1px solid var(--border-strong);
-  border-radius: 6px;
-  background: var(--control);
-  color: var(--text);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--control) 86%, transparent);
+  color: var(--text-muted);
   font: inherit;
   font-size: 11.5px;
+  font-weight: 500;
   line-height: 1;
-  padding: 3px 6px;
+  letter-spacing: 0;
   cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease;
 }
 
 .changes__action--all {
-  height: 22px;
-  padding: 0 8px;
   text-transform: none;
-  letter-spacing: 0;
 }
 
 .changes__action:hover {
   background: var(--surface-hover);
   border-color: #4b4f58;
+  color: var(--text);
+}
+
+.changes__action--stage {
+  border-color: color-mix(in srgb, var(--diff-add) 40%, var(--border));
+  background: color-mix(in srgb, var(--diff-add) 10%, transparent);
+  color: var(--diff-add);
+}
+
+.changes__action--stage:hover {
+  border-color: color-mix(in srgb, var(--diff-add) 62%, var(--border));
+  background: color-mix(in srgb, var(--diff-add) 18%, transparent);
+  color: var(--diff-add);
 }
 
 .changes__action:focus-visible {
@@ -702,7 +1594,7 @@ textarea {
 }
 
 .changes__item--selected {
-  background: #2b2e35;
+  background: var(--selection);
   box-shadow: inset 3px 0 0 var(--accent);
 }
 
@@ -744,18 +1636,18 @@ textarea {
 }
 
 .changes__badge--modified {
-  background: rgba(91, 156, 240, 0.2);
-  color: #8dbaf7;
+  background: color-mix(in srgb, var(--diff-mod) 20%, transparent);
+  color: var(--diff-mod);
 }
 
 .changes__badge--added {
-  background: rgba(63, 178, 127, 0.2);
-  color: #6ccba0;
+  background: color-mix(in srgb, var(--diff-add) 20%, transparent);
+  color: var(--diff-add);
 }
 
 .changes__badge--deleted {
-  background: rgba(139, 144, 154, 0.22);
-  color: #b0b4bd;
+  background: color-mix(in srgb, var(--diff-del) 18%, transparent);
+  color: var(--diff-del);
 }
 
 .changes__badge--untracked {
@@ -789,9 +1681,76 @@ textarea {
 
 .changes__entry-action {
   flex: none;
-  width: 26px;
-  height: 26px;
-  margin-right: 2px;
+  width: 24px;
+  height: 24px;
+  margin-right: 4px;
+  border-radius: 999px;
+  opacity: 0.55;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease,
+    opacity 120ms ease;
+}
+
+.changes__item:hover .changes__entry-action,
+.changes__entry-action:focus-visible {
+  opacity: 1;
+}
+
+.changes__entry-action--stage {
+  color: var(--diff-add);
+}
+
+.changes__entry-action--stage:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--diff-add) 16%, transparent);
+  color: var(--diff-add);
+}
+
+.changes__entry-action--unstage:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+  color: var(--text);
+}
+
+/* The unstaged row's right-click menu. It floats over the lists, so it does not
+   push the commit box or the next section around. */
+.changes__context-menu {
+  position: fixed;
+  z-index: 20;
+  min-width: 200px;
+  padding: 4px;
+  border: 1px solid #4b4f58;
+  border-radius: 8px;
+  background: var(--control);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5);
+}
+
+.changes__context-action {
+  display: flex;
+  width: 100%;
+  padding: 6px 10px;
+  border: none;
+  border-radius: 5px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.changes__context-action:hover,
+.changes__context-action:focus-visible {
+  background: var(--surface-hover);
+  outline: none;
+}
+
+.changes__context-action--discard {
+  color: var(--discard);
+}
+
+.changes__context-action--discard:hover,
+.changes__context-action--discard:focus-visible {
+  background: color-mix(in srgb, var(--discard) 14%, transparent);
 }
 
 /* The commit message box, anchored to the bottom of the sidebar. */
@@ -1362,6 +2321,13 @@ textarea {
   text-align: center;
 }
 
+.diff__difference-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+}
+
 .diff__difference {
   flex: none;
   color: var(--text-muted);
@@ -1369,49 +2335,41 @@ textarea {
   white-space: nowrap;
 }
 
-.diff__button {
-  background: var(--surface);
-  color: var(--text);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 5px 10px;
-  font: inherit;
-  cursor: pointer;
-}
-
-.diff__button:hover {
-  background: var(--surface-hover);
-}
-
-.diff__button:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-}
-
-.diff__button--danger {
-  background: #b4453f;
-  border-color: #b4453f;
-  color: #fff;
-}
-
-.diff__button--danger:hover {
-  background: #c04a43;
-}
-
-.diff__confirm {
-  display: flex;
+.diff__nav-buttons {
+  display: inline-flex;
   align-items: center;
-  gap: 10px;
-  margin: 8px 12px;
-  padding: 8px 10px;
-  border: 1px solid var(--conflict);
-  border-radius: 6px;
-  background: var(--surface);
-  font-size: 13px;
+  gap: 2px;
 }
 
-.diff__confirm-text {
-  margin-right: auto;
+.diff__nav-button {
+  width: 22px;
+  height: 22px;
+}
+
+.diff__nav-button:disabled {
+  color: var(--border-strong);
+}
+
+.diff__nav-button:disabled:hover {
+  background: transparent;
+}
+
+.diff__flash {
+  animation: diff-flash 400ms ease-out;
+  background-color: rgba(232, 163, 61, 0.45);
+  border-radius: 2px;
+  box-shadow: 0 0 8px rgba(232, 163, 61, 0.5);
+}
+
+@keyframes diff-flash {
+  0% {
+    background-color: rgba(232, 163, 61, 0.6);
+    box-shadow: 0 0 12px rgba(232, 163, 61, 0.7);
+  }
+  100% {
+    background-color: transparent;
+    box-shadow: none;
+  }
 }
 
 .diff__error {
@@ -1455,11 +2413,10 @@ textarea {
   overflow: hidden;
   border: 0;
   border-radius: 0;
-  background: var(--bg);
+  background: var(--diff-bg);
 }
 
-/* The staging margin: a hollow dot for a prepared hunk, a solid one for a
-   hunk still to prepare, next to the working-copy line it covers. */
+/* The staging margin stays clickable, but the dots are not painted. */
 .staging-gutter {
   width: 16px;
 }
@@ -1474,25 +2431,10 @@ textarea {
   display: inline-block;
   width: 9px;
   height: 9px;
-  border-radius: 50%;
 }
 
 .staging-marker--spacer {
   visibility: hidden;
-}
-
-.staging-marker--unstaged {
-  background: var(--accent);
-}
-
-.staging-marker--staged {
-  border: 2px solid var(--accent);
-  background: transparent;
-}
-
-.staging-marker--staged.staging-marker--unstaged {
-  background: var(--accent);
-  box-shadow: inset 0 0 0 2px var(--surface);
 }
 
 .diff__hunk-menu {
@@ -1519,21 +2461,30 @@ textarea {
 
 .diff__hunk-actions {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .diff__hunk-action {
-  height: 28px;
-  padding: 0 10px;
-  background: var(--surface);
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  width: 100%;
+  height: 30px;
+  padding: 0 12px;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
   border: 1px solid var(--border-strong);
-  border-radius: 6px;
+  border-radius: 999px;
   color: var(--text);
   font: inherit;
-  font-size: 12.5px;
+  font-size: 12px;
+  font-weight: 500;
   white-space: nowrap;
   cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease;
 }
 
 .diff__hunk-action:hover:not(:disabled) {
@@ -1550,15 +2501,79 @@ textarea {
   cursor: default;
 }
 
-.diff__hunk-action--primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--accent-ink);
-  font-weight: 600;
+.diff__hunk-action--quiet {
+  font-weight: 500;
 }
 
-.diff__hunk-action--primary:hover:not(:disabled) {
-  background: var(--accent-hover);
+/* The actions of one changed block sit on their own row above its lines,
+   rather than floating over the first line of code. */
+.diff__panes .cm-deletedChunk .cm-chunkButtons {
+  position: static;
+  inset: auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  margin: 0 0 4px -6px;
+  padding: 4px 8px 5px;
+  border-bottom: 1px solid var(--border);
+  background: var(--control);
+}
+
+/* CodeMirror's inline chunk controls, restyled as Stage/Discard/Unstage
+   pills. The extra specificity is needed to outrank the merge view's base
+   theme, which paints them green and red. */
+.diff__panes .cm-deletedChunk button.diff__chunk-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 22px;
+  margin: 0 3px;
+  padding: 0 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-muted);
+  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease;
+}
+
+.diff__panes .cm-deletedChunk button.diff__chunk-button:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.diff__panes .cm-deletedChunk button.diff__chunk-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.diff__panes .cm-deletedChunk button.diff__chunk-button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.diff__panes .cm-deletedChunk button.diff__chunk-button--stage,
+.diff__panes .cm-deletedChunk button.diff__chunk-button--unstage,
+.diff__panes .cm-deletedChunk button.diff__chunk-button--discard {
+  border-color: color-mix(in srgb, var(--text) 16%, var(--border));
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  color: var(--text-muted);
+}
+
+.diff__panes .cm-deletedChunk button.diff__chunk-button--stage:hover,
+.diff__panes .cm-deletedChunk button.diff__chunk-button--unstage:hover,
+.diff__panes .cm-deletedChunk button.diff__chunk-button--discard:hover {
+  background: color-mix(in srgb, var(--text) 12%, transparent);
+  color: var(--text);
 }
 
 .diff__panes .cm-editor {
@@ -1570,7 +2585,7 @@ textarea {
 .diff__panes .cm-editor,
 .diff__panes .cm-scroller,
 .diff__panes .cm-gutters {
-  background-color: var(--bg);
+  background-color: var(--diff-bg);
 }
 
 .diff__panes .cm-scroller {
@@ -1580,6 +2595,33 @@ textarea {
 
 .diff__panes .cm-mergeView {
   height: 100%;
+}
+
+/* The folded run between two blocks: a quiet row that expands on click. */
+.diff__panes .cm-editor .cm-collapsedLines {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 24px;
+  margin: 4px 0;
+  padding: 0 8px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--surface) 78%, transparent);
+  color: var(--text-dim);
+  font-size: 11px;
+  letter-spacing: 0.01em;
+}
+
+.diff__panes .cm-editor .cm-collapsedLines:hover {
+  border-color: color-mix(in srgb, var(--text-dim) 55%, var(--border));
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.diff__panes .cm-editor .cm-collapsedLines::before,
+.diff__panes .cm-editor .cm-collapsedLines::after {
+  content: none;
 }
 
 /* Three-pane staging view: HEAD, the editable index and the working copy,
@@ -1601,7 +2643,7 @@ textarea {
   flex-direction: column;
   flex: 1;
   min-height: 0;
-  background: var(--bg);
+  background: var(--diff-bg);
 }
 
 .three__topbar {
@@ -1718,7 +2760,7 @@ textarea {
   height: 30px;
   background: var(--bar);
   border-bottom: 1px solid var(--border);
-  color: #cfd2d8;
+  color: var(--text-muted);
   font-size: 12px;
 }
 
@@ -1748,7 +2790,7 @@ textarea {
 .three__tag {
   flex: none;
   padding: 0 7px;
-  border: 1px solid #34373d;
+  border: 1px solid var(--border);
   border-radius: 9px;
   color: var(--text-dim);
   font-size: 11px;
@@ -1778,14 +2820,14 @@ textarea {
   min-width: 0;
   height: 24px;
   overflow: hidden;
-  color: #d8dae0;
+  color: var(--text);
 }
 
 .three__line-number {
   flex: none;
   width: 34px;
   padding-right: 6px;
-  color: #6f7480;
+  color: var(--text-dim);
   text-align: right;
   user-select: none;
 }
@@ -1800,19 +2842,23 @@ textarea {
 }
 
 .three__cell--add {
-  background: rgba(63, 178, 127, 0.16);
+  background: color-mix(in srgb, var(--diff-add) 16%, transparent);
 }
 
 .three__cell--mod {
-  background: rgba(91, 156, 240, 0.17);
+  background: var(--diff-mod-bg);
 }
 
 .three__cell--del {
-  background: rgba(139, 144, 154, 0.22);
+  background: color-mix(in srgb, var(--diff-del) 16%, transparent);
 }
 
 .three__cell--empty {
-  background: repeating-linear-gradient(135deg, #1c1d21 0 6px, #212328 6px 12px);
+  background: repeating-linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--text) 4%, var(--bg)) 0 6px,
+    color-mix(in srgb, var(--text) 8%, var(--bg)) 6px 12px
+  );
 }
 
 .three__arrow {
@@ -1831,7 +2877,7 @@ textarea {
   border: 1px solid var(--border-strong);
   border-radius: 4px;
   background: var(--control);
-  color: #cfd2d8;
+  color: var(--text-muted);
   font: inherit;
   font-size: 12px;
   line-height: 1;
@@ -1849,7 +2895,7 @@ textarea {
 }
 
 .three__staged {
-  color: #6ccba0;
+  color: var(--diff-add);
   font-family: 'IBM Plex Sans', system-ui, sans-serif;
   font-size: 11px;
   line-height: 1;
@@ -1997,6 +3043,23 @@ textarea {
 .dialog__input:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
+}
+
+.clone__path-row {
+  display: flex;
+  gap: 8px;
+}
+
+.clone__path-input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.clone__target {
+  margin: 2px 0 0;
+  color: var(--text-dim);
+  font-size: 11px;
+  word-break: break-all;
 }
 
 .dialog__scope {
@@ -2584,15 +3647,15 @@ textarea {
 }
 
 .conflicts__swatch--modified {
-  background: rgba(91, 156, 240, 0.55);
+  background: color-mix(in srgb, var(--diff-mod) 72%, transparent);
 }
 
 .conflicts__swatch--deleted {
-  background: rgba(139, 144, 154, 0.6);
+  background: color-mix(in srgb, var(--diff-del) 72%, transparent);
 }
 
 .conflicts__swatch--added {
-  background: rgba(63, 178, 127, 0.55);
+  background: color-mix(in srgb, var(--diff-add) 72%, transparent);
 }
 
 .conflicts__swatch--conflicting {
@@ -2702,7 +3765,7 @@ textarea {
   flex-direction: column;
   height: 100vh;
   min-height: 0;
-  background: var(--bg);
+  background: var(--diff-bg);
   color: var(--text);
   font-size: 13px;
   line-height: 1.4;
@@ -2781,7 +3844,7 @@ textarea {
   flex: none;
   width: 1px;
   height: 20px;
-  background: #34373d;
+  background: var(--border);
   margin: 0 2px;
 }
 
@@ -2823,14 +3886,19 @@ textarea {
 }
 
 .merge__button--simple {
-  color: #d9c6ee;
+  color: var(--purple);
 }
 
 .merge__button--danger {
-  border-color: var(--conflict);
-  background: var(--conflict);
-  color: #1b1110;
+  border-color: color-mix(in srgb, var(--discard) 50%, var(--border));
+  background: color-mix(in srgb, var(--discard) 14%, transparent);
+  color: var(--discard);
   font-weight: 600;
+}
+
+.merge__button--danger:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--discard) 70%, var(--border));
+  background: color-mix(in srgb, var(--discard) 22%, transparent);
 }
 
 .merge__toolbar {
@@ -2894,7 +3962,7 @@ textarea {
   flex: none;
   margin-left: auto;
   padding: 1px 7px;
-  border: 1px solid #34373d;
+  border: 1px solid var(--border);
   border-radius: 9px;
   color: var(--text-dim);
   font-size: 11px;
@@ -2906,7 +3974,7 @@ textarea {
   flex: 1;
   min-height: 0;
   overflow: auto;
-  background: var(--bg);
+  background: var(--diff-bg);
   font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 12.5px;
   line-height: 24px;
@@ -2928,18 +3996,18 @@ textarea {
   min-width: 0;
   height: 24px;
   overflow: hidden;
-  color: #d8dae0;
+  color: var(--text);
 }
 
 .merge__cell--result {
-  background: rgba(255, 255, 255, 0.018);
+  background: color-mix(in srgb, var(--text) 2%, transparent);
 }
 
 .merge__line-number {
   flex: none;
   width: 34px;
   padding-right: 6px;
-  color: #6f7480;
+  color: var(--text-dim);
   text-align: right;
   user-select: none;
 }
@@ -2991,7 +4059,7 @@ textarea {
   border: 1px solid var(--border-strong);
   border-radius: 4px;
   background: var(--control);
-  color: #cfd2d8;
+  color: var(--text-muted);
   font: inherit;
   font-size: 12px;
   line-height: 1;
@@ -3004,29 +4072,33 @@ textarea {
 }
 
 .merge__cell--modified {
-  background: rgba(91, 156, 240, 0.17);
+  background: var(--diff-mod-bg);
 }
 
 .merge__cell--added {
-  background: rgba(63, 178, 127, 0.16);
+  background: color-mix(in srgb, var(--diff-add) 16%, transparent);
 }
 
 .merge__cell--deleted {
-  background: rgba(139, 144, 154, 0.22);
+  background: color-mix(in srgb, var(--diff-del) 16%, transparent);
 }
 
 .merge__cell--conflict {
-  background: rgba(240, 103, 79, 0.13);
+  background: color-mix(in srgb, var(--conflict) 13%, transparent);
 }
 
 .merge__cell--empty {
-  background: repeating-linear-gradient(135deg, #1c1d21 0 6px, #212328 6px 12px);
+  background: repeating-linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--text) 4%, var(--bg)) 0 6px,
+    color-mix(in srgb, var(--text) 8%, var(--bg)) 6px 12px
+  );
 }
 
 .merge__word {
   border-radius: 2px;
-  background: rgba(240, 103, 79, 0.28);
-  color: #ffe0da;
+  background: color-mix(in srgb, var(--conflict) 28%, transparent);
+  color: var(--text);
 }
 
 .merge__word--conflict {
@@ -3067,15 +4139,15 @@ textarea {
 }
 
 .merge__swatch--modified {
-  background: var(--blue);
+  background: var(--diff-mod);
 }
 
 .merge__swatch--deleted {
-  background: #8b909a;
+  background: var(--diff-del);
 }
 
 .merge__swatch--added {
-  background: var(--green);
+  background: var(--diff-add);
 }
 
 .merge__swatch--conflicting {
@@ -3184,6 +4256,12 @@ textarea {
   height: 100%;
 }
 
+.merge__compare-panes .cm-editor,
+.merge__compare-panes .cm-scroller,
+.merge__compare-panes .cm-gutters {
+  background-color: var(--diff-bg);
+}
+
 .merge__confirm {
   width: min(440px, 90vw);
   padding: 20px;
@@ -3210,4 +4288,860 @@ textarea {
   justify-content: flex-end;
   gap: 8px;
   margin-top: 18px;
+}
+
+/* The commit graph dialog: one row per commit, with the graph gutter on the
+   left and the commit's message, refs, author and date on the right. */
+.history__panel {
+  width: min(980px, calc(100vw - 48px));
+  max-height: min(760px, calc(100vh - 64px));
+  padding: 16px 18px 14px;
+  gap: 10px;
+  overflow: hidden;
+}
+
+/* The detail view gives the diff a real height to fill, instead of letting a
+   short graph decide it. */
+.history__panel--detail {
+  height: min(760px, calc(100vh - 64px));
+}
+
+/* Maximized leaves only a thin frame around the panel, so the graph and the
+   diff get the whole window. It overrides the detail view's capped height. */
+.history__panel--maximized {
+  width: calc(100vw - 16px);
+  max-width: none;
+  height: calc(100vh - 16px);
+  max-height: none;
+}
+
+.history__panel--maximized .history__commit {
+  grid-template-columns: 300px minmax(0, 1fr);
+}
+
+.history__header {
+  flex: none;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.history__actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.history__heading {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.history__title-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.history__back {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  margin-left: -4px;
+}
+
+.history__count {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.history__list {
+  flex: 1 1 auto;
+  min-height: 0;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--background);
+}
+
+.history__row {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  min-height: 54px;
+  padding: 0;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.history__list li:last-child .history__row {
+  border-bottom: 0;
+}
+
+.history__row:hover {
+  background: var(--panel);
+}
+
+.history__row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.history__graph {
+  flex: none;
+  position: relative;
+}
+
+.history__graph svg {
+  display: block;
+}
+
+.history__body {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  padding: 6px 12px 6px 2px;
+}
+
+.history__subject-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.history__subject {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.history__refs {
+  flex: none;
+  max-width: 60%;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.history__ref {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 10.5px;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.history__ref--tag {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+}
+
+.history__ref--head {
+  color: var(--green);
+  border-color: color-mix(in srgb, var(--green) 55%, var(--border));
+}
+
+.history__ref--branch {
+  color: var(--blue);
+  border-color: color-mix(in srgb, var(--blue) 55%, var(--border));
+}
+
+.history__ref--remote {
+  color: var(--text-dim);
+}
+
+.history__ref-sync {
+  flex: none;
+  opacity: 0.8;
+}
+
+.history__details {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--text-dim);
+  font-size: 11.5px;
+}
+
+.history__id {
+  flex: none;
+  color: var(--accent);
+  font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+}
+
+.history__author {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+}
+
+.history__dot {
+  flex: none;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--text-dim);
+}
+
+.history__date {
+  flex: none;
+}
+
+.history__empty {
+  margin: 8px 0;
+  color: var(--text-muted);
+}
+
+.history__note {
+  flex: none;
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 11.5px;
+  text-align: center;
+}
+
+/* The checkout warning: the picked commit, then why checking it out detaches
+   HEAD or what uncommitted changes may do. */
+.history__checkout {
+  width: min(560px, calc(100vw - 48px));
+}
+
+.history__checkout-target {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  font-size: 13px;
+}
+
+.history__checkout-target span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history__checkout-confirm {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 600;
+}
+
+.history__checkout-confirm:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+/* The selected commit: its metadata line above a file list and the read-only
+   diff of the chosen file. */
+.history__subject--detail {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  font-weight: 400;
+}
+
+.history__commit-meta {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 0 2px;
+  color: var(--text-dim);
+  font-size: 11.5px;
+}
+
+.history__refs--detail {
+  margin-left: auto;
+  max-width: 55%;
+}
+
+.history__commit {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--background);
+}
+
+.history__files {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  overflow: hidden;
+  border-right: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.history__files-title {
+  flex: none;
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.history__files-note {
+  margin: 0;
+  padding: 8px 2px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.history__files-note--error {
+  color: var(--conflict);
+}
+
+.history__file-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+}
+
+.history__file {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.history__file:hover {
+  background: var(--surface-hover);
+}
+
+.history__file--active {
+  background: var(--surface-hover);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.history__file:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.history__status {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 17px;
+  height: 17px;
+  margin-top: 1px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 9.5px;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.history__status--added {
+  color: var(--diff-add);
+}
+
+.history__status--modified {
+  color: var(--diff-mod);
+}
+
+.history__status--deleted {
+  color: var(--diff-del);
+}
+
+.history__status--renamed,
+.history__status--copied {
+  color: var(--purple);
+}
+
+.history__status--type-changed {
+  color: var(--accent);
+}
+
+.history__status--unmerged,
+.history__status--unknown {
+  color: var(--text-dim);
+}
+
+.history__file-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.history__file-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+}
+
+.history__file-dir,
+.history__file-note {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-dim);
+  font-size: 10.5px;
+}
+
+.history__diff {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  background: var(--bg);
+}
+
+.history__diff > .diff {
+  flex: 1 1 auto;
+  width: 100%;
+}
+
+.history__diff-empty {
+  margin: auto;
+  padding: 16px;
+  color: var(--text-muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+/* The selected commit's files, shown in the file sidebar while the diff stays
+   in the work area. */
+.commit-files {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 12px 16px;
+}
+
+.commit-files__commit {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface);
+}
+
+.commit-files__id-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.commit-files__subject {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+  font-size: 13px;
+}
+
+.commit-files__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  color: var(--text-dim);
+  font-size: 11.5px;
+}
+
+.commit-files__refs {
+  max-width: 60%;
+}
+
+.commit-files__list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.commit-files__note {
+  margin: 0;
+  padding: 8px 2px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.commit-files__note--error {
+  color: var(--conflict);
+}
+
+/* The branch manager: a create form above the local branches it can rename or
+   delete. */
+.branch__panel {
+  width: min(640px, calc(100vw - 48px));
+  max-height: min(680px, calc(100vh - 64px));
+  overflow-y: auto;
+}
+
+.branch__create {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.branch__check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.branch__list-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.branch__count {
+  color: var(--text-dim);
+}
+
+.branch__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--background);
+}
+
+.branch__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.branch__row:last-child {
+  border-bottom: none;
+}
+
+.branch__row-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1 1 180px;
+}
+
+.branch__row-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+
+.branch__badge {
+  flex: none;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
+  font-size: 10px;
+}
+
+.branch__row-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.branch__row-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding-top: 6px;
+}
+
+.branch__row-form .dialog__input {
+  flex: 1 1 180px;
+}
+
+.branch__row-form--delete {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.branch__danger {
+  color: var(--conflict);
+  border-color: color-mix(in srgb, var(--conflict) 45%, var(--border));
+}
+
+/* A quiet note inside a dialog, for a blocked or pending state. */
+.dialog__notice {
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--control);
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+/* The merge dialog: source, strategy and the output of a refusal. */
+.merge__panel {
+  width: min(560px, calc(100vw - 48px));
+  max-height: min(640px, calc(100vh - 64px));
+  overflow-y: auto;
+}
+
+.merge__output {
+  max-height: 220px;
+}
+
+.merge__conflicts {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid color-mix(in srgb, var(--conflict) 55%, var(--border));
+  border-radius: 6px;
+}
+
+/* The GitFlow popup: init, start and finish share one panel. */
+.gitflow__panel {
+  width: min(660px, calc(100vw - 48px));
+  max-height: min(700px, calc(100vh - 64px));
+  overflow-y: auto;
+}
+
+.gitflow__form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.gitflow__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 12px;
+}
+
+.gitflow__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.gitflow__branches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--background);
+  font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+
+.gitflow__branch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.gitflow__branch-label {
+  color: var(--text-dim);
+  font-family: inherit;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.gitflow__heading {
+  margin: 4px 0 0;
+  font-size: 14px;
+}
+
+.gitflow__pending {
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border));
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.gitflow__tag {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.gitflow__kinds {
+  display: flex;
+  gap: 6px;
+}
+
+.gitflow__kind {
+  padding: 5px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--control);
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.gitflow__kind:hover:not(:disabled) {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.gitflow__kind--active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, var(--control));
+  color: var(--accent);
+}
+
+.gitflow__name-row {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+}
+
+.gitflow__prefix {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-right: none;
+  border-radius: 6px 0 0 6px;
+  background: var(--control);
+  color: var(--text-dim);
+  font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+
+.gitflow__name-row .dialog__input {
+  border-radius: 0 6px 6px 0;
+}
+
+.gitflow__hint {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+.gitflow__families {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.gitflow__family {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 12px;
+}
+
+.gitflow__family-name {
+  flex: none;
+  width: 64px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+
+.gitflow__empty {
+  color: var(--text-dim);
+}
+
+.gitflow__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.gitflow__chip {
+  padding: 1px 7px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--control);
+  color: var(--text-muted);
+  font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
 }

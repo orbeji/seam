@@ -45,9 +45,7 @@ describe('parsePushOutput', () => {
     const nonFastForward = parsePushOutput(
       '!\trefs/heads/main:refs/heads/main\t[rejected] (non-fast-forward)'
     )
-    const stale = parsePushOutput(
-      '!\trefs/heads/main:refs/heads/main\t[rejected] (stale info)'
-    )
+    const stale = parsePushOutput('!\trefs/heads/main:refs/heads/main\t[rejected] (stale info)')
 
     expect(nonFastForward[0]?.rejection).toBe('non-fast-forward')
     expect(stale[0]?.rejection).toBe('stale-info')
@@ -63,9 +61,7 @@ describe('parsePushOutput', () => {
   })
 
   it('recognises an existing tag and marks it as a tag', () => {
-    const refs = parsePushOutput(
-      '!\trefs/tags/v1:refs/tags/v1\t[rejected] (already exists)'
-    )
+    const refs = parsePushOutput('!\trefs/tags/v1:refs/tags/v1\t[rejected] (already exists)')
 
     expect(refs[0]?.rejection).toBe('tag-exists')
     expect(refs[0]?.tag).toBe(true)
@@ -101,12 +97,10 @@ describe('isAuthenticationFailure', () => {
     expect(isAuthenticationFailure('fatal: could not read Username for https://example.test')).toBe(
       true
     )
+    expect(isAuthenticationFailure('git@example.test: Permission denied (publickey).')).toBe(true)
     expect(
-      isAuthenticationFailure('git@example.test: Permission denied (publickey).')
+      isAuthenticationFailure('fatal: could not read Password: terminal prompts disabled')
     ).toBe(true)
-    expect(isAuthenticationFailure('fatal: could not read Password: terminal prompts disabled')).toBe(
-      true
-    )
   })
 
   it('does not confuse a hook refusal with a credential failure', () => {

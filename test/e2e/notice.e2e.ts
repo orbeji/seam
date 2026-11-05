@@ -69,13 +69,15 @@ describe('commit notification', () => {
     await page.locator('[data-testid=commit-message]').fill('with a notice')
     await page.locator('[data-testid=commit-button]').click()
 
-    // The notification carries the id a terminal would print for this commit.
-    await page.waitForSelector('[data-testid=commit-notice]')
-    const shortId = (await repo.git(['rev-parse', '--short', 'HEAD'])).trim()
-    expect(await page.locator('[data-testid=commit-notice]').innerText()).toContain(shortId)
-
+    // The popup carries the id a terminal would print for this commit.
+    await page.waitForSelector('[data-testid=sync-notice][data-tone=ok]')
     // The copy button reaches the system clipboard through the main process.
     await page.locator('[data-testid=commit-copy]').click()
+    const shortId = (await repo.git(['rev-parse', '--short', 'HEAD'])).trim()
+    expect(await page.locator('[data-testid=sync-notice][data-tone=ok]').innerText()).toContain(
+      shortId
+    )
+
     await waitFor(
       async () =>
         (await application?.evaluate(({ clipboard }) => clipboard.readText())) === shortId,

@@ -3,6 +3,7 @@
 import { describe, expect, it } from 'vitest'
 import en from './locales/en.json'
 import es from './locales/es.json'
+import ca from './locales/ca.json'
 
 type Catalog = Record<string, unknown>
 
@@ -26,7 +27,8 @@ function resolve(catalog: Catalog, path: string): unknown {
 
 const catalogs: ReadonlyArray<[string, Catalog]> = [
   ['en', en],
-  ['es', es]
+  ['es', es],
+  ['ca', ca]
 ]
 
 describe('i18n catalogs', () => {

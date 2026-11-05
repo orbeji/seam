@@ -98,15 +98,17 @@ afterEach(async () => {
 })
 
 describe('the diff viewer over the mixed repository', () => {
-  it('shows side by side with two editors and unified with one', async () => {
+  it('opens in the unified view and hides the layout switch', async () => {
     await openFile('tracked.txt')
-    await waitForEditors(2)
-
-    await page.selectOption('[data-testid=diff-layout]', 'unified')
     await waitForEditors(1)
+    expect(await page.locator('[data-testid=diff-layout-three]').count()).toBe(0)
+    expect(await page.locator('.diff__layout-button').count()).toBe(0)
 
-    await page.selectOption('[data-testid=diff-layout]', 'side-by-side')
-    await waitForEditors(2)
+    // A working-tree change can be accepted or rejected in the unified view.
+    await waitFor(
+      async () => (await page.locator(`${PANES} .cm-chunkButtons button[name=accept]`).count()) > 0,
+      'accept and reject controls'
+    )
   })
 
   it('counts the changed ranges of a file', async () => {

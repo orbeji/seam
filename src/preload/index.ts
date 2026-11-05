@@ -2,26 +2,42 @@
 
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
 import type {
+  CommitChanges,
   CommitOutcome,
   ConflictAcceptOutcome,
   ConflictState,
+  GitFlowFinishOutcome,
+  GitFlowState,
   HeadCommit,
   Identity,
+  MergeOutcome,
+  MergeState,
   OperationOutcome,
   PushOutcome,
   PushState,
   PushUpdateOutcome,
+  RepositoryHistory,
   ResolveSimpleOutcome
 } from '../shared/git'
 import {
   IPC_CHANNELS,
   IPC_CONTRACT_VERSION,
+  type BranchList,
+  type CheckoutBranchRequest,
+  type CheckoutCommitRequest,
+  type CloneRequest,
   type CommitDraftWriteRequest,
+  type CommitFileComparisonRequest,
   type CommitRequest,
   type ConflictAcceptRequest,
   type ConflictRevertRequest,
+  type CreateBranchRequest,
+  type DeleteBranchRequest,
   type FileComparison,
   type FileComparisonRequest,
+  type GitFlowFinishRequest,
+  type GitFlowInitRequest,
+  type GitFlowStartRequest,
   type HunkWriteRequest,
   type IdentityWriteRequest,
   type IndexWriteRequest,
@@ -29,13 +45,16 @@ import {
   type MergeApplyRequest,
   type MergeEditorModel,
   type MergeEditorRequest,
+  type MergeRequest,
   type PushProgress,
   type PushRequest,
   type PushUpdateRequest,
+  type RenameBranchRequest,
   type RepositorySnapshot,
   type RevertHunksRequest,
   type SeamApi,
   type SettingsData,
+  type SettingsPatch,
   type StagePathsRequest,
   type StagingModel,
   type StagingModelRequest
@@ -45,8 +64,13 @@ const seamApi: SeamApi = {
   contractVersion: IPC_CONTRACT_VERSION,
   chooseRepository: () =>
     ipcRenderer.invoke(IPC_CHANNELS.chooseRepository) as Promise<string | null>,
+  chooseDirectory: () => ipcRenderer.invoke(IPC_CHANNELS.chooseDirectory) as Promise<string | null>,
+  cloneRepository: (request: CloneRequest) =>
+    ipcRenderer.invoke(IPC_CHANNELS.cloneRepository, request) as Promise<IpcResult<string>>,
   listRecentRepositories: () =>
     ipcRenderer.invoke(IPC_CHANNELS.listRecentRepositories) as Promise<string[]>,
+  removeRecentRepository: (repo: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.removeRecentRepository, repo) as Promise<IpcResult<null>>,
   initialRepository: () =>
     ipcRenderer.invoke(IPC_CHANNELS.initialRepository) as Promise<string | null>,
   readRepositoryStatus: (repo: string) =>
@@ -65,6 +89,8 @@ const seamApi: SeamApi = {
     ipcRenderer.invoke(IPC_CHANNELS.stageFiles, request) as Promise<IpcResult<null>>,
   unstageFiles: (request: StagePathsRequest) =>
     ipcRenderer.invoke(IPC_CHANNELS.unstageFiles, request) as Promise<IpcResult<null>>,
+  discardFiles: (request: StagePathsRequest) =>
+    ipcRenderer.invoke(IPC_CHANNELS.discardFiles, request) as Promise<IpcResult<null>>,
   writeHunks: (request: HunkWriteRequest) =>
     ipcRenderer.invoke(IPC_CHANNELS.writeHunks, request) as Promise<IpcResult<null>>,
   writeIndex: (request: IndexWriteRequest) =>
@@ -87,14 +113,28 @@ const seamApi: SeamApi = {
     >,
   readCommitTemplate: (repo: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.readCommitTemplate, repo) as Promise<IpcResult<string | null>>,
+  readRepositoryHistory: (repo: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.readRepositoryHistory, repo) as Promise<
+      IpcResult<RepositoryHistory>
+    >,
+  readCommitChanges: (repo: string, commit: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.readCommitChanges, repo, commit) as Promise<
+      IpcResult<CommitChanges>
+    >,
+  checkoutCommit: (request: CheckoutCommitRequest) =>
+    ipcRenderer.invoke(IPC_CHANNELS.checkoutCommit, request) as Promise<IpcResult<null>>,
+  readCommitFileComparison: (request: CommitFileComparisonRequest) =>
+    ipcRenderer.invoke(IPC_CHANNELS.readCommitFileComparison, request) as Promise<
+      IpcResult<FileComparison>
+    >,
   readIdentity: (repo: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.readIdentity, repo) as Promise<IpcResult<Identity>>,
   writeIdentity: (request: IdentityWriteRequest) =>
     ipcRenderer.invoke(IPC_CHANNELS.writeIdentity, request) as Promise<IpcResult<null>>,
   readSettings: () =>
     ipcRenderer.invoke(IPC_CHANNELS.readSettings) as Promise<IpcResult<SettingsData>>,
-  writeSettings: (settings: SettingsData) =>
-    ipcRenderer.invoke(IPC_CHANNELS.writeSettings, settings) as Promise<IpcResult<null>>,
+  writeSettings: (patch: SettingsPatch) =>
+    ipcRenderer.invoke(IPC_CHANNELS.writeSettings, patch) as Promise<IpcResult<null>>,
   readConflicts: (repo: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.readConflicts, repo) as Promise<IpcResult<ConflictState>>,
   acceptConflict: (request: ConflictAcceptRequest) =>
@@ -123,6 +163,34 @@ const seamApi: SeamApi = {
     ipcRenderer.invoke(IPC_CHANNELS.readMergeMessage, repo) as Promise<IpcResult<string>>,
   readPushState: (repo: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.readPushState, repo) as Promise<IpcResult<PushState>>,
+  listBranches: (repo: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.listBranches, repo) as Promise<IpcResult<BranchList>>,
+  checkoutBranch: (request: CheckoutBranchRequest) =>
+    ipcRenderer.invoke(IPC_CHANNELS.checkoutBranch, request) as Promise<IpcResult<null>>,
+  createBranch: (request: CreateBranchRequest) =>
+    ipcRenderer.invoke(IPC_CHANNELS.createBranch, request) as Promise<IpcResult<null>>,
+  renameBranch: (request: RenameBranchRequest) =>
+    ipcRenderer.invoke(IPC_CHANNELS.renameBranch, request) as Promise<IpcResult<null>>,
+  deleteBranch: (request: DeleteBranchRequest) =>
+    ipcRenderer.invoke(IPC_CHANNELS.deleteBranch, request) as Promise<IpcResult<null>>,
+  readMergeState: (repo: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.readMergeState, repo) as Promise<IpcResult<MergeState>>,
+  mergeBranch: (request: MergeRequest) =>
+    ipcRenderer.invoke(IPC_CHANNELS.startMerge, request) as Promise<IpcResult<MergeOutcome>>,
+  readGitFlow: (repo: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.readGitFlow, repo) as Promise<IpcResult<GitFlowState>>,
+  initGitFlow: (request: GitFlowInitRequest) =>
+    ipcRenderer.invoke(IPC_CHANNELS.initGitFlow, request) as Promise<IpcResult<null>>,
+  startGitFlow: (request: GitFlowStartRequest) =>
+    ipcRenderer.invoke(IPC_CHANNELS.startGitFlow, request) as Promise<IpcResult<string>>,
+  finishGitFlow: (request: GitFlowFinishRequest) =>
+    ipcRenderer.invoke(IPC_CHANNELS.finishGitFlow, request) as Promise<
+      IpcResult<GitFlowFinishOutcome>
+    >,
+  fetchRemotes: (repo: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.fetchRemotes, repo) as Promise<IpcResult<null>>,
+  pull: (request: PushUpdateRequest) =>
+    ipcRenderer.invoke(IPC_CHANNELS.pullUpstream, request) as Promise<IpcResult<PushUpdateOutcome>>,
   push: (request: PushRequest) =>
     ipcRenderer.invoke(IPC_CHANNELS.runPush, request) as Promise<IpcResult<PushOutcome>>,
   cancelPush: (repo: string) =>

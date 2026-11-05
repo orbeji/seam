@@ -45,6 +45,8 @@ describe('RepositoryService.snapshot', () => {
     expect(result.value.summary.unstaged.map((entry) => entry.path)).toEqual(['tracked.txt'])
     expect(result.value.summary.untracked.map((entry) => entry.path)).toEqual(['new.txt'])
     expect(result.value.operation).toBeNull()
+    // The fixture has no remote, so there is nothing the top bar could push.
+    expect(result.value.pushCount).toBe(0)
   })
 
   it('reports a stopped merge', async () => {

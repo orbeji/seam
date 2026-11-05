@@ -27,6 +27,11 @@ export class RecentRepositories {
     this.save()
   }
 
+  forget(repo: string): void {
+    this.paths = this.paths.filter((entry) => entry !== repo)
+    this.save()
+  }
+
   private load(): string[] {
     try {
       const parsed: unknown = JSON.parse(readFileSync(this.file, 'utf8'))

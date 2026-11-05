@@ -110,7 +110,13 @@ describe('push', () => {
     const localHead = (await repo.git(['rev-parse', 'HEAD'])).trim()
     const { application, page } = await launch(repo)
     try {
-      await page.locator('[data-testid=push-button]').click()
+      // The bar advertises the one commit the new branch would publish, once
+      // the first snapshot has arrived.
+      const pushButton = page.locator('[data-testid=push-button]')
+      await waitFor(async () => !(await pushButton.isDisabled()), 'the push button to enable')
+      expect(await page.locator('[data-testid=push-count]').textContent()).toBe('1')
+
+      await pushButton.click()
       await page.waitForSelector('[data-testid=push-dialog]')
 
       expect(await page.locator('[data-testid=push-local-branch]').textContent()).toBe('main')
@@ -123,12 +129,20 @@ describe('push', () => {
 
       await page.locator('[data-testid=push-submit]').click()
       await dialogClosed(page)
+
+      // The success popup arrives as soon as the push ends, before the slow
+      // checks below and before its own few seconds run out.
+      const notice = page.locator('[data-testid=sync-notice][data-tone=ok]')
+      await notice.waitFor()
+      expect(await notice.textContent()).toBe('Pushed to origin/main.')
+
       await waitFor(async () => (await remoteHead(remote)) === localHead, 'the remote branch')
 
       expect((await repo.git(['rev-parse', '--abbrev-ref', 'main@{u}'])).trim()).toBe('origin/main')
-      const notice = page.locator('[data-testid=operation-notice]')
-      await notice.waitFor()
-      expect(await notice.textContent()).toBe('Pushed to origin/main.')
+
+      // Nothing is left to send, so the button waits for the next commit.
+      await waitFor(async () => pushButton.isDisabled(), 'the push button to disable')
+      expect(await page.locator('[data-testid=push-count]').count()).toBe(0)
     } finally {
       await application.close()
     }

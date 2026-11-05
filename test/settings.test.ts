@@ -93,4 +93,19 @@ describe('Settings', () => {
     expect(settings.crlfWarningFor('/repo')).toBe(true)
     expect(settings.crlfWarningFor('/ok')).toBe(false)
   })
+
+  it('starts the light syntax colours from its own palette', () => {
+    expect(new Settings(tempFile()).read().syntaxTheme).toBe('seam')
+  })
+
+  it('remembers the syntax palette and falls back on a name it does not know', () => {
+    const file = tempFile()
+    const settings = new Settings(file)
+    settings.update({ syntaxTheme: 'github' })
+
+    expect(new Settings(file).read().syntaxTheme).toBe('github')
+
+    writeFileSync(file, JSON.stringify({ syntaxTheme: 'neon' }))
+    expect(new Settings(file).read().syntaxTheme).toBe('seam')
+  })
 })

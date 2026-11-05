@@ -9,22 +9,35 @@ import {
   type WebContents
 } from 'electron'
 import type {
+  CheckoutBranchRequest,
+  CheckoutCommitRequest,
+  CloneRequest,
+  CommitFileComparisonRequest,
   CommitRequest,
   ConflictAcceptRequest,
   ConflictRevertRequest,
+  CreateBranchRequest,
   CrlfChoice,
+  DeleteBranchRequest,
   FileVersionSource,
+  GitFlowFinishRequest,
+  GitFlowInitRequest,
+  GitFlowStartRequest,
   HunkRange,
   HunkWriteRequest,
   IdentityWriteRequest,
   IndexWriteRequest,
   MergeApplyRequest,
+  MergeRequest,
   PushRequest,
   PushUpdateRequest,
+  RenameBranchRequest,
   RevertHunksRequest,
+  SettingsPatch,
   StagePathsRequest
 } from '../../shared/ipc'
 import { IPC_CHANNELS } from '../../shared/ipc'
+import type { GitFlowKind, MergeStrategy } from '../../shared/git'
 import type { CommitDrafts } from '../session/commit-drafts'
 import type { CommitHistory } from '../session/commit-history'
 import type { GitWatcher } from '../session/git-watcher'
@@ -157,6 +170,14 @@ function parseMergeApply(value: unknown): MergeApplyRequest | null {
   return { repo, path, content, stage }
 }
 
+/** Narrows an IPC payload to a clone request, rejecting anything else. */
+function parseCloneRequest(value: unknown): CloneRequest | null {
+  if (typeof value !== 'object' || value === null) return null
+  const { url, path } = value as Record<string, unknown>
+  if (typeof url !== 'string' || typeof path !== 'string') return null
+  return { url, path }
+}
+
 /** Narrows an IPC payload to a push, rejecting anything else. */
 function parsePushRequest(value: unknown): PushRequest | null {
   if (typeof value !== 'object' || value === null) return null
@@ -185,6 +206,124 @@ function parsePushUpdate(value: unknown): PushUpdateRequest | null {
   const { repo, strategy } = value as Record<string, unknown>
   if (typeof repo !== 'string' || (strategy !== 'rebase' && strategy !== 'merge')) return null
   return { repo, strategy }
+}
+
+/** Narrows an IPC payload to a branch checkout request. */
+function parseCheckoutBranch(value: unknown): CheckoutBranchRequest | null {
+  if (typeof value !== 'object' || value === null) return null
+  const { repo, branch, createTracking } = value as Record<string, unknown>
+  if (typeof repo !== 'string' || typeof branch !== 'string') return null
+  if (createTracking !== undefined && typeof createTracking !== 'boolean') return null
+  return { repo, branch, ...(createTracking === undefined ? {} : { createTracking }) }
+}
+
+/** Narrows an IPC payload to checking out one commit. */
+function parseCheckoutCommit(value: unknown): CheckoutCommitRequest | null {
+  if (typeof value !== 'object' || value === null) return null
+  const { repo, commit } = value as Record<string, unknown>
+  if (typeof repo !== 'string' || typeof commit !== 'string' || commit === '') return null
+  return { repo, commit }
+}
+
+/** Narrows an IPC payload to a branch creation request. */
+function parseCreateBranch(value: unknown): CreateBranchRequest | null {
+  if (typeof value !== 'object' || value === null) return null
+  const { repo, name, startPoint, checkout } = value as Record<string, unknown>
+  if (typeof repo !== 'string' || typeof name !== 'string') return null
+  if (startPoint !== undefined && startPoint !== null && typeof startPoint !== 'string') return null
+  if (typeof checkout !== 'boolean') return null
+  return { repo, name, startPoint: startPoint ?? null, checkout }
+}
+
+/** Narrows an IPC payload to a branch rename request. */
+function parseRenameBranch(value: unknown): RenameBranchRequest | null {
+  if (typeof value !== 'object' || value === null) return null
+  const { repo, name, newName } = value as Record<string, unknown>
+  if (typeof repo !== 'string' || typeof name !== 'string' || typeof newName !== 'string') {
+    return null
+  }
+  return { repo, name, newName }
+}
+
+/** Narrows an IPC payload to a branch deletion request. */
+function parseDeleteBranch(value: unknown): DeleteBranchRequest | null {
+  if (typeof value !== 'object' || value === null) return null
+  const { repo, name, force } = value as Record<string, unknown>
+  if (typeof repo !== 'string' || typeof name !== 'string' || typeof force !== 'boolean') {
+    return null
+  }
+  return { repo, name, force }
+}
+
+/** Narrows an IPC payload to a merge request. */
+function parseMergeRequest(value: unknown): MergeRequest | null {
+  if (typeof value !== 'object' || value === null) return null
+  const { repo, source, strategy, message } = value as Record<string, unknown>
+  if (typeof repo !== 'string' || typeof source !== 'string' || typeof message !== 'string') {
+    return null
+  }
+  if (strategy !== 'merge-commit' && strategy !== 'fast-forward' && strategy !== 'squash') {
+    return null
+  }
+  return { repo, source, strategy: strategy as MergeStrategy, message }
+}
+
+/** Narrows an IPC payload to a GitFlow initialization request. */
+function parseGitFlowInit(value: unknown): GitFlowInitRequest | null {
+  if (typeof value !== 'object' || value === null) return null
+  const fields = value as Record<string, unknown>
+  const keys = [
+    'repo',
+    'master',
+    'develop',
+    'featurePrefix',
+    'releasePrefix',
+    'hotfixPrefix',
+    'versionTagPrefix'
+  ] as const
+  for (const key of keys) {
+    if (typeof fields[key] !== 'string') return null
+  }
+  return {
+    repo: fields['repo'] as string,
+    master: fields['master'] as string,
+    develop: fields['develop'] as string,
+    featurePrefix: fields['featurePrefix'] as string,
+    releasePrefix: fields['releasePrefix'] as string,
+    hotfixPrefix: fields['hotfixPrefix'] as string,
+    versionTagPrefix: fields['versionTagPrefix'] as string
+  }
+}
+
+/** Narrows an IPC payload to a GitFlow branch start. */
+function parseGitFlowStart(value: unknown): GitFlowStartRequest | null {
+  if (typeof value !== 'object' || value === null) return null
+  const { repo, kind, name } = value as Record<string, unknown>
+  if (typeof repo !== 'string' || typeof name !== 'string') return null
+  if (kind !== 'feature' && kind !== 'release' && kind !== 'hotfix') return null
+  return { repo, kind: kind as GitFlowKind, name }
+}
+
+/** Narrows an IPC payload to a GitFlow finish. */
+function parseGitFlowFinish(value: unknown): GitFlowFinishRequest | null {
+  if (typeof value !== 'object' || value === null) return null
+  const { repo, tag } = value as Record<string, unknown>
+  if (typeof repo !== 'string') return null
+  if (tag !== null && typeof tag !== 'string') return null
+  return { repo, tag }
+}
+
+/** Narrows an IPC payload to a one-file commit comparison request. */
+function parseCommitFileComparison(value: unknown): CommitFileComparisonRequest | null {
+  if (typeof value !== 'object' || value === null) return null
+  const { repo, commit, path, previousPath } = value as Record<string, unknown>
+  if (typeof repo !== 'string' || typeof commit !== 'string' || typeof path !== 'string') {
+    return null
+  }
+  if (previousPath !== undefined && previousPath !== null && typeof previousPath !== 'string') {
+    return null
+  }
+  return { repo, commit, path, previousPath: previousPath ?? null }
 }
 
 /** Narrows an IPC payload to a repository and a message, rejecting anything
@@ -247,6 +386,60 @@ function parseIdentityWrite(value: unknown): IdentityWriteRequest | null {
   if (typeof repo !== 'string' || typeof name !== 'string' || typeof email !== 'string') return null
   if (scope !== 'local' && scope !== 'global') return null
   return { repo, name, email, scope }
+}
+
+/** Narrows an IPC payload to a change of the stored preferences. */
+function parseSettingsPatch(value: unknown): SettingsPatch | null {
+  if (typeof value !== 'object' || value === null) return null
+  const raw = value as Record<string, unknown>
+  const patch: SettingsPatch = {}
+  if ('runHooks' in raw) {
+    if (typeof raw['runHooks'] !== 'boolean') return null
+    patch.runHooks = raw['runHooks']
+  }
+  if ('language' in raw) {
+    if (raw['language'] !== null && typeof raw['language'] !== 'string') return null
+    patch.language = raw['language']
+  }
+  if ('theme' in raw) {
+    if (raw['theme'] !== 'dark' && raw['theme'] !== 'light') return null
+    patch.theme = raw['theme']
+  }
+  if ('whitespace' in raw) {
+    const whitespace = raw['whitespace']
+    if (
+      whitespace !== 'none' &&
+      whitespace !== 'trim' &&
+      whitespace !== 'ignore' &&
+      whitespace !== 'ignore-and-blank'
+    ) {
+      return null
+    }
+    patch.whitespace = whitespace
+  }
+  if ('highlight' in raw) {
+    const highlight = raw['highlight']
+    if (
+      highlight !== 'words' &&
+      highlight !== 'lines' &&
+      highlight !== 'split' &&
+      highlight !== 'characters' &&
+      highlight !== 'none'
+    ) {
+      return null
+    }
+    patch.highlight = highlight
+  }
+  if ('syntaxTheme' in raw) {
+    const syntaxTheme = raw['syntaxTheme']
+    if (syntaxTheme !== 'seam' && syntaxTheme !== 'github' && syntaxTheme !== 'vivid') return null
+    patch.syntaxTheme = syntaxTheme
+  }
+  if ('collapse' in raw) {
+    if (typeof raw['collapse'] !== 'boolean') return null
+    patch.collapse = raw['collapse']
+  }
+  return patch
 }
 
 /** One window's watch over the repository it currently shows. */
@@ -313,7 +506,36 @@ export function registerRepositoryHandlers(
     return repo
   })
 
+  ipcMain.handle(IPC_CHANNELS.chooseDirectory, async (event) => {
+    const parent = BrowserWindow.fromWebContents(event.sender)
+    const result = parent
+      ? await dialog.showOpenDialog(parent, OPEN_DIRECTORY)
+      : await dialog.showOpenDialog(OPEN_DIRECTORY)
+
+    if (result.canceled) return null
+    return result.filePaths[0] ?? null
+  })
+
+  ipcMain.handle(IPC_CHANNELS.cloneRepository, async (_event, request: unknown) => {
+    const parsed = parseCloneRequest(request)
+    if (parsed === null) {
+      return { ok: false, code: 'unknown', message: 'Invalid clone request' }
+    }
+    const result = await service.clone(parsed.url, parsed.path)
+    // The clone is only worth remembering once Git has made it.
+    if (result.ok) recent.remember(result.value)
+    return result
+  })
+
   ipcMain.handle(IPC_CHANNELS.listRecentRepositories, () => recent.list())
+
+  ipcMain.handle(IPC_CHANNELS.removeRecentRepository, (_event, repo: unknown) => {
+    if (typeof repo !== 'string') {
+      return { ok: false, code: 'unknown', message: 'Invalid repository path' }
+    }
+    recent.forget(repo)
+    return { ok: true, value: null }
+  })
 
   ipcMain.handle(IPC_CHANNELS.initialRepository, () => initialRepository)
 
@@ -351,6 +573,12 @@ export function registerRepositoryHandlers(
     const parsed = parseStagePaths(request)
     if (!parsed) return { ok: false, code: 'unknown', message: 'Invalid staging request' }
     return service.unstage(parsed.repo, parsed.paths)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.discardFiles, (_event, request: unknown) => {
+    const parsed = parseStagePaths(request)
+    if (!parsed) return { ok: false, code: 'unknown', message: 'Invalid discard request' }
+    return service.discard(parsed.repo, parsed.paths)
   })
 
   ipcMain.handle(IPC_CHANNELS.writeHunks, (_event, request: unknown) => {
@@ -454,21 +682,53 @@ export function registerRepositoryHandlers(
     return service.readCommitTemplate(repo)
   })
 
+  ipcMain.handle(IPC_CHANNELS.readRepositoryHistory, (_event, repo: unknown) => {
+    if (typeof repo !== 'string') {
+      return { ok: false, code: 'unknown', message: 'Invalid history request' }
+    }
+    return service.readHistory(repo)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.readCommitChanges, (_event, repo: unknown, commit: unknown) => {
+    if (typeof repo !== 'string' || typeof commit !== 'string') {
+      return { ok: false, code: 'unknown', message: 'Invalid commit changes request' }
+    }
+    return service.readCommitChanges(repo, commit)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.checkoutCommit, (_event, request: unknown) => {
+    const parsed = parseCheckoutCommit(request)
+    if (parsed === null) {
+      return { ok: false, code: 'unknown', message: 'Invalid checkout request' }
+    }
+    return service.checkoutCommit(parsed.repo, parsed.commit)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.readCommitFileComparison, (_event, request: unknown) => {
+    const parsed = parseCommitFileComparison(request)
+    if (parsed === null) {
+      return { ok: false, code: 'unknown', message: 'Invalid commit file request' }
+    }
+    return service.readCommitFileComparison(
+      parsed.repo,
+      parsed.commit,
+      parsed.path,
+      parsed.previousPath
+    )
+  })
+
   ipcMain.handle(IPC_CHANNELS.readSettings, () => ({
     ok: true,
-    value: { runHooks: settings.runHooks }
+    value: settings.read()
   }))
 
   ipcMain.handle(IPC_CHANNELS.writeSettings, (_event, value: unknown) => {
-    if (typeof value !== 'object' || value === null) {
-      return { ok: false, code: 'unknown', message: 'Invalid settings' }
-    }
-    const runHooks = (value as Record<string, unknown>)['runHooks']
-    if (typeof runHooks !== 'boolean') {
+    const patch = parseSettingsPatch(value)
+    if (patch === null) {
       return { ok: false, code: 'unknown', message: 'Invalid settings' }
     }
     try {
-      settings.setRunHooks(runHooks)
+      settings.update(patch)
       return { ok: true, value: null }
     } catch (error) {
       return {
@@ -566,6 +826,92 @@ export function registerRepositoryHandlers(
     return service.readPushState(repo)
   })
 
+  ipcMain.handle(IPC_CHANNELS.listBranches, (_event, repo: unknown) => {
+    if (typeof repo !== 'string') {
+      return { ok: false, code: 'unknown', message: 'Invalid branch list request' }
+    }
+    return service.listBranches(repo)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.checkoutBranch, (_event, request: unknown) => {
+    const parsed = parseCheckoutBranch(request)
+    if (parsed === null) {
+      return { ok: false, code: 'unknown', message: 'Invalid checkout request' }
+    }
+    return service.checkoutBranch(parsed.repo, parsed.branch, parsed.createTracking)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.createBranch, (_event, request: unknown) => {
+    const parsed = parseCreateBranch(request)
+    if (parsed === null) {
+      return { ok: false, code: 'unknown', message: 'Invalid branch creation request' }
+    }
+    return service.createBranch(parsed.repo, parsed.name, parsed.startPoint, parsed.checkout)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.renameBranch, (_event, request: unknown) => {
+    const parsed = parseRenameBranch(request)
+    if (parsed === null) {
+      return { ok: false, code: 'unknown', message: 'Invalid branch rename request' }
+    }
+    return service.renameBranch(parsed.repo, parsed.name, parsed.newName)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.deleteBranch, (_event, request: unknown) => {
+    const parsed = parseDeleteBranch(request)
+    if (parsed === null) {
+      return { ok: false, code: 'unknown', message: 'Invalid branch deletion request' }
+    }
+    return service.deleteBranch(parsed.repo, parsed.name, parsed.force)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.readMergeState, (_event, repo: unknown) => {
+    if (typeof repo !== 'string') {
+      return { ok: false, code: 'unknown', message: 'Invalid merge state request' }
+    }
+    return service.readMergeState(repo)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.startMerge, (_event, request: unknown) => {
+    const parsed = parseMergeRequest(request)
+    if (parsed === null) {
+      return { ok: false, code: 'unknown', message: 'Invalid merge request' }
+    }
+    return service.mergeBranch(parsed.repo, parsed.source, parsed.strategy, parsed.message)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.readGitFlow, (_event, repo: unknown) => {
+    if (typeof repo !== 'string') {
+      return { ok: false, code: 'unknown', message: 'Invalid GitFlow state request' }
+    }
+    return service.readGitFlow(repo)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.initGitFlow, (_event, request: unknown) => {
+    const parsed = parseGitFlowInit(request)
+    if (parsed === null) {
+      return { ok: false, code: 'unknown', message: 'Invalid GitFlow initialization request' }
+    }
+    const { repo, ...config } = parsed
+    return service.initGitFlow(repo, config)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.startGitFlow, (_event, request: unknown) => {
+    const parsed = parseGitFlowStart(request)
+    if (parsed === null) {
+      return { ok: false, code: 'unknown', message: 'Invalid GitFlow start request' }
+    }
+    return service.startGitFlow(parsed.repo, parsed.kind, parsed.name)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.finishGitFlow, (_event, request: unknown) => {
+    const parsed = parseGitFlowFinish(request)
+    if (parsed === null) {
+      return { ok: false, code: 'unknown', message: 'Invalid GitFlow finish request' }
+    }
+    return service.finishGitFlow(parsed.repo, parsed.tag)
+  })
+
   ipcMain.handle(IPC_CHANNELS.runPush, (event, request: unknown) => {
     const parsed = parsePushRequest(request)
     if (parsed === null) {
@@ -602,6 +948,21 @@ export function registerRepositoryHandlers(
       return { ok: false, code: 'unknown', message: 'Invalid push update request' }
     }
     return service.updateForPush(parsed.repo, parsed.strategy)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.fetchRemotes, (_event, repo: unknown) => {
+    if (typeof repo !== 'string') {
+      return { ok: false, code: 'unknown', message: 'Invalid fetch request' }
+    }
+    return service.fetchRemotes(repo)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.pullUpstream, (_event, request: unknown) => {
+    const parsed = parsePushUpdate(request)
+    if (parsed === null) {
+      return { ok: false, code: 'unknown', message: 'Invalid pull request' }
+    }
+    return service.pull(parsed.repo, parsed.strategy)
   })
 
   ipcMain.handle(IPC_CHANNELS.writeClipboardText, (_event, text: unknown) => {

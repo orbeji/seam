@@ -4,7 +4,60 @@
     "tagline": "Un cliente de Git para preparar cambios, ver diferencias y resolver conflictos."
   },
   "topbar": {
-    "refresh": "Actualizar estado"
+    "refresh": "Actualizar estado",
+    "history": {
+      "label": "Historial",
+      "title": "Mostrar el grafo de commits",
+      "hide": "Ocultar el grafo de commits"
+    },
+    "fetch": {
+      "label": "Fetch",
+      "title": "Descargar de todos los remotos"
+    },
+    "pull": {
+      "label": "Pull",
+      "title": "Actualizar desde el upstream"
+    },
+    "merge": {
+      "label": "Fusionar",
+      "title": "Fusionar una rama en la actual"
+    },
+    "newBranch": {
+      "label": "Rama",
+      "title": "Crear, renombrar o eliminar ramas"
+    },
+    "gitflow": {
+      "label": "GitFlow",
+      "title": "Iniciar o terminar ramas GitFlow"
+    },
+    "sync": {
+      "fetching": "Descargando de todos los remotos…",
+      "fetchDone": "Descarga terminada.",
+      "pulling": "Actualizando desde el upstream…",
+      "pullDone": "Todo está al día con el upstream.",
+      "pullFailed": "Git no pudo actualizar la rama.",
+      "dismiss": "Descartar"
+    },
+    "branch": {
+      "local": "Ramas locales",
+      "remote": "Ramas remotas",
+      "checkout": "Cambiar",
+      "loading": "Cargando ramas…",
+      "none": "No se encontraron ramas",
+      "current": "Rama actual"
+    },
+    "repo": {
+      "remove": "Eliminar de la lista"
+    }
+  },
+  "repoTabs": {
+    "label": "Repositorios abiertos",
+    "empty": "Ningún repositorio abierto",
+    "close": "Cerrar {{repo}}",
+    "add": "Añadir un repositorio",
+    "reopen": "Reabrir un repositorio",
+    "closed": "Cerrados recientemente",
+    "none": "No hay repositorios para reabrir."
   },
   "status": {
     "ready": "Listo",
@@ -21,19 +74,111 @@
     "selectFile": "Selecciona un archivo para ver sus diferencias.",
     "closeTab": "Cerrar pestaña"
   },
+  "history": {
+    "title": "Historial de commits",
+    "loading": "Leyendo el historial de commits…",
+    "empty": "Este repositorio todavía no tiene commits.",
+    "count_one": "{{count}} commit",
+    "count_other": "{{count}} commits",
+    "truncated": "Se muestran los {{count}} commits más recientes.",
+    "noSubject": "(sin mensaje)",
+    "tagTitle": "Etiqueta {{name}}",
+    "headTitle": "Rama actual {{name}}",
+    "branchTitle": "Rama {{name}}",
+    "remoteTitle": "Rama remota {{name}}",
+    "syncedHeadTitle": "Rama actual {{name}}, sincronizada con {{remote}}",
+    "syncedBranchTitle": "Rama {{name}}, sincronizada con {{remote}}",
+    "back": "Volver al historial",
+    "commitTitle": "Commit {{id}}",
+    "files": "Archivos modificados",
+    "filesCount_one": "{{count}} archivo modificado",
+    "filesCount_other": "{{count}} archivos modificados",
+    "filesLoading": "Leyendo los archivos modificados…",
+    "filesEmpty": "Este commit no modifica ningún archivo.",
+    "selectFile": "Selecciona un archivo modificado para ver sus cambios.",
+    "commitChanges": "Cambios del commit",
+    "backToCurrentChanges": "Volver a los cambios actuales",
+    "renamedFrom": "Antes {{path}}",
+    "checkout": {
+      "title": "¿Cambiar a este commit?",
+      "blockedTitle": "No se puede cambiar a este commit",
+      "past": "Este commit es anterior al HEAD actual. Al cambiar a él, HEAD queda separado (detached) y el árbol de trabajo vuelve a esa revisión. Los commits más recientes siguen en {{branch}}; los commits que hagas aquí no pertenecen a ninguna rama a menos que crees una, y solo se podrán alcanzar desde el reflog.",
+      "other": "Este commit no es el HEAD actual. Al cambiar a él, HEAD queda separado (detached) en {{id}} y el árbol de trabajo pasa a esa revisión. Los commits que hagas aquí no pertenecen a ninguna rama a menos que crees una, y solo se podrán alcanzar desde el reflog.",
+      "branchTitle": "¿Cambiar a la rama {{branch}}?",
+      "remoteTitle": "¿Cambiar a {{branch}}?",
+      "branch": "HEAD se mantendrá en la rama {{branch}} y el árbol de trabajo pasará a su punta.",
+      "remote": "Seam hace fetch del remoto y cambia a la rama local {{branch}}, que lo sigue.",
+      "tagTip": "Este commit tiene la etiqueta {{tags}}.",
+      "dirty": "Hay cambios sin commit. Git puede rechazar el checkout si se fueran a sobrescribir; si no, te acompañarán a la revisión seleccionada.",
+      "operation": "Hay un {{operation}} en curso. Termínalo o abórtalo antes de cambiar a otro commit.",
+      "cancel": "Cancelar",
+      "confirm": "Cambiar al commit",
+      "confirmBranch": "Cambiar a la rama",
+      "checkingOut": "Cambiando…",
+      "alreadyHere": "Ya estás en este commit.",
+      "done": "Has cambiado a {{id}} con HEAD separado (detached).",
+      "doneBranch": "Has cambiado a la rama {{branch}}.",
+      "failed": "Git no pudo cambiar a este commit.",
+      "hint": "Haz doble clic para cambiar a este commit."
+    },
+    "maximize": "Maximizar",
+    "restore": "Restaurar tamaño",
+    "status": {
+      "added": "Añadido",
+      "modified": "Modificado",
+      "deleted": "Eliminado",
+      "renamed": "Renombrado",
+      "copied": "Copiado",
+      "type-changed": "Tipo cambiado",
+      "unmerged": "Sin fusionar",
+      "unknown": "Modificado"
+    },
+    "close": "Cerrar"
+  },
   "language": {
     "label": "Idioma",
     "names": {
       "en": "English",
-      "es": "Español"
+      "es": "Español",
+      "ca": "Català"
     }
   },
+  "settings": {
+    "title": "Configuración",
+    "language": "Idioma",
+    "languageAuto": "Automático (sistema)",
+    "theme": "Tema",
+    "themeDark": "Oscuro",
+    "themeLight": "Claro",
+    "syntaxTheme": "Colores del código (claro)",
+    "syntaxSeam": "Seam",
+    "syntaxGithub": "GitHub",
+    "syntaxVivid": "VS Code",
+    "whitespace": "Espacios en blanco",
+    "whitespaceNone": "Ninguno (comparar exactamente)",
+    "whitespaceTrim": "Ignorar en los extremos",
+    "whitespaceIgnore": "Ignorar todos",
+    "whitespaceIgnoreBlank": "Ignorar todos y líneas en blanco",
+    "highlight": "Resaltado de cambios",
+    "highlightWords": "Palabras",
+    "highlightLines": "Líneas",
+    "highlightSplit": "Cambios divididos",
+    "highlightChars": "Caracteres",
+    "highlightNone": "Ninguno",
+    "collapse": "Plegar líneas sin cambios por defecto",
+    "signoff": "Firma",
+    "signoffHint": "Añadir trailer Signed-off-by a los commits por defecto",
+    "hooks": "Ejecutar hooks",
+    "hooksHint": "Ejecutar hooks pre-commit y commit-msg por defecto",
+    "save": "Guardar"
+  },
   "changes": {
-    "title": "Cambios",
+    "title": "Cambios actuales",
     "files_one": "{{count}} archivo",
     "files_other": "{{count}} archivos",
     "empty": "Abre un repositorio para ver sus cambios preparados, sin preparar y sin seguimiento.",
     "open": "Abrir repositorio…",
+    "clone": "Clonar repositorio…",
     "recent": "Repositorios recientes",
     "loading": "Leyendo el repositorio…",
     "none": "Nada por aquí.",
@@ -44,10 +189,14 @@
       "conflicts": "Conflictos de merge"
     },
     "actions": {
-      "stage": "Preparar",
-      "unstage": "Quitar",
-      "stageAll": "Preparar todo",
-      "unstageAll": "Quitar todo"
+      "stage": "Stage",
+      "unstage": "Unstage",
+      "stageAll": "Stage all",
+      "unstageAll": "Unstage all"
+    },
+    "menu": {
+      "label": "Acciones del archivo",
+      "discardAll": "Descartar todos los cambios"
     },
     "operation": {
       "merge": "Merge en curso",
@@ -55,6 +204,21 @@
       "revert": "Revert en curso",
       "rebase": "Rebase en curso"
     }
+  },
+  "clone": {
+    "title": "Clonar repositorio",
+    "explain": "Git copia un repositorio desde una URL a una carpeta nueva con su nombre.",
+    "url": "URL del repositorio",
+    "urlPlaceholder": "https://github.com/usuario/repositorio.git",
+    "destination": "Carpeta contenedora",
+    "destinationPlaceholder": "/home/tu/proyectos",
+    "browse": "Examinar…",
+    "target": "Se clonará en {{path}}",
+    "targetUnknown": "Escribe una URL y elige una carpeta contenedora para ver la carpeta nueva.",
+    "required": "Escribe la URL del repositorio y elige una carpeta contenedora.",
+    "cancel": "Cancelar",
+    "submit": "Clonar",
+    "cloning": "Clonando…"
   },
   "conflicts": {
     "title": "Conflictos de merge",
@@ -159,51 +323,32 @@
     "outputEmpty": "Git se detuvo sin imprimir nada."
   },
   "merge": {
-    "yours": "Tuyos",
-    "result": "Resultado",
-    "theirs": "Suyos",
-    "readOnly": "solo lectura",
-    "editable": "editable",
-    "conflictOf": "Conflicto {{current}} de {{total}}",
-    "noConflicts": "Sin conflictos",
-    "previousConflict": "Conflicto anterior (Mayús+F7)",
-    "nextConflict": "Conflicto siguiente (F7)",
-    "save": "Guardar y cerrar",
-    "apply": "Aplicar cambios",
-    "close": "Cerrar sin aplicar",
-    "applyAll": "Aplicar todo lo no conflictivo",
-    "fromLeft": "Desde la izquierda",
-    "fromRight": "Desde la derecha",
-    "resolveSimple": "Resolver conflictos simples",
-    "compare": "Comparar",
-    "compareYours": "Tuyos frente al resultado",
-    "compareTheirs": "Suyos frente al resultado",
-    "closeCompare": "Cerrar comparación",
-    "takeLeft": "Aceptar el cambio de Tuyos",
-    "ignoreLeft": "Ignorar el cambio de Tuyos",
-    "takeRight": "Aceptar el cambio de Suyos",
-    "ignoreRight": "Ignorar el cambio de Suyos",
-    "resolveLeft": "Resolver con Tuyos",
-    "resolveRight": "Resolver con Suyos",
-    "revert": "Deshacer el cambio",
-    "contextMenu": "Acciones del cambio",
-    "stats": "{{changes}} cambios: {{conflicts}} conflictos, {{nonConflicting}} no conflictivos, {{resolved}} resueltos",
-    "legend": {
-      "modified": "Modificado",
-      "deleted": "Borrado",
-      "added": "Añadido",
-      "conflicting": "En conflicto"
-    },
-    "statusResult": "El resultado parte del ancestro común",
-    "binary": "Es un conflicto binario. Elige un lado en la lista de conflictos.",
-    "readOnlyFile": "Este archivo no tiene stages separados que fusionar. Se abre en solo lectura.",
-    "large": "El archivo es grande, así que se reducen el resaltado en línea y las marcas de unión.",
-    "resolveAllFirst": "Resuelve todos los cambios antes de aplicar.",
-    "discardTitle": "¿Descartar el resultado?",
-    "discardBody": "Los cambios hechos en este editor no se han escrito. Si cierras ahora, el archivo queda como estaba.",
-    "discard": "Descartar y cerrar",
-    "cancel": "Seguir editando",
-    "loading": "Leyendo las tres versiones…"
+    "title": "Fusionar una rama",
+    "loading": "Leyendo las ramas…",
+    "into": "El resultado va a {{branch}}.",
+    "detached": "HEAD está separado. Haz checkout de una rama antes de fusionar.",
+    "source": "Rama que fusionar",
+    "choose": "Elige una rama",
+    "strategy": "Cómo integrar",
+    "mergeCommit": "Crear un commit de fusión (--no-ff)",
+    "fastForward": "Solo avance rápido",
+    "squash": "Aplastar los cambios en el árbol de trabajo",
+    "message": "Mensaje del commit de fusión",
+    "messagePlaceholder": "Déjalo vacío para usar el mensaje de Git",
+    "operation": "Ya hay un {{operation}} en curso. Termínalo o anúlalo primero.",
+    "dirty": "Haz commit o guarda tus cambios antes de fusionar.",
+    "noBranches": "No hay otra rama que fusionar.",
+    "required": "Elige la rama que fusionar.",
+    "output": "Salida de Git",
+    "conflicts_one": "La fusión se ha detenido en {{count}} archivo con conflictos.",
+    "conflicts_other": "La fusión se ha detenido en {{count}} archivos con conflictos.",
+    "resolve": "Resolver conflictos",
+    "close": "Cerrar",
+    "merging": "Fusionando…",
+    "submit": "Fusionar",
+    "completed": "Fusión terminada.",
+    "done": "Se ha fusionado {{source}} en {{branch}}.",
+    "failed": "Git no pudo fusionar la rama. Su salida está abajo."
   },
   "commit": {
     "message": {
@@ -215,6 +360,7 @@
     "signoff": "Firma",
     "hooks": "Ejecutar hooks",
     "cancel": "Cancelar",
+    "committing": "Confirmando…",
     "output": "Salida de los hooks",
     "timedOut": "El commit seguía en marcha tras cinco minutos y se ha detenido.",
     "history": "Historial",
@@ -225,18 +371,18 @@
       "label": "Autor",
       "placeholder": "Nombre <correo>"
     },
-    "button": "Confirmar",
-    "commitAndPush": "Confirmar y hacer push",
-    "buttonCount_one": "Confirmar {{count}} archivo preparado",
-    "buttonCount_other": "Confirmar {{count}} archivos preparados",
-    "help": "Solo se confirman los cambios preparados. Se desactiva cuando no hay nada preparado.",
+    "button": "Commit",
+    "commitAndPush": "Commit and push",
+    "buttonCount_one": "Commit {{count}} archivo preparado",
+    "buttonCount_other": "Commit {{count}} archivos preparados",
+    "help": "Solo se hace commit de los cambios preparados. Se desactiva cuando no hay nada preparado.",
     "reason": {
       "nothing-staged": "No hay nada preparado.",
       "conflicts": "Hay conflictos sin resolver."
     },
-    "operation": "{{operation}}: termínala antes de confirmar.",
+    "operation": "{{operation}}: termínala antes de hacer commit.",
     "finishMerge": "Terminar merge",
-    "helpMerge": "Confirma el merge con el mensaje de arriba, cuando no queden conflictos sin resolver."
+    "helpMerge": "Hace commit del merge con el mensaje de arriba, cuando no queden conflictos sin resolver."
   },
   "push": {
     "button": "Push",
@@ -258,6 +404,8 @@
     "tagsFollow": "Tags anotados alcanzables",
     "tagsAll": "Todos los tags",
     "submit": "Push",
+    "pushing": "Enviando…",
+    "updating": "Actualizando y enviando…",
     "cancelPush": "Cancelar push",
     "close": "Cerrar",
     "done": "Enviado a {{remote}}/{{branch}}.",
@@ -335,7 +483,9 @@
       "worktree": "Copia de trabajo (editable)",
       "stage1": "Base (solo lectura)",
       "stage2": "Tu versión (solo lectura)",
-      "stage3": "Su versión (solo lectura)"
+      "stage3": "Su versión (solo lectura)",
+      "commitParent": "Commit padre (solo lectura)",
+      "commit": "Commit (solo lectura)"
     },
     "navigation": {
       "previous": "Diferencia anterior",
@@ -348,10 +498,12 @@
       "stage": "Preparar hunk",
       "stageSelection": "Preparar líneas seleccionadas",
       "unstage": "Quitar hunk",
-      "revert": "Revertir hunk",
-      "revertConfirm": "¿Descartar el cambio pendiente? El archivo vuelve a lo preparado.",
-      "revertAccept": "Revertir",
-      "revertCancel": "Cancelar"
+      "revert": "Descartar hunk"
+    },
+    "chunk": {
+      "stage": "Preparar",
+      "discard": "Descartar",
+      "unstage": "Quitar"
     },
     "count": "Diferencias: {{count}}",
     "three": {
@@ -395,6 +547,92 @@
     "scope": "Guardarlo",
     "scopeRepo": "Solo en este repositorio",
     "scopeGlobal": "En todos los repositorios"
+  },
+  "branch": {
+    "title": "Ramas",
+    "explain": "Crea una rama desde HEAD, una rama o una etiqueta. Renómbrala o elimínala sin salir de Seam.",
+    "name": "Nombre de la rama",
+    "namePlaceholder": "feature/mi-cambio",
+    "startPoint": "Empezar desde",
+    "head": "HEAD actual",
+    "checkout": "Hacer checkout de la rama nueva",
+    "nameRequired": "Pon un nombre a la rama nueva.",
+    "create": "Crear rama",
+    "local": "Ramas locales",
+    "loading": "Cargando las ramas…",
+    "none": "No hay ramas locales.",
+    "current": "actual",
+    "rename": "Renombrar",
+    "newName": "Nombre nuevo",
+    "saveRename": "Renombrar rama",
+    "cancel": "Cancelar",
+    "delete": "Eliminar",
+    "deleteCurrent": "Haz checkout de otra rama antes de eliminar esta.",
+    "deleteExplain": "Git solo elimina una rama cuando sus commits ya están fusionados. Forzar la eliminación descarta los commits sin fusionar.",
+    "force": "Eliminar aunque sus commits no estén fusionados",
+    "confirmDelete": "Eliminar rama",
+    "close": "Cerrar",
+    "created": "Se ha creado {{branch}}.",
+    "renamed": "Se ha renombrado {{name}} a {{newName}}.",
+    "deleted": "Se ha eliminado {{branch}}."
+  },
+  "gitflow": {
+    "title": "GitFlow",
+    "loading": "Leyendo la configuración de GitFlow…",
+    "initExplain": "Elige las dos ramas de larga vida y los prefijos de las ramas que crea Seam. GitFlow lo guarda en la configuración local del repositorio.",
+    "fields": {
+      "master": "Rama master",
+      "develop": "Rama develop",
+      "featurePrefix": "Prefijo de feature",
+      "releasePrefix": "Prefijo de release",
+      "hotfixPrefix": "Prefijo de hotfix",
+      "versionTagPrefix": "Prefijo de la etiqueta de versión"
+    },
+    "init": "Inicializar GitFlow",
+    "initialized": "GitFlow está inicializado.",
+    "master": "Master",
+    "develop": "Develop",
+    "current": "Actual",
+    "detached": "HEAD separado",
+    "operation": "Hay un {{operation}} en curso. Termínalo o anúlalo primero.",
+    "dirty": "Haz commit o guarda tus cambios antes de continuar.",
+    "startTitle": "Iniciar una rama",
+    "kind": {
+      "feature": "Feature",
+      "release": "Release",
+      "hotfix": "Hotfix"
+    },
+    "name": "Nombre de la rama",
+    "namePlaceholder": "mi-cambio",
+    "startFrom": "Empieza desde {{branch}}.",
+    "start": "Iniciar rama",
+    "finishTitle": "Terminar {{branch}}",
+    "resumeTitle": "Continuar {{branch}}",
+    "finishExplain": {
+      "feature": "Fusiona la feature en {{develop}} con un commit de fusión y la elimina.",
+      "release": "Fusiona la release en {{master}}, la etiqueta, fusiona {{master}} de vuelta en {{develop}} y la elimina.",
+      "hotfix": "Fusiona el hotfix en {{master}}, lo etiqueta, fusiona {{master}} de vuelta en {{develop}} y lo elimina."
+    },
+    "resumeExplain": "Una finalización se detuvo en «{{step}}». Resuelve lo que la detuvo y continúa desde aquí.",
+    "step": {
+      "merge-master": "fusionar en master",
+      "tag": "crear la etiqueta",
+      "merge-develop": "fusionar de vuelta en develop",
+      "delete": "eliminar la rama"
+    },
+    "tag": "Etiqueta",
+    "tagValue": "La finalización crea la etiqueta {{tag}}.",
+    "finish": "Terminar rama",
+    "resume": "Continuar la finalización",
+    "none": "Ninguna",
+    "output": "Salida de Git",
+    "conflicts_one": "La finalización se ha detenido en {{count}} archivo con conflictos. Resuélvelo y continúa.",
+    "conflicts_other": "La finalización se ha detenido en {{count}} archivos con conflictos. Resuélvelos y continúa.",
+    "resolve": "Resolver conflictos",
+    "close": "Cerrar",
+    "started": "Se ha iniciado {{branch}}.",
+    "finished": "Se ha terminado {{branch}}.",
+    "failed": "Git no pudo terminar la rama. Su salida está abajo."
   },
   "errors": {
     "gitNotFound": "No se ha encontrado Git. Instala Git 2.30 o posterior y vuelve a abrir Seam.",

@@ -4,7 +4,60 @@
     "tagline": "A Git client for staging, diffs and conflicts."
   },
   "topbar": {
-    "refresh": "Refresh status"
+    "refresh": "Refresh status",
+    "history": {
+      "label": "History",
+      "title": "Show the commit graph",
+      "hide": "Hide the commit graph"
+    },
+    "fetch": {
+      "label": "Fetch",
+      "title": "Fetch from all remotes"
+    },
+    "pull": {
+      "label": "Pull",
+      "title": "Pull from upstream"
+    },
+    "merge": {
+      "label": "Merge",
+      "title": "Merge a branch into the current one"
+    },
+    "newBranch": {
+      "label": "Branch",
+      "title": "Create, rename or delete branches"
+    },
+    "gitflow": {
+      "label": "GitFlow",
+      "title": "Start or finish GitFlow branches"
+    },
+    "sync": {
+      "fetching": "Fetching from all remotes…",
+      "fetchDone": "Fetch finished.",
+      "pulling": "Pulling from the upstream…",
+      "pullDone": "Everything is up to date with the upstream.",
+      "pullFailed": "Git could not update the branch.",
+      "dismiss": "Dismiss"
+    },
+    "branch": {
+      "local": "Local branches",
+      "remote": "Remote branches",
+      "checkout": "Checkout",
+      "loading": "Loading branches…",
+      "none": "No branches found",
+      "current": "Current branch"
+    },
+    "repo": {
+      "remove": "Remove from list"
+    }
+  },
+  "repoTabs": {
+    "label": "Open repositories",
+    "empty": "No repository open",
+    "close": "Close {{repo}}",
+    "add": "Add a repository",
+    "reopen": "Reopen a repository",
+    "closed": "Recently closed",
+    "none": "No repositories to reopen."
   },
   "status": {
     "ready": "Ready",
@@ -21,19 +74,111 @@
     "selectFile": "Select a file to see its diff.",
     "closeTab": "Close tab"
   },
+  "history": {
+    "title": "Commit history",
+    "loading": "Reading the commit history…",
+    "empty": "This repository has no commits yet.",
+    "count_one": "{{count}} commit",
+    "count_other": "{{count}} commits",
+    "truncated": "Showing the newest {{count}} commits.",
+    "noSubject": "(no message)",
+    "tagTitle": "Tag {{name}}",
+    "headTitle": "Current branch {{name}}",
+    "branchTitle": "Branch {{name}}",
+    "remoteTitle": "Remote branch {{name}}",
+    "syncedHeadTitle": "Current branch {{name}}, in sync with {{remote}}",
+    "syncedBranchTitle": "Branch {{name}}, in sync with {{remote}}",
+    "back": "Back to history",
+    "commitTitle": "Commit {{id}}",
+    "files": "Changed files",
+    "filesCount_one": "{{count}} changed file",
+    "filesCount_other": "{{count}} changed files",
+    "filesLoading": "Reading the changed files…",
+    "filesEmpty": "This commit does not change any file.",
+    "selectFile": "Select a changed file to see its diff.",
+    "commitChanges": "Commit Changes",
+    "backToCurrentChanges": "Back to current changes",
+    "renamedFrom": "Was {{path}}",
+    "checkout": {
+      "title": "Check out this commit?",
+      "blockedTitle": "Cannot check out this commit",
+      "past": "This commit is older than the current HEAD. Checking it out detaches HEAD and moves the working tree back to that revision. The newer commits stay on {{branch}}; commits you make here belong to no branch unless you create one, and are only reachable from the reflog.",
+      "other": "This commit is not the current HEAD. Checking it out leaves HEAD detached at {{id}} and switches the working tree to that revision. Commits you make here belong to no branch unless you create one, and are only reachable from the reflog.",
+      "branchTitle": "Check out branch {{branch}}?",
+      "remoteTitle": "Check out {{branch}}?",
+      "branch": "HEAD will stay attached to branch {{branch}} and the working tree will switch to its tip.",
+      "remote": "Seam fetches the remote and checks out the local branch {{branch}} that tracks it.",
+      "tagTip": "This commit is tagged {{tags}}.",
+      "dirty": "There are uncommitted changes. Git may refuse the checkout if they would be overwritten; otherwise they follow you into the checked-out revision.",
+      "operation": "A {{operation}} is in progress. Finish or abort it before checking out a commit.",
+      "cancel": "Cancel",
+      "confirm": "Check out commit",
+      "confirmBranch": "Check out branch",
+      "checkingOut": "Checking out…",
+      "alreadyHere": "You are already at this commit.",
+      "done": "Checked out {{id}} in detached HEAD.",
+      "doneBranch": "Checked out branch {{branch}}.",
+      "failed": "Git could not check out this commit.",
+      "hint": "Double-click to check out this commit."
+    },
+    "maximize": "Maximize",
+    "restore": "Restore size",
+    "status": {
+      "added": "Added",
+      "modified": "Modified",
+      "deleted": "Deleted",
+      "renamed": "Renamed",
+      "copied": "Copied",
+      "type-changed": "Type changed",
+      "unmerged": "Unmerged",
+      "unknown": "Changed"
+    },
+    "close": "Close"
+  },
   "language": {
     "label": "Language",
     "names": {
       "en": "English",
-      "es": "Español"
+      "es": "Español",
+      "ca": "Català"
     }
   },
+  "settings": {
+    "title": "Settings",
+    "language": "Language",
+    "languageAuto": "Automatic (system)",
+    "theme": "Theme",
+    "themeDark": "Dark",
+    "themeLight": "Light",
+    "syntaxTheme": "Code colours (light)",
+    "syntaxSeam": "Seam",
+    "syntaxGithub": "GitHub",
+    "syntaxVivid": "VS Code",
+    "whitespace": "Whitespace",
+    "whitespaceNone": "None (compare exactly)",
+    "whitespaceTrim": "Ignore around",
+    "whitespaceIgnore": "Ignore all",
+    "whitespaceIgnoreBlank": "Ignore all and blank lines",
+    "highlight": "Change highlight",
+    "highlightWords": "Words",
+    "highlightLines": "Lines",
+    "highlightSplit": "Split changes",
+    "highlightChars": "Characters",
+    "highlightNone": "None",
+    "collapse": "Collapse unchanged lines by default",
+    "signoff": "Sign-off",
+    "signoffHint": "Add Signed-off-by trailer to commits by default",
+    "hooks": "Run hooks",
+    "hooksHint": "Run pre-commit and commit-msg hooks by default",
+    "save": "Save"
+  },
   "changes": {
-    "title": "Changes",
+    "title": "Current Changes",
     "files_one": "{{count}} file",
     "files_other": "{{count}} files",
     "empty": "Open a repository to see its staged, unstaged and untracked changes.",
     "open": "Open repository…",
+    "clone": "Clone repository…",
     "recent": "Recent repositories",
     "loading": "Reading the repository…",
     "none": "Nothing here.",
@@ -49,12 +194,31 @@
       "stageAll": "Stage all",
       "unstageAll": "Unstage all"
     },
+    "menu": {
+      "label": "File actions",
+      "discardAll": "Discard all changes"
+    },
     "operation": {
       "merge": "Merge in progress",
       "cherry-pick": "Cherry-pick in progress",
       "revert": "Revert in progress",
       "rebase": "Rebase in progress"
     }
+  },
+  "clone": {
+    "title": "Clone repository",
+    "explain": "Git copies a repository from a URL into a new folder named after it.",
+    "url": "Repository URL",
+    "urlPlaceholder": "https://github.com/user/repo.git",
+    "destination": "Parent folder",
+    "destinationPlaceholder": "/home/you/projects",
+    "browse": "Browse…",
+    "target": "Will clone into {{path}}",
+    "targetUnknown": "Enter a URL and choose a parent folder to see the new folder.",
+    "required": "Enter a repository URL and choose a parent folder.",
+    "cancel": "Cancel",
+    "submit": "Clone",
+    "cloning": "Cloning…"
   },
   "conflicts": {
     "title": "Merge conflicts",
@@ -159,51 +323,32 @@
     "outputEmpty": "Git stopped without printing anything."
   },
   "merge": {
-    "yours": "Yours",
-    "result": "Result",
-    "theirs": "Theirs",
-    "readOnly": "read-only",
-    "editable": "editable",
-    "conflictOf": "Conflict {{current}} of {{total}}",
-    "noConflicts": "No conflicts",
-    "previousConflict": "Previous conflict (Shift+F7)",
-    "nextConflict": "Next conflict (F7)",
-    "save": "Save and close",
-    "apply": "Apply changes",
-    "close": "Close without applying",
-    "applyAll": "Apply all non-conflicting",
-    "fromLeft": "From left",
-    "fromRight": "From right",
-    "resolveSimple": "Resolve simple conflicts",
-    "compare": "Compare",
-    "compareYours": "Yours vs Result",
-    "compareTheirs": "Theirs vs Result",
-    "closeCompare": "Close compare",
-    "takeLeft": "Accept the Yours change",
-    "ignoreLeft": "Ignore the Yours change",
-    "takeRight": "Accept the Theirs change",
-    "ignoreRight": "Ignore the Theirs change",
-    "resolveLeft": "Resolve using Yours",
-    "resolveRight": "Resolve using Theirs",
-    "revert": "Revert change",
-    "contextMenu": "Change actions",
-    "stats": "{{changes}} changes: {{conflicts}} conflicts, {{nonConflicting}} non-conflicting, {{resolved}} resolved",
-    "legend": {
-      "modified": "Modified",
-      "deleted": "Deleted",
-      "added": "Added",
-      "conflicting": "Conflicting"
-    },
-    "statusResult": "The result starts from the common ancestor",
-    "binary": "This is a binary conflict. Choose a side in the conflicts list.",
-    "readOnlyFile": "This file has no separate stages to merge. It opens read-only.",
-    "large": "This file is large, so inline highlighting and the connecting marks are reduced.",
-    "resolveAllFirst": "Resolve every change before applying.",
-    "discardTitle": "Discard the result?",
-    "discardBody": "The changes made in this editor have not been written. Closing now leaves the file as it was.",
-    "discard": "Discard and close",
-    "cancel": "Keep editing",
-    "loading": "Reading the three versions…"
+    "title": "Merge a branch",
+    "loading": "Reading the branches…",
+    "into": "The result goes into {{branch}}.",
+    "detached": "HEAD is detached. Check out a branch before merging.",
+    "source": "Branch to merge",
+    "choose": "Choose a branch",
+    "strategy": "How to integrate",
+    "mergeCommit": "Create a merge commit (--no-ff)",
+    "fastForward": "Fast-forward only",
+    "squash": "Squash the changes into the working tree",
+    "message": "Merge commit message",
+    "messagePlaceholder": "Leave empty to use Git's message",
+    "operation": "A {{operation}} is already in progress. Finish or abort it first.",
+    "dirty": "Commit or stash your changes before merging.",
+    "noBranches": "There is no other branch to merge in.",
+    "required": "Choose the branch to merge.",
+    "output": "Git output",
+    "conflicts_one": "The merge stopped on {{count}} conflicted file.",
+    "conflicts_other": "The merge stopped on {{count}} conflicted files.",
+    "resolve": "Resolve conflicts",
+    "close": "Close",
+    "merging": "Merging…",
+    "submit": "Merge",
+    "completed": "Merge finished.",
+    "done": "Merged {{source}} into {{branch}}.",
+    "failed": "Git could not merge the branch. Its output is below."
   },
   "commit": {
     "message": {
@@ -215,6 +360,7 @@
     "signoff": "Sign-off",
     "hooks": "Run hooks",
     "cancel": "Cancel",
+    "committing": "Committing…",
     "output": "Hook output",
     "timedOut": "The commit was still running after five minutes and was stopped.",
     "history": "History",
@@ -258,6 +404,8 @@
     "tagsFollow": "Reachable annotated tags",
     "tagsAll": "All tags",
     "submit": "Push",
+    "pushing": "Pushing…",
+    "updating": "Updating and pushing…",
     "cancelPush": "Cancel push",
     "close": "Close",
     "done": "Pushed to {{remote}}/{{branch}}.",
@@ -335,7 +483,9 @@
       "worktree": "Working copy (editable)",
       "stage1": "Base (read-only)",
       "stage2": "Yours (read-only)",
-      "stage3": "Theirs (read-only)"
+      "stage3": "Theirs (read-only)",
+      "commitParent": "Parent commit (read-only)",
+      "commit": "Commit (read-only)"
     },
     "navigation": {
       "previous": "Previous difference",
@@ -348,10 +498,12 @@
       "stage": "Stage hunk",
       "stageSelection": "Stage selected lines",
       "unstage": "Unstage hunk",
-      "revert": "Revert hunk",
-      "revertConfirm": "Revert the pending change? The file goes back to what is staged.",
-      "revertAccept": "Revert",
-      "revertCancel": "Cancel"
+      "revert": "Discard hunk"
+    },
+    "chunk": {
+      "stage": "Stage",
+      "discard": "Discard",
+      "unstage": "Unstage"
     },
     "count": "Differences: {{count}}",
     "three": {
@@ -395,6 +547,92 @@
     "scope": "Keep it",
     "scopeRepo": "Only for this repository",
     "scopeGlobal": "For all repositories"
+  },
+  "branch": {
+    "title": "Branches",
+    "explain": "Create a branch from HEAD, a branch or a tag. Rename or delete one without leaving Seam.",
+    "name": "Branch name",
+    "namePlaceholder": "feature/my-change",
+    "startPoint": "Start from",
+    "head": "Current HEAD",
+    "checkout": "Check out the new branch",
+    "nameRequired": "Give the new branch a name.",
+    "create": "Create branch",
+    "local": "Local branches",
+    "loading": "Loading branches…",
+    "none": "There are no local branches.",
+    "current": "current",
+    "rename": "Rename",
+    "newName": "New name",
+    "saveRename": "Rename branch",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "deleteCurrent": "Check out another branch before deleting this one.",
+    "deleteExplain": "Git deletes a branch only when its commits are already merged. Forcing the delete throws the unmerged commits away.",
+    "force": "Delete even if its commits are not merged",
+    "confirmDelete": "Delete branch",
+    "close": "Close",
+    "created": "Created {{branch}}.",
+    "renamed": "Renamed {{name}} to {{newName}}.",
+    "deleted": "Deleted {{branch}}."
+  },
+  "gitflow": {
+    "title": "GitFlow",
+    "loading": "Reading the GitFlow configuration…",
+    "initExplain": "Choose the two long-lived branches and the prefixes of the branches Seam creates. GitFlow stores this in the repository's local configuration.",
+    "fields": {
+      "master": "Master branch",
+      "develop": "Develop branch",
+      "featurePrefix": "Feature prefix",
+      "releasePrefix": "Release prefix",
+      "hotfixPrefix": "Hotfix prefix",
+      "versionTagPrefix": "Version tag prefix"
+    },
+    "init": "Initialize GitFlow",
+    "initialized": "GitFlow is initialized.",
+    "master": "Master",
+    "develop": "Develop",
+    "current": "Current",
+    "detached": "detached HEAD",
+    "operation": "A {{operation}} is in progress. Finish or abort it first.",
+    "dirty": "Commit or stash your changes before continuing.",
+    "startTitle": "Start a branch",
+    "kind": {
+      "feature": "Feature",
+      "release": "Release",
+      "hotfix": "Hotfix"
+    },
+    "name": "Branch name",
+    "namePlaceholder": "my-change",
+    "startFrom": "Starts from {{branch}}.",
+    "start": "Start branch",
+    "finishTitle": "Finish {{branch}}",
+    "resumeTitle": "Continue {{branch}}",
+    "finishExplain": {
+      "feature": "Merges the feature into {{develop}} with a merge commit and deletes it.",
+      "release": "Merges the release into {{master}}, tags it, merges {{master}} back into {{develop}} and deletes it.",
+      "hotfix": "Merges the hotfix into {{master}}, tags it, merges {{master}} back into {{develop}} and deletes it."
+    },
+    "resumeExplain": "A finish stopped at \"{{step}}\". Resolve what stopped it and continue from here.",
+    "step": {
+      "merge-master": "merging into master",
+      "tag": "creating the tag",
+      "merge-develop": "merging back into develop",
+      "delete": "deleting the branch"
+    },
+    "tag": "Tag",
+    "tagValue": "The finish creates the tag {{tag}}.",
+    "finish": "Finish branch",
+    "resume": "Continue finish",
+    "none": "None",
+    "output": "Git output",
+    "conflicts_one": "The finish stopped on {{count}} conflicted file. Resolve it, then continue.",
+    "conflicts_other": "The finish stopped on {{count}} conflicted files. Resolve them, then continue.",
+    "resolve": "Resolve conflicts",
+    "close": "Close",
+    "started": "Started {{branch}}.",
+    "finished": "Finished {{branch}}.",
+    "failed": "Git could not finish the branch. Its output is below."
   },
   "errors": {
     "gitNotFound": "Git was not found. Install Git 2.30 or newer and reopen Seam.",

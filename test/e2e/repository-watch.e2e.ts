@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { _electron as electron, type ElectronApplication, type Page } from 'playwright-core'
@@ -12,7 +12,7 @@ import { createSampleRepositories, type SampleRepositories } from '../fixtures/s
  * The phase 3 watcher test: a `git add` run outside the application updates the
  * lists on their own, without reopening the repository or focusing the window.
  * It fails unless the main process watches the git folder and pushes the change
- * to the interface.
+ * to the interface. An edit to the working tree must do the same.
  */
 
 const temporaries: string[] = []
@@ -59,7 +59,7 @@ async function waitFor(condition: () => Promise<boolean>, what: string): Promise
   throw new Error(`Timed out waiting for ${what}`)
 }
 
-describe('watching the git folder', () => {
+describe('watching the repository', () => {
   it('updates the lists when a file is staged from the terminal', async () => {
     expect(await count('untracked')).toBe(1)
     const stagedBefore = await count('staged')
@@ -72,6 +72,19 @@ describe('watching the git folder', () => {
     await waitFor(
       async () => (await count('staged')) === stagedBefore + 1,
       'the staged count to grow'
+    )
+  })
+
+  it('updates the lists when a file is edited in the working tree', async () => {
+    const untrackedBefore = await count('untracked')
+
+    // A save in an editor, in a folder below the repository root.
+    mkdirSync(join(samples.mixed, 'nested'), { recursive: true })
+    writeFileSync(join(samples.mixed, 'nested', 'new.txt'), 'new file\n')
+
+    await waitFor(
+      async () => (await count('untracked')) === untrackedBefore + 1,
+      'the new working-tree file to appear'
     )
   })
 })

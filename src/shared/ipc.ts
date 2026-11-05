@@ -2,21 +2,30 @@
 
 import type {
   ChangeSummary,
+  CommitChanges,
   CommitOutcome,
   ConflictAcceptOutcome,
   ConflictSide,
   ConflictSides,
   ConflictState,
+  GitFlowConfig,
+  GitFlowFinishOutcome,
+  GitFlowKind,
+  GitFlowState,
   GitOperation,
   HeadCommit,
   Identity,
   IdentityScope,
+  MergeOutcome,
+  MergeState,
+  MergeStrategy,
   OperationOutcome,
   PushOutcome,
   PushState,
   PushTagMode,
   PushUpdateOutcome,
   RepoStatus,
+  RepositoryHistory,
   ResolveSimpleOutcome
 } from './git'
 
@@ -25,12 +34,17 @@ import type {
  * interface. Bump it whenever a message shape changes so the three layers can
  * detect a mismatch instead of failing silently.
  */
-export const IPC_CONTRACT_VERSION = 19
+export const IPC_CONTRACT_VERSION = 30
 
 /** Channel names shared by the main process and the preload bridge. */
 export const IPC_CHANNELS = {
   chooseRepository: 'repo:choose',
+  /** Opens the folder picker without adding the choice to the recent list. */
+  chooseDirectory: 'app:choose-directory',
+  /** Clones a repository into a path that does not exist yet. */
+  cloneRepository: 'repo:clone',
   listRecentRepositories: 'repo:recent:list',
+  removeRecentRepository: 'repo:recent:remove',
   readRepositoryStatus: 'repo:status',
   readFileComparison: 'diff:read',
   readStagingModel: 'staging:read',
@@ -42,6 +56,8 @@ export const IPC_CHANNELS = {
   repositoryChanged: 'repo:changed',
   stageFiles: 'repo:stage',
   unstageFiles: 'repo:unstage',
+  /** Restores paths in the working tree from the index, discarding their changes. */
+  discardFiles: 'repo:discard',
   readCommitDraft: 'commit:draft:read',
   writeCommitDraft: 'commit:draft:write',
   createCommit: 'commit:create',
@@ -49,6 +65,14 @@ export const IPC_CHANNELS = {
   readHeadCommit: 'commit:head',
   readCommitHistory: 'commit:history:read',
   readCommitTemplate: 'commit:template',
+  /** Reads the commit graph: commits, parents and the refs pointing at them. */
+  readRepositoryHistory: 'repo:history',
+  /** Reads the files one commit changed against its first parent. */
+  readCommitChanges: 'commit:changes:read',
+  /** Reads one file as it was in a commit's parent and in the commit. */
+  readCommitFileComparison: 'commit:file:read',
+  /** Checks out one commit, leaving HEAD detached at it. */
+  checkoutCommit: 'history:checkout',
   readIdentity: 'identity:read',
   writeIdentity: 'identity:write',
   readSettings: 'settings:read',
@@ -70,7 +94,33 @@ export const IPC_CHANNELS = {
   /** Sent from main to the interface while a push prints its progress. */
   pushProgress: 'push:progress',
   /** Copies text from the interface through the main process's clipboard. */
-  writeClipboardText: 'clipboard:write-text'
+  writeClipboardText: 'clipboard:write-text',
+  /** Lists local and remote branches. */
+  listBranches: 'branch:list',
+  /** Creates a local branch from HEAD or a chosen start point. */
+  createBranch: 'branch:create',
+  /** Renames a local branch. */
+  renameBranch: 'branch:rename',
+  /** Deletes a local branch. */
+  deleteBranch: 'branch:delete',
+  /** Checks out a branch (local or remote). */
+  checkoutBranch: 'branch:checkout',
+  /** Reads the branches and readiness of the merge dialog. */
+  readMergeState: 'merge:state',
+  /** Starts a merge into the checked-out branch. */
+  startMerge: 'merge:start',
+  /** Reads the GitFlow configuration, branches and pending finish. */
+  readGitFlow: 'gitflow:read',
+  /** Writes the GitFlow configuration and creates develop when needed. */
+  initGitFlow: 'gitflow:init',
+  /** Starts a feature, release or hotfix branch. */
+  startGitFlow: 'gitflow:start',
+  /** Finishes, or resumes finishing, the current GitFlow branch. */
+  finishGitFlow: 'gitflow:finish',
+  /** Refreshes the refs of every configured remote (a `git fetch --all`). */
+  fetchRemotes: 'sync:fetch',
+  /** Fetches and integrates the current branch's upstream (a `git pull`). */
+  pullUpstream: 'sync:pull'
 } as const
 
 /** Why a call failed, so the interface can show a translated message. */
@@ -83,6 +133,15 @@ export interface RepositorySnapshot {
   readonly status: RepoStatus
   readonly summary: ChangeSummary
   readonly operation: GitOperation | null
+  /** How many commits the Push button would send, zero when there is nothing. */
+  readonly pushCount: number
+}
+
+/** A repository to clone from a URL into a new local folder. */
+export interface CloneRequest {
+  readonly url: string
+  /** The full local path the repository is cloned into. */
+  readonly path: string
 }
 
 /**
@@ -120,6 +179,16 @@ export interface FileComparisonRequest {
   readonly path: string
   readonly from: FileVersionSource
   readonly to: FileVersionSource
+}
+
+/** What the history view asks for when it opens one file of a commit. */
+export interface CommitFileComparisonRequest {
+  readonly repo: string
+  /** The commit whose version is shown on the right. */
+  readonly commit: string
+  readonly path: string
+  /** The path in the parent for a rename or a copy, otherwise null. */
+  readonly previousPath: string | null
 }
 
 /**
@@ -261,10 +330,56 @@ export interface IdentityWriteRequest {
   readonly scope: IdentityScope
 }
 
+/** The interface's colour scheme. */
+export type ThemePreference = 'dark' | 'light'
+
+/** How the viewer compares whitespace, mirroring the diff engine's modes. */
+export type WhitespacePreference = 'none' | 'trim' | 'ignore' | 'ignore-and-blank'
+
+/** How finely the viewer highlights a change. */
+export type HighlightPreference = 'words' | 'lines' | 'split' | 'characters' | 'none'
+
+/** The syntax colours the code viewers use in the light colour scheme. */
+export type SyntaxThemePreference = 'seam' | 'github' | 'vivid'
+
 /** The preferences the interface reads at startup and stores when changed. */
 export interface SettingsData {
   /** Whether Git's `pre-commit` and `commit-msg` hooks run. */
   readonly runHooks: boolean
+  /** The interface language, or null to follow the system. */
+  readonly language: string | null
+  /** The colour scheme the window and the editors use. */
+  readonly theme: ThemePreference
+  /** How the viewer compares whitespace by default. */
+  readonly whitespace: WhitespacePreference
+  /** How finely the viewer highlights changes by default. */
+  readonly highlight: HighlightPreference
+  /** The syntax colours the code viewers use in the light colour scheme. */
+  readonly syntaxTheme: SyntaxThemePreference
+  /** Whether unchanged lines are folded in the viewer by default. */
+  readonly collapse: boolean
+  /** Whether commits include the `Signed-off-by` trailer by default. */
+  readonly signoff: boolean
+}
+
+/** A change to the stored preferences; fields left out keep their value. */
+export interface SettingsPatch {
+  /** Whether Git's `pre-commit` and `commit-msg` hooks run. */
+  runHooks?: boolean
+  /** The interface language, or null to follow the system. */
+  language?: string | null
+  /** The colour scheme the window and the editors use. */
+  theme?: ThemePreference
+  /** How the viewer compares whitespace by default. */
+  whitespace?: WhitespacePreference
+  /** How finely the viewer highlights changes by default. */
+  highlight?: HighlightPreference
+  /** The syntax colours the code viewers use in the light colour scheme. */
+  syntaxTheme?: SyntaxThemePreference
+  /** Whether unchanged lines are folded in the viewer by default. */
+  collapse?: boolean
+  /** Whether commits include the `Signed-off-by` trailer by default. */
+  signoff?: boolean
 }
 
 /** One side of a conflict to accept, with the working copy the dialog saw. */
@@ -353,6 +468,95 @@ export interface PushUpdateRequest {
   readonly strategy: 'rebase' | 'merge'
 }
 
+/** A local or remote branch. */
+export interface BranchInfo {
+  /** The branch name (e.g., "main", "feature/x"). */
+  readonly name: string
+  /** The commit OID the branch points to. */
+  readonly oid: string
+  /** Whether this is the currently checked-out branch. */
+  readonly current: boolean
+  /** For remote branches: the remote name (e.g., "origin"). */
+  readonly remote?: string
+}
+
+/** The list of branches, split into local and remote. */
+export interface BranchList {
+  readonly local: readonly BranchInfo[]
+  readonly remote: readonly BranchInfo[]
+}
+
+/** Request to check out a branch. */
+export interface CheckoutBranchRequest {
+  readonly repo: string
+  /** The branch name to check out. For remote branches, use "origin/branch". */
+  readonly branch: string
+  /** Whether to create a new local branch tracking the remote. */
+  readonly createTracking?: boolean
+}
+
+/** Request to check out one commit, leaving HEAD detached at it. */
+export interface CheckoutCommitRequest {
+  readonly repo: string
+  /** The commit id, as the history graph shows it. */
+  readonly commit: string
+}
+
+/** Creates a local branch from HEAD or from a chosen start point. */
+export interface CreateBranchRequest {
+  readonly repo: string
+  /** The new branch's name, such as `feature/login`. */
+  readonly name: string
+  /** The branch, tag or commit to start from; null starts at HEAD. */
+  readonly startPoint: string | null
+  /** Whether to check the new branch out after creating it. */
+  readonly checkout: boolean
+}
+
+/** Renames a local branch, including the checked-out one. */
+export interface RenameBranchRequest {
+  readonly repo: string
+  readonly name: string
+  readonly newName: string
+}
+
+/** Deletes a local branch, optionally throwing away its unmerged commits. */
+export interface DeleteBranchRequest {
+  readonly repo: string
+  readonly name: string
+  readonly force: boolean
+}
+
+/** Starts a merge into the checked-out branch. */
+export interface MergeRequest {
+  readonly repo: string
+  /** The branch to merge in, named as Git shows it (`develop`, `origin/main`). */
+  readonly source: string
+  readonly strategy: MergeStrategy
+  /** The merge commit's message for `merge-commit`; empty uses Git's default. */
+  readonly message: string
+}
+
+/** Writes the GitFlow configuration and creates develop when it is missing. */
+export interface GitFlowInitRequest extends GitFlowConfig {
+  readonly repo: string
+}
+
+/** Starts a feature, release or hotfix branch. */
+export interface GitFlowStartRequest {
+  readonly repo: string
+  readonly kind: GitFlowKind
+  /** The name without its prefix, or with it; both are accepted. */
+  readonly name: string
+}
+
+/** Finishes, or resumes finishing, the current GitFlow branch. */
+export interface GitFlowFinishRequest {
+  readonly repo: string
+  /** The tag a release or hotfix creates; null uses the configured default. */
+  readonly tag: string | null
+}
+
 /** One chunk of a push's live output, tied to the repository it belongs to. */
 export interface PushProgress {
   readonly repo: string
@@ -368,8 +572,18 @@ export interface SeamApi {
   readonly contractVersion: number
   /** Opens the folder picker; resolves with the chosen path, or null if cancelled. */
   chooseRepository(): Promise<string | null>
+  /**
+   * Opens the folder picker without remembering the choice as a repository;
+   * resolves with the chosen path, or null if cancelled. It is how the clone
+   * dialog asks where the new folder should go.
+   */
+  chooseDirectory(): Promise<string | null>
+  /** Clones a repository into a new folder and returns its path; never throws. */
+  cloneRepository(request: CloneRequest): Promise<IpcResult<string>>
   /** Recent repository paths, most recent first. */
   listRecentRepositories(): Promise<string[]>
+  /** Removes a repository from the recent list; never throws. */
+  removeRecentRepository(repo: string): Promise<IpcResult<null>>
   /** The repository passed on the command line with `--repo`, or null. */
   initialRepository(): Promise<string | null>
   /** Reads a repository's status; never throws, returns an error result instead. */
@@ -385,6 +599,11 @@ export interface SeamApi {
   stageFiles(request: StagePathsRequest): Promise<IpcResult<null>>
   /** Removes paths from the index in one write; never throws. */
   unstageFiles(request: StagePathsRequest): Promise<IpcResult<null>>
+  /**
+   * Restores paths in the working tree from the index, throwing their pending
+   * changes away and leaving the index alone; never throws.
+   */
+  discardFiles(request: StagePathsRequest): Promise<IpcResult<null>>
   /**
    * Prepares the given hunks of a file or removes them, rebuilding the index's
    * text; never throws. It is how a single hunk is staged from the viewer.
@@ -441,6 +660,24 @@ export interface SeamApi {
    */
   readCommitTemplate(repo: string): Promise<IpcResult<string | null>>
   /**
+   * The newest commits of every branch and tag, with their parents and the refs
+   * that point at them, so the interface can draw the commit graph; never
+   * throws.
+   */
+  readRepositoryHistory(repo: string): Promise<IpcResult<RepositoryHistory>>
+  /** The files one commit changed against its first parent; never throws. */
+  readCommitChanges(repo: string, commit: string): Promise<IpcResult<CommitChanges>>
+  /**
+   * Checks out one commit, leaving HEAD detached at it. Git refuses when local
+   * changes would be overwritten; never throws.
+   */
+  checkoutCommit(request: CheckoutCommitRequest): Promise<IpcResult<null>>
+  /**
+   * One file as it was in a commit's first parent and in the commit itself,
+   * ready for the read-only viewer; never throws.
+   */
+  readCommitFileComparison(request: CommitFileComparisonRequest): Promise<IpcResult<FileComparison>>
+  /**
    * The name and address Git would sign with; never throws. A null field means
    * the configuration does not set it and the commit would fail without help.
    */
@@ -449,8 +686,8 @@ export interface SeamApi {
   writeIdentity(request: IdentityWriteRequest): Promise<IpcResult<null>>
   /** The stored preferences, so the interface starts with what the user chose. */
   readSettings(): Promise<IpcResult<SettingsData>>
-  /** Stores the preferences; never throws. */
-  writeSettings(settings: SettingsData): Promise<IpcResult<null>>
+  /** Stores a change to the preferences; never throws. */
+  writeSettings(settings: SettingsPatch): Promise<IpcResult<null>>
   /**
    * The conflict list and the name of each side, including the files Git can
    * still un-resolve; never throws.
@@ -501,6 +738,53 @@ export interface SeamApi {
    * send; never throws.
    */
   readPushState(repo: string): Promise<IpcResult<PushState>>
+  /**
+   * Lists local and remote branches; never throws.
+   */
+  listBranches(repo: string): Promise<IpcResult<BranchList>>
+  /**
+   * Checks out a branch (local or remote). For remote branches, fetches first
+   * and creates a local tracking branch; never throws.
+   */
+  checkoutBranch(request: CheckoutBranchRequest): Promise<IpcResult<null>>
+  /** Creates a local branch, validating the name with Git first; never throws. */
+  createBranch(request: CreateBranchRequest): Promise<IpcResult<null>>
+  /** Renames a local branch, validating the new name with Git first; never throws. */
+  renameBranch(request: RenameBranchRequest): Promise<IpcResult<null>>
+  /** Deletes a local branch, safely unless `force` is set; never throws. */
+  deleteBranch(request: DeleteBranchRequest): Promise<IpcResult<null>>
+  /**
+   * The checked-out branch, the branches it can merge in, and whether Git is
+   * free to start; never throws.
+   */
+  readMergeState(repo: string): Promise<IpcResult<MergeState>>
+  /**
+   * Starts a merge into the checked-out branch. A conflict is not an error: the
+   * outcome keeps the operation in progress for the conflicts screen; never
+   * throws.
+   */
+  mergeBranch(request: MergeRequest): Promise<IpcResult<MergeOutcome>>
+  /**
+   * The GitFlow configuration, the branches of each family, the current
+   * position and any finish waiting to resume; never throws.
+   */
+  readGitFlow(repo: string): Promise<IpcResult<GitFlowState>>
+  /** Writes the GitFlow configuration and creates develop when missing; never throws. */
+  initGitFlow(request: GitFlowInitRequest): Promise<IpcResult<null>>
+  /** Creates and checks out a feature, release or hotfix branch; never throws. */
+  startGitFlow(request: GitFlowStartRequest): Promise<IpcResult<string>>
+  /**
+   * Finishes, or resumes finishing, the current GitFlow branch. A conflict is
+   * not an error: the outcome says which step stopped; never throws.
+   */
+  finishGitFlow(request: GitFlowFinishRequest): Promise<IpcResult<GitFlowFinishOutcome>>
+  /** Refreshes the refs of every configured remote without touching the local branches; never throws. */
+  fetchRemotes(repo: string): Promise<IpcResult<null>>
+  /**
+   * Fetches and integrates the current branch's upstream, the way `git pull`
+   * would; never throws. A conflict leaves the operation in progress.
+   */
+  pull(request: PushUpdateRequest): Promise<IpcResult<PushUpdateOutcome>>
   /**
    * Runs `git push --porcelain` with the dialog's choices. A rejected reference
    * comes back inside the outcome, not as an error; only a failure to reach Git

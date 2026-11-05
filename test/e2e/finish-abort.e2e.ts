@@ -88,8 +88,8 @@ async function dialogClosed(page: Page): Promise<void> {
 }
 
 async function notice(page: Page): Promise<string> {
-  await page.waitForSelector('[data-testid=operation-notice]')
-  return (await page.locator('[data-testid=operation-notice]').textContent()) ?? ''
+  await page.waitForSelector('[data-testid=sync-notice][data-tone=ok]')
+  return (await page.locator('[data-testid=sync-notice][data-tone=ok]').textContent()) ?? ''
 }
 
 /** A merge stopped on the one line both branches changed. */

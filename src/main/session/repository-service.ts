@@ -7,38 +7,67 @@ import {
   acceptConflict as acceptConflictSide,
   abortOperation as abortOperationInRepo,
   applyMerge as applyMergeResult,
+  checkoutBranch as checkoutBranchInRepo,
+  checkoutCommit as checkoutCommitInRepo,
+  clearPendingGitFlow,
+  cloneRepository as cloneRepositoryInRepo,
+  countPushCommits,
+  createBranch as createBranchInRepo,
   createCommit,
+  deleteBranch as deleteBranchInRepo,
   detectOperation,
+  discardPaths,
+  finishGitFlow as finishGitFlowInRepo,
   finishOperation as finishOperationInRepo,
   GitCommandError,
   GitError,
   GitNotFoundError,
   GitRunner,
   GitVersionError,
+  initGitFlow as initGitFlowInRepo,
+  listBranches as listBranchesInRepo,
+  mergeBranch as mergeBranchInRepo,
+  readCommitChanges as readCommitChangesFromRepo,
+  readCommitComparison as readCommitComparisonFromRepo,
   readCommitTemplate,
   readComparison,
   readConflictState,
   readFileModel,
+  readGitFlowState as readGitFlowStateFromRepo,
   readHeadCommit,
   readIdentity,
   readMergeEditor as readMergeEditorModel,
   readMergeMessage as readMergeMessageFromRepo,
+  readMergeState as readMergeStateFromRepo,
   readPushState as readPushStateFromRepo,
+  readRepositoryHistory as readRepositoryHistoryFromRepo,
   readStatus,
   removeIndexPaths,
+  renameBranch as renameBranchInRepo,
   resolveSimpleConflicts as resolveSimple,
   revertConflict as revertConflictResolution,
   skipOperation as skipOperationInRepo,
   stagePaths,
+  startGitFlow as startGitFlowInRepo,
   summarizeChanges,
   unstagePaths,
   updateForPush as updateForPushInRepo,
+  fetchRemotes as fetchRemotesInRepo,
+  pull as pullInRepo,
   push as pushToRemote,
   writeIdentity,
   writeIndexEntry,
   writeWorktreeFile,
+  type BranchList,
   type CommitOptions,
+  type GitFlowConfig,
+  type GitFlowFinishOutcome,
+  type GitFlowKind,
+  type GitFlowState,
   type HeadCommit,
+  type MergeOutcome,
+  type MergeState,
+  type MergeStrategy,
   type PushOptions,
   type PushUpdateStrategy,
   type VersionSource
@@ -54,6 +83,7 @@ import type {
   StagingModel
 } from '../../shared/ipc'
 import type {
+  CommitChanges,
   CommitOutcome,
   ConflictAcceptOutcome,
   ConflictSide,
@@ -64,6 +94,7 @@ import type {
   PushOutcome,
   PushState,
   PushUpdateOutcome,
+  RepositoryHistory,
   ResolveSimpleOutcome
 } from '../../shared/git'
 import { GitWatcher } from './git-watcher'
@@ -114,9 +145,27 @@ export class RepositoryService {
   private commitInFlight: { readonly repo: string; readonly controller: AbortController } | null =
     null
   /** The push running right now, so a remote that will not answer can be stopped. */
-  private pushInFlight: { readonly repo: string; readonly controller: AbortController } | null = null
+  private pushInFlight: { readonly repo: string; readonly controller: AbortController } | null =
+    null
 
   constructor(private readonly runner: GitRunner = new GitRunner()) {}
+
+  /**
+   * Clones a repository into a new folder. The path is the full destination,
+   * not a parent, and must not exist yet unless it is an empty folder Git can
+   * fill. The path is left out of the recent list; the handler adds it only
+   * after the clone succeeds.
+   */
+  async clone(url: string, destination: string): Promise<IpcResult<string>> {
+    try {
+      const target = await cloneRepositoryInRepo(this.runner, url, destination)
+      this.versionChecked ??= this.runner.ensureVersion(target)
+      await this.versionChecked
+      return { ok: true, value: target }
+    } catch (error) {
+      return failureFrom(error)
+    }
+  }
 
   async snapshot(repo: string): Promise<IpcResult<RepositorySnapshot>> {
     const opened = await this.open(repo)
@@ -124,10 +173,13 @@ export class RepositoryService {
 
     try {
       const status = await readStatus(this.runner, repo)
-      const operation = await detectOperation(this.runner, repo)
+      const [operation, pushCount] = await Promise.all([
+        detectOperation(this.runner, repo),
+        countPushCommits(this.runner, repo, status.branch)
+      ])
       return {
         ok: true,
-        value: { repo, status, summary: summarizeChanges(status), operation }
+        value: { repo, status, summary: summarizeChanges(status), operation, pushCount }
       }
     } catch (error) {
       return failureFrom(error)
@@ -184,6 +236,14 @@ export class RepositoryService {
   /** Removes the given paths from the index, leaving the working tree alone. */
   unstage(repo: string, paths: readonly string[]): Promise<IpcResult<null>> {
     return this.write(repo, () => unstagePaths(this.runner, repo, paths))
+  }
+
+  /**
+   * Throws away the working-tree changes to the given paths, restoring them
+   * from the index. Prepared changes stay prepared.
+   */
+  discard(repo: string, paths: readonly string[]): Promise<IpcResult<null>> {
+    return this.write(repo, () => discardPaths(this.runner, repo, paths))
   }
 
   /**
@@ -321,6 +381,64 @@ export class RepositoryService {
 
     try {
       return { ok: true, value: await readCommitTemplate(this.runner, repo) }
+    } catch (error) {
+      return failureFrom(error)
+    }
+  }
+
+  /** The commit graph, with each commit's parents, author and refs. */
+  async readHistory(repo: string): Promise<IpcResult<RepositoryHistory>> {
+    const opened = await this.open(repo)
+    if (!opened.ok) return opened
+
+    try {
+      return { ok: true, value: await readRepositoryHistoryFromRepo(this.runner, repo) }
+    } catch (error) {
+      return failureFrom(error)
+    }
+  }
+
+  /** The files one commit changed against its first parent. */
+  async readCommitChanges(repo: string, commit: string): Promise<IpcResult<CommitChanges>> {
+    const opened = await this.open(repo)
+    if (!opened.ok) return opened
+
+    try {
+      return { ok: true, value: await readCommitChangesFromRepo(this.runner, repo, commit) }
+    } catch (error) {
+      return failureFrom(error)
+    }
+  }
+
+  /** One file of a commit, from its first parent's version to the commit's. */
+  async readCommitFileComparison(
+    repo: string,
+    commit: string,
+    path: string,
+    previousPath: string | null
+  ): Promise<IpcResult<FileComparison>> {
+    const opened = await this.open(repo)
+    if (!opened.ok) return opened
+
+    try {
+      const comparison = await readCommitComparisonFromRepo(
+        this.runner,
+        repo,
+        commit,
+        path,
+        previousPath
+      )
+      return {
+        ok: true,
+        value: {
+          from: comparison.from,
+          to: comparison.to,
+          fromSize: comparison.fromSize,
+          toSize: comparison.toSize,
+          binary: comparison.binary,
+          normalised: comparison.normalised
+        }
+      }
     } catch (error) {
       return failureFrom(error)
     }
@@ -492,7 +610,13 @@ export class RepositoryService {
     if (!opened.ok) return opened
 
     try {
-      return { ok: true, value: await abortOperationInRepo(this.runner, repo) }
+      const outcome = await abortOperationInRepo(this.runner, repo)
+      // An aborted GitFlow merge means the finish was abandoned, so the stored
+      // steps must not resume on their own later.
+      if (outcome.finished && outcome.operation === null) {
+        await clearPendingGitFlow(this.runner, repo)
+      }
+      return { ok: true, value: outcome }
     } catch (error) {
       return failureFrom(error)
     }
@@ -517,6 +641,138 @@ export class RepositoryService {
 
     try {
       return { ok: true, value: await readPushStateFromRepo(this.runner, repo) }
+    } catch (error) {
+      return failureFrom(error)
+    }
+  }
+
+  /** Lists local and remote branches. */
+  async listBranches(repo: string): Promise<IpcResult<BranchList>> {
+    const opened = await this.open(repo)
+    if (!opened.ok) return opened
+
+    try {
+      return { ok: true, value: await listBranchesInRepo(this.runner, repo) }
+    } catch (error) {
+      return failureFrom(error)
+    }
+  }
+
+  /** Checks out a branch (local or remote). */
+  async checkoutBranch(
+    repo: string,
+    branch: string,
+    createTracking = true
+  ): Promise<IpcResult<null>> {
+    const opened = await this.open(repo)
+    if (!opened.ok) return opened
+
+    try {
+      await checkoutBranchInRepo(this.runner, repo, branch, createTracking)
+      return { ok: true, value: null }
+    } catch (error) {
+      return failureFrom(error)
+    }
+  }
+
+  /** Checks out one commit with HEAD detached, as the history view asks. */
+  checkoutCommit(repo: string, commit: string): Promise<IpcResult<null>> {
+    return this.write(repo, () => checkoutCommitInRepo(this.runner, repo, commit))
+  }
+
+  /** Creates a local branch, validating the name with Git first. */
+  async createBranch(
+    repo: string,
+    name: string,
+    startPoint: string | null,
+    checkout: boolean
+  ): Promise<IpcResult<null>> {
+    return this.write(repo, () =>
+      createBranchInRepo(this.runner, repo, { name, startPoint, checkout })
+    )
+  }
+
+  /** Renames a local branch, validating the new name with Git first. */
+  async renameBranch(repo: string, name: string, newName: string): Promise<IpcResult<null>> {
+    return this.write(repo, () => renameBranchInRepo(this.runner, repo, name, newName))
+  }
+
+  /** Deletes a local branch, safely unless `force` is set. */
+  async deleteBranch(repo: string, name: string, force: boolean): Promise<IpcResult<null>> {
+    return this.write(repo, () => deleteBranchInRepo(this.runner, repo, name, force))
+  }
+
+  /** Reads the branches and readiness of the merge dialog. */
+  async readMergeState(repo: string): Promise<IpcResult<MergeState>> {
+    const opened = await this.open(repo)
+    if (!opened.ok) return opened
+
+    try {
+      return { ok: true, value: await readMergeStateFromRepo(this.runner, repo) }
+    } catch (error) {
+      return failureFrom(error)
+    }
+  }
+
+  /** Starts a merge into the checked-out branch. */
+  async mergeBranch(
+    repo: string,
+    source: string,
+    strategy: MergeStrategy,
+    message: string
+  ): Promise<IpcResult<MergeOutcome>> {
+    const opened = await this.open(repo)
+    if (!opened.ok) return opened
+
+    try {
+      return {
+        ok: true,
+        value: await mergeBranchInRepo(this.runner, repo, source, strategy, message)
+      }
+    } catch (error) {
+      return failureFrom(error)
+    }
+  }
+
+  /** Reads the GitFlow configuration, its branches and any pending finish. */
+  async readGitFlow(repo: string): Promise<IpcResult<GitFlowState>> {
+    const opened = await this.open(repo)
+    if (!opened.ok) return opened
+
+    try {
+      return { ok: true, value: await readGitFlowStateFromRepo(this.runner, repo) }
+    } catch (error) {
+      return failureFrom(error)
+    }
+  }
+
+  /** Writes the GitFlow configuration and creates develop when missing. */
+  async initGitFlow(repo: string, config: GitFlowConfig): Promise<IpcResult<null>> {
+    return this.write(repo, () => initGitFlowInRepo(this.runner, repo, config))
+  }
+
+  /** Creates and checks out a feature, release or hotfix branch. */
+  async startGitFlow(repo: string, kind: GitFlowKind, name: string): Promise<IpcResult<string>> {
+    const opened = await this.open(repo)
+    if (!opened.ok) return opened
+
+    try {
+      return { ok: true, value: await startGitFlowInRepo(this.runner, repo, kind, name) }
+    } catch (error) {
+      return failureFrom(error)
+    }
+  }
+
+  /** Finishes, or resumes finishing, the current GitFlow branch. */
+  async finishGitFlow(repo: string, tag: string | null): Promise<IpcResult<GitFlowFinishOutcome>> {
+    const opened = await this.open(repo)
+    if (!opened.ok) return opened
+
+    try {
+      return {
+        ok: true,
+        value: await finishGitFlowInRepo(this.runner, repo, tag ?? undefined)
+      }
     } catch (error) {
       return failureFrom(error)
     }
@@ -579,6 +835,31 @@ export class RepositoryService {
     }
   }
 
+  /** Refreshes every configured remote's refs without touching the branches. */
+  async fetchRemotes(repo: string): Promise<IpcResult<null>> {
+    const opened = await this.open(repo)
+    if (!opened.ok) return opened
+
+    try {
+      await fetchRemotesInRepo(this.runner, repo)
+      return { ok: true, value: null }
+    } catch (error) {
+      return failureFrom(error)
+    }
+  }
+
+  /** Fetches and integrates the current branch's upstream, the way pull would. */
+  async pull(repo: string, strategy: PushUpdateStrategy): Promise<IpcResult<PushUpdateOutcome>> {
+    const opened = await this.open(repo)
+    if (!opened.ok) return opened
+
+    try {
+      return { ok: true, value: await pullInRepo(this.runner, repo, strategy) }
+    } catch (error) {
+      return failureFrom(error)
+    }
+  }
+
   /** Opens the repository, runs one write and maps any failure to a result. */
   private async write(repo: string, action: () => Promise<unknown>): Promise<IpcResult<null>> {
     const opened = await this.open(repo)
@@ -593,14 +874,15 @@ export class RepositoryService {
   }
 
   /**
-   * Starts watching the files Git writes, so the interface can refresh when a
-   * `git add` or `commit` happens outside Seam. Returns null when the path is
-   * not a repository this Git version can read.
+   * Starts watching the files Git writes and the working tree, so the interface
+   * can refresh when a `git add`, a `commit` or an editor's save happens outside
+   * Seam. Returns null when the path is not a repository this Git version can
+   * read.
    */
   async watch(repo: string, onChange: () => void): Promise<GitWatcher | null> {
     const gitDir = await this.gitDirectory(repo)
     if (gitDir === null) return null
-    return new GitWatcher(gitDir, onChange)
+    return new GitWatcher(gitDir, onChange, { workingTree: repo })
   }
 
   /** Absolute path of the repository's git folder, or null when it is not one. */

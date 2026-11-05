@@ -63,6 +63,28 @@ headless Linux machine.
 Use **Open repository…** to pick a folder; Seam remembers the ten most recent
 ones. From a shell, `seam --repo <path>` opens a repository directly.
 
+## Branches, merges and GitFlow
+
+The top bar groups the branch actions before the remote ones:
+
+- **Branch** creates a local branch from HEAD, another branch or a tag, and
+  renames or deletes an existing one. Deleting refuses to throw away unmerged
+  commits unless the force box is ticked.
+- **Merge** merges a local or remote branch into the checked-out one. The
+  strategy is a real merge commit (`--no-ff`), a fast-forward only, or a
+  squash that leaves the changes staged for the next commit.
+- **GitFlow** is one dynamic popup driven by plain `git`. With no
+  configuration it asks for the master, develop and prefix names. On a
+  feature, release or hotfix branch it offers the finish for that branch; on
+  any other branch it starts a new one. A feature is merged into develop; a
+  release or hotfix is merged into master, tagged, merged back into develop and
+  deleted.
+
+The GitFlow configuration lives in the repository's local Git config, so a
+terminal clone keeps working with it. If a finish stops on a conflict, the
+remaining steps are stored in `.git/seam/gitflow-finish.json`; resolving the
+merge and committing resumes the finish from the popup or on its own.
+
 ## Layout
 
 ```text

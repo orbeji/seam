@@ -123,6 +123,23 @@ describe('the conflicts dialog', () => {
     await page.waitForSelector('[data-testid=conflicts-dialog]')
   })
 
+  it('does not offer accept or reject on a conflict in the unified view', async () => {
+    await page.locator('[data-testid=conflicts-close]').click()
+    await page.waitForSelector('[data-testid=conflicts]')
+
+    await page.locator('[data-testid=conflicts] [data-testid=entry][title="both.txt"]').click()
+    await page.waitForSelector('[data-testid=diff-panes]')
+    await page.selectOption('[data-testid=diff-layout]', 'unified')
+    await page.waitForSelector('[data-testid=diff-panes] .cm-deletedChunk')
+
+    expect(await page.locator('[data-testid=diff-panes] .cm-chunkButtons').count()).toBe(0)
+
+    await page.locator('[data-testid=diff-close]').click()
+    await page.waitForSelector('[data-testid=conflicts-resolve]')
+    await page.locator('[data-testid=conflicts-resolve]').click()
+    await page.waitForSelector('[data-testid=conflicts-dialog]')
+  })
+
   it('resolves the simple conflicts and leaves the rest', async () => {
     await page.locator('[data-testid=resolve-simple]').click()
     await waitFor(() => resolved('simple.txt'), 'the simple conflict to resolve')

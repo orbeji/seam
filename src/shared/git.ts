@@ -149,6 +149,72 @@ export interface HeadCommit {
   published: boolean
 }
 
+/** What a reference shown in the commit history points at. */
+export type HistoryRefKind = 'tag' | 'branch' | 'remote' | 'head'
+
+/** A tag or branch pointing at one commit of the history. */
+export interface HistoryRef {
+  /** The short name Git shows: `main`, `origin/main` or `v1.0.0`. */
+  readonly name: string
+  readonly kind: HistoryRefKind
+  /**
+   * For a local branch, the remote-tracking refs (`origin/main`) that point at
+   * the same commit and are folded into this one pill. A remote that has moved
+   * elsewhere stays a separate ref with its own commit.
+   */
+  readonly remotes?: readonly string[]
+}
+
+/**
+ * One commit of the history graph. The parents let the interface lay the graph
+ * out: a commit with two parents is a merge, and the branches that share a
+ * parent meet again at that commit.
+ */
+export interface HistoryCommit {
+  readonly oid: string
+  readonly shortId: string
+  readonly parents: readonly string[]
+  readonly subject: string
+  readonly authorName: string
+  readonly authorEmail: string
+  /** The author date, in Git's strict ISO 8601 format (`%aI`). */
+  readonly authorDate: string
+  /** The tags and branches that point at the commit, tags first. */
+  readonly refs: readonly HistoryRef[]
+}
+
+/** The commits the history view draws, newest first, and the refs they carry. */
+export interface RepositoryHistory {
+  readonly commits: readonly HistoryCommit[]
+  /** Whether Git held more commits than Seam read. */
+  readonly truncated: boolean
+  /** The branch HEAD points at, or null when it is detached. */
+  readonly head: string | null
+  /** The commit HEAD points at, or null before the first commit. */
+  readonly headOid: string | null
+}
+
+/** How a commit changed one path against its first parent. */
+export type CommitFileStatus =
+  'added' | 'modified' | 'deleted' | 'renamed' | 'copied' | 'type-changed' | 'unmerged' | 'unknown'
+
+/** One file a commit touched, with the name it had before a rename. */
+export interface CommitFileChange {
+  /** The path in the commit, or the path it was deleted or renamed from. */
+  readonly path: string
+  /** The path in the parent for a rename or a copy, otherwise null. */
+  readonly previousPath: string | null
+  readonly status: CommitFileStatus
+}
+
+/** The files one commit changed against its first parent. */
+export interface CommitChanges {
+  readonly oid: string
+  /** The commit compared against, or null for a root commit. */
+  readonly parent: string | null
+  readonly files: readonly CommitFileChange[]
+}
+
 /**
  * The four lists the changes screen shows. An entry can be both staged and
  * unstaged (porcelain `MM`), in which case it appears in both, like the reference client.
@@ -263,11 +329,7 @@ export type PushTagMode = 'none' | 'follow' | 'all'
 
 /** Why Git refused one reference, when Seam can tell it apart. */
 export type PushRejection =
-  | 'non-fast-forward'
-  | 'remote-rejected'
-  | 'tag-exists'
-  | 'stale-info'
-  | 'other'
+  'non-fast-forward' | 'remote-rejected' | 'tag-exists' | 'stale-info' | 'other'
 
 /** The first letter of a `git push --porcelain` reference line. */
 export type PushRefFlag = ' ' | '*' | '!' | '=' | '+' | '-'
@@ -353,6 +415,124 @@ export interface PushUpdateOutcome {
   /** The operation still in progress, or null when the update finished. */
   readonly operation: GitOperation | null
   /** Everything Git printed, for the dialog's output panel. */
+  readonly output: string
+}
+
+/** How a merge integrates the source branch. */
+export type MergeStrategy = 'merge-commit' | 'fast-forward' | 'squash'
+
+/** What came of starting a merge: a clean result or an operation left in progress. */
+export interface MergeOutcome {
+  /** Whether Git exited zero and left no operation behind. */
+  readonly ok: boolean
+  /** Files still unmerged when Git stopped on a conflict. */
+  readonly conflicts: number
+  /** The operation still in progress, or null when the merge finished. */
+  readonly operation: GitOperation | null
+  /** Everything Git printed, for the dialog's output panel. */
+  readonly output: string
+}
+
+/** What the merge dialog reads before it starts. */
+export interface MergeState {
+  /** The checked-out branch, or null when HEAD is detached. */
+  readonly currentBranch: string | null
+  /** The commit HEAD points at, or null before the first commit. */
+  readonly headOid: string | null
+  /** Local branches that can be merged in. */
+  readonly local: readonly string[]
+  /** Remote branches that can be merged in, named `origin/main`. */
+  readonly remote: readonly string[]
+  /** The operation in progress, or null when the repository is idle. */
+  readonly operation: GitOperation | null
+  /** Files still unmerged. */
+  readonly conflicts: number
+  /** Whether tracked files have staged or unstaged changes. */
+  readonly dirty: boolean
+}
+
+/** The GitFlow branch families Seam manages. */
+export type GitFlowKind = 'feature' | 'release' | 'hotfix'
+
+/** The names and prefixes GitFlow uses in one repository. */
+export interface GitFlowConfig {
+  /** The branch releases and hotfixes are merged into. */
+  readonly master: string
+  /** The integration branch features and releases start from. */
+  readonly develop: string
+  /** Prefix of a feature branch, ending in `/`. */
+  readonly featurePrefix: string
+  /** Prefix of a release branch, ending in `/`. */
+  readonly releasePrefix: string
+  /** Prefix of a hotfix branch, ending in `/`. */
+  readonly hotfixPrefix: string
+  /** Prefix of a release or hotfix tag. */
+  readonly versionTagPrefix: string
+}
+
+/** The local branches of each GitFlow family, with their full names. */
+export interface GitFlowBranches {
+  readonly feature: readonly string[]
+  readonly release: readonly string[]
+  readonly hotfix: readonly string[]
+}
+
+/** One step of a finish that Git may stop halfway through. */
+export type GitFlowFinishStep = 'merge-master' | 'tag' | 'merge-develop' | 'delete'
+
+/**
+ * A finish that is still running. It is kept next to the Git directory so a
+ * conflict, a restart or a commit made from the main window can resume it.
+ */
+export interface GitFlowPendingFinish {
+  readonly kind: GitFlowKind
+  /** The full branch name, such as `release/1.2.0`. */
+  readonly branch: string
+  /** The branch name without its prefix, used for the default tag. */
+  readonly name: string
+  /** The tag to create for a release or hotfix, or null for a feature. */
+  readonly tag: string | null
+  /** The next command to run. */
+  readonly step: GitFlowFinishStep
+}
+
+/** Everything the GitFlow popup shows about the open repository. */
+export interface GitFlowState {
+  /** Whether a complete configuration exists and both main branches are present. */
+  readonly initialized: boolean
+  readonly config: GitFlowConfig
+  /** The checked-out branch, or null when HEAD is detached. */
+  readonly currentBranch: string | null
+  /** The GitFlow family of the current branch, or null. */
+  readonly currentKind: GitFlowKind | null
+  /** The current branch without its prefix, or null. */
+  readonly currentName: string | null
+  readonly branches: GitFlowBranches
+  /** The operation in progress, or null. */
+  readonly operation: GitOperation | null
+  /** Files still unmerged. */
+  readonly conflicts: number
+  /** Whether tracked files have staged or unstaged changes. */
+  readonly dirty: boolean
+  /** An interrupted finish waiting to be resumed, or null. */
+  readonly pending: GitFlowPendingFinish | null
+}
+
+/** What came of running one or more steps of a GitFlow finish. */
+export interface GitFlowFinishOutcome {
+  /** Whether every step ran and the branch was deleted. */
+  readonly finished: boolean
+  /** Whether Git exited non-zero on the step that stopped. */
+  readonly failed: boolean
+  /** Files still unmerged when a merge stopped. */
+  readonly conflicts: number
+  /** The operation still in progress, or null. */
+  readonly operation: GitOperation | null
+  /** The step that stopped the finish, or null when it is over. */
+  readonly step: GitFlowFinishStep | null
+  /** The tag this finish creates, or null for a feature. */
+  readonly tag: string | null
+  /** Everything Git printed, for the popup's output panel. */
   readonly output: string
 }
 

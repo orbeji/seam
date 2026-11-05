@@ -11,8 +11,8 @@ import { createRepository, type SampleRepository } from '../fixtures/repository'
  * Reverting a pending hunk from the viewer. Two lines are changed in the
  * working copy; the first change is thrown away through the marker menu, so the
  * file goes back to the index's line while the second change stays pending. The
- * action asks first, and the editor can bring the change back while the viewer
- * is open.
+ * action reverts straight away, and the editor can bring the change back while
+ * the viewer is open.
  */
 
 let repository: SampleRepository
@@ -84,12 +84,11 @@ function worktreeText(): string {
   return readFileSync(join(repository.path, 'f.txt'), 'utf8')
 }
 
-/** Opens the marker menu of the first pending change and asks to revert it. */
-async function openRevertConfirm(): Promise<void> {
+/** Opens the marker menu of the first pending change and reverts it. */
+async function revertFirst(): Promise<void> {
   await page.locator(FORWARD).first().click()
   await page.waitForSelector('[data-testid=hunk-revert]')
   await page.locator('[data-testid=hunk-revert]').click()
-  await page.waitForSelector('[data-testid=revert-confirm]')
 }
 
 describe('reverting a hunk in the viewer', () => {
@@ -101,8 +100,6 @@ describe('reverting a hunk in the viewer', () => {
     await page.waitForSelector('[data-testid=hunk-revert]')
     expect(await page.locator('[data-testid=hunk-revert]').isEnabled()).toBe(true)
     await page.locator('[data-testid=hunk-revert]').click()
-    await page.waitForSelector('[data-testid=revert-confirm]')
-    await page.locator('[data-testid=revert-accept]').click()
 
     // Wait on the finished text, not on the absence of the reverted line: the
     // working copy is written where it lies, so a reader can catch it empty for
@@ -122,22 +119,10 @@ describe('reverting a hunk in the viewer', () => {
     expect(await page.locator('.cm-merge-b .cm-line', { hasText: /^two$/ }).count()).toBe(1)
   })
 
-  it('asks first, and leaves the file alone when the revert is cancelled', async () => {
-    await openFile()
-
-    await openRevertConfirm()
-    await page.locator('[data-testid=revert-cancel]').click()
-
-    await expect.poll(() => page.locator('[data-testid=revert-confirm]').count()).toBe(0)
-    expect(await page.locator(FORWARD).count()).toBe(2)
-    expect(await repository.git(['diff', '--', 'f.txt'])).toContain('+TWO')
-  })
-
   it('can be brought back with the editor while the viewer is open', async () => {
     await openFile()
 
-    await openRevertConfirm()
-    await page.locator('[data-testid=revert-accept]').click()
+    await revertFirst()
 
     // The reverted line is on screen as the index has it.
     await expect

@@ -4,13 +4,14 @@ import i18n from 'i18next'
 import { initReactI18next } from 'react-i18next'
 import en from './locales/en.json'
 import es from './locales/es.json'
+import ca from './locales/ca.json'
 
 /** Languages the interface ships with. Adding one is adding a catalog file. */
-export const SUPPORTED_LANGUAGES = ['en', 'es'] as const
+export const SUPPORTED_LANGUAGES = ['en', 'es', 'ca'] as const
 export type SupportedLanguage = (typeof SUPPORTED_LANGUAGES)[number]
 export const FALLBACK_LANGUAGE: SupportedLanguage = 'en'
 
-const catalogs: Record<SupportedLanguage, typeof en> = { en, es }
+const catalogs: Record<SupportedLanguage, typeof en> = { en, es, ca }
 
 function isSupported(candidate: string): candidate is SupportedLanguage {
   return (SUPPORTED_LANGUAGES as readonly string[]).includes(candidate)

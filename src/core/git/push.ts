@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 import type {
+  BranchStatus,
   PushCommit,
   PushOutcome,
   PushRef,
@@ -228,6 +229,38 @@ async function readPendingCommits(
 }
 
 /**
+ * How many commits a push would send, for the top bar's count. A branch that
+ * tracks an upstream already has the number in its status; a branch that
+ * publishes itself counts what no remote branch holds, exactly as the dialog's
+ * commit list does. A detached HEAD, or a repository with no commits, has none.
+ */
+export async function countPushCommits(
+  runner: GitRunner,
+  repo: string,
+  branch: BranchStatus
+): Promise<number> {
+  if (branch.head === null) return 0
+  if (branch.ahead !== undefined) return branch.ahead
+
+  // A branch that publishes itself can only travel when a remote exists. Without
+  // one, no push is possible even though every local commit is technically new.
+  if (branch.upstream === undefined) {
+    const remotes = await runner.run(['remote'], { cwd: repo, readOnly: true })
+    if (remotes.code !== 0 || remotes.stdout.toString('utf8').trim() === '') return 0
+  }
+
+  const range =
+    branch.upstream !== undefined ? [`${branch.upstream}..HEAD`] : ['HEAD', '--not', '--remotes']
+  const result = await runner.run(['rev-list', '--count', ...range], {
+    cwd: repo,
+    readOnly: true
+  })
+  if (result.code !== 0) return 0
+  const count = Number(result.stdout.toString('utf8').trim())
+  return Number.isFinite(count) && count > 0 ? count : 0
+}
+
+/**
  * Everything the push dialog needs: the branch, its upstream, the remotes, the
  * commits that would travel and the remote commit the lease would use. Every
  * call is read-only, so opening the dialog never touches the index or a ref.
@@ -400,6 +433,16 @@ export async function updateForPush(
     }
   }
 
+  return integrateUpstream(runner, repo, strategy, fetchOutput)
+}
+
+/** Runs the chosen integration and reads what stopped. */
+async function integrateUpstream(
+  runner: GitRunner,
+  repo: string,
+  strategy: PushUpdateStrategy,
+  fetchOutput: string
+): Promise<PushUpdateOutcome> {
   const args = strategy === 'merge' ? ['merge', '--no-edit', '@{u}'] : ['rebase', '@{u}']
   const result = await runner.run(args, {
     cwd: repo,
@@ -420,4 +463,46 @@ export async function updateForPush(
     operation,
     output: combine(fetchOutput, combine(result.stdout.toString('utf8'), result.stderr))
   }
+}
+
+/**
+ * Runs `git fetch --all`, refreshing every configured remote's refs without
+ * touching the local branches or the working tree. A thrown {@link GitCommandError}
+ * is what the interface shows, so a network failure is an ordinary error.
+ */
+export async function fetchRemotes(runner: GitRunner, repo: string): Promise<void> {
+  await runner.runOrThrow(['fetch', '--all'], { cwd: repo, timeoutMs: PUSH_TIMEOUT_MS })
+}
+
+/**
+ * Fetches and integrates the branch's upstream, the way `git pull` would. A
+ * rebase that would rewrite published history falls back to a merge instead of
+ * refusing, so the pull button cannot dead-end; a conflict leaves the operation
+ * in progress for the conflicts list to take over.
+ */
+export async function pull(
+  runner: GitRunner,
+  repo: string,
+  strategy: PushUpdateStrategy
+): Promise<PushUpdateOutcome> {
+  const status = await readStatus(runner, repo)
+  if (status.branch.upstream === undefined) {
+    throw new GitError('This branch has no upstream to pull from.')
+  }
+
+  const effective = strategy === 'rebase' && (await isPublished(runner, repo)) ? 'merge' : strategy
+
+  const fetch = await runner.run(['fetch'], { cwd: repo, timeoutMs: PUSH_TIMEOUT_MS })
+  const fetchOutput = combine(fetch.stdout.toString('utf8'), fetch.stderr)
+  if (fetch.code !== 0) {
+    return {
+      ok: false,
+      fetched: false,
+      conflicts: 0,
+      operation: await detectOperation(runner, repo),
+      output: fetchOutput
+    }
+  }
+
+  return integrateUpstream(runner, repo, effective, fetchOutput)
 }

@@ -16,17 +16,23 @@ const REF_FOLDERS = ['', 'heads', 'remotes', 'tags'] as const
 export interface GitWatcherOptions {
   /** Milliseconds to wait after the last event before reporting a change. */
   debounceMs?: number
+  /**
+   * Absolute path of the working tree. It is watched recursively so an edit
+   * made outside Seam reaches the interface in the same way a `git add` does.
+   * Omitted when only the git folder should be watched.
+   */
+  workingTree?: string
 }
 
 /**
- * Watches the files Git touches inside a repository's git folder and reports a
- * single change per burst of activity. The working tree is deliberately not
- * watched: it can be huge, and the interface refreshes it when the window
- * regains focus instead.
+ * Watches the files Git touches inside a repository's git folder, and the
+ * working tree when it is given, and reports a single change per burst of
+ * activity. The working tree is watched recursively so edits anywhere in the
+ * checkout - not only at its top level - refresh the open file.
  *
- * The set is the one the phase 3 chapter lists: `index`, `HEAD`, the loose
- * references and Git's operation markers. `index` is what `git add` rewrites,
- * so an external stage shows up here without any polling.
+ * The git folder set is the one the phase 3 chapter lists: `index`, `HEAD`, the
+ * loose references and Git's operation markers. `index` is what `git add`
+ * rewrites, so an external stage shows up here without any polling.
  */
 export class GitWatcher {
   private readonly watchers: FSWatcher[] = []
@@ -51,6 +57,13 @@ export class GitWatcher {
       for (const folder of REF_FOLDERS) {
         this.watchFolder(folder === '' ? refs : join(refs, folder))
       }
+    }
+
+    const workingTree = options.workingTree
+    if (workingTree !== undefined) {
+      // A platform without recursive watching still gets the top level, so a
+      // file at the root keeps working there.
+      if (!this.watchFolder(workingTree, true)) this.watchFolder(workingTree)
     }
   }
 

@@ -4,7 +4,16 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { GitRunner, push, readPushState, updateForPush } from '../src/core/git'
+import {
+  countPushCommits,
+  fetchRemotes,
+  GitRunner,
+  pull,
+  push,
+  readPushState,
+  readStatus,
+  updateForPush
+} from '../src/core/git'
 import { createRepository, SampleRepository } from './fixtures/repository'
 
 /**
@@ -131,6 +140,46 @@ describe('readPushState', () => {
   })
 })
 
+describe('countPushCommits', () => {
+  it('counts the commits a new branch would publish', async () => {
+    const remote = await bareRemote()
+    const repo = await repository(remote)
+    await firstCommit(repo)
+
+    const status = await readStatus(runner, repo.path)
+    expect(await countPushCommits(runner, repo.path, status.branch)).toBe(1)
+  })
+
+  it('drops to zero once the branch is pushed and rises with a new commit', async () => {
+    const remote = await bareRemote()
+    const repo = await repository(remote)
+    await firstCommit(repo)
+    await repo.git(['push', '-q', '-u', 'origin', 'main'])
+
+    const clean = await readStatus(runner, repo.path)
+    expect(await countPushCommits(runner, repo.path, clean.branch)).toBe(0)
+
+    repo.write('g.txt', 'next\n')
+    await repo.git(['add', '.'])
+    await repo.git(['commit', '-qm', 'Next'])
+    const ahead = await readStatus(runner, repo.path)
+    expect(await countPushCommits(runner, repo.path, ahead.branch)).toBe(1)
+  })
+
+  it('is zero without a remote, for a detached HEAD, or before the first commit', async () => {
+    const repo = await createRepository()
+    repositories.push(repo)
+    await firstCommit(repo)
+
+    const noRemote = await readStatus(runner, repo.path)
+    expect(await countPushCommits(runner, repo.path, noRemote.branch)).toBe(0)
+
+    await repo.git(['checkout', '-q', '--detach'])
+    const detached = await readStatus(runner, repo.path)
+    expect(await countPushCommits(runner, repo.path, detached.branch)).toBe(0)
+  })
+})
+
 describe('push', () => {
   it('creates a branch without an upstream and sets one', async () => {
     const remote = await bareRemote()
@@ -151,9 +200,7 @@ describe('push', () => {
     expect(outcome.refs).toHaveLength(1)
     expect(outcome.refs[0]?.flag).toBe('*')
     expect(await remoteHead(remote)).toBe(oid)
-    expect((await repo.git(['rev-parse', '--abbrev-ref', 'main@{u}'])).trim()).toBe(
-      'origin/main'
-    )
+    expect((await repo.git(['rev-parse', '--abbrev-ref', 'main@{u}'])).trim()).toBe('origin/main')
   })
 
   it('follows the tags the pushed commits reach, and sends all tags when asked', async () => {
@@ -382,5 +429,89 @@ describe('force push', () => {
     })
     expect(forced.ok).toBe(true)
     expect(await remoteHead(remote)).toBe(await head(repo))
+  })
+})
+
+describe('fetchRemotes and pull', () => {
+  it('refreshes every remote without touching the working tree', async () => {
+    const remote = await bareRemote()
+    const repo = await repository(remote)
+    await firstCommit(repo)
+    await repo.git(['push', '-q', '-u', 'origin', 'main'])
+    const before = await head(repo)
+
+    // A second copy pushes something this repository has not seen yet.
+    const other = await clone(remote)
+    other.write('f.txt', 'changed elsewhere\n')
+    await other.git(['commit', '-aqm', 'Other change'])
+    await other.git(['push', '-q', 'origin', 'main'])
+
+    await fetchRemotes(runner, repo.path)
+    expect(await head(repo)).toBe(before)
+
+    // The refreshed upstream is now visible to the push dialog's reads.
+    const state = await readPushState(runner, repo.path)
+    expect(state.remoteOid).toBe(await remoteHead(remote))
+  })
+
+  it('pull fast-forwards to what the other copy pushed', async () => {
+    const remote = await bareRemote()
+    const repo = await repository(remote)
+    await firstCommit(repo)
+    await repo.git(['push', '-q', '-u', 'origin', 'main'])
+
+    const other = await clone(remote)
+    other.write('f.txt', 'changed elsewhere\n')
+    await other.git(['commit', '-aqm', 'Other change'])
+    await other.git(['push', '-q', 'origin', 'main'])
+
+    await fetchRemotes(runner, repo.path)
+    const pulled = await pull(runner, repo.path, 'merge')
+    expect(pulled.ok).toBe(true)
+    expect(pulled.conflicts).toBe(0)
+    expect(pulled.operation).toBeNull()
+    expect(await head(repo)).toBe(await remoteHead(remote))
+    expect(repo.read('f.txt')).toBe('changed elsewhere\n')
+  })
+
+  it('pull joins divergent history with a merge, and never rewrites published commits', async () => {
+    const remote = await bareRemote()
+    const repo = await repository(remote)
+    await firstCommit(repo)
+    await repo.git(['push', '-q', '-u', 'origin', 'main'])
+    const other = await clone(remote)
+
+    // The first copy diverges: its own commit never reaches the remote's main.
+    repo.write('g.txt', 'my own work\n')
+    await repo.git(['add', '.'])
+    await repo.git(['commit', '-qm', 'Local change'])
+    // Publishing the same commit on another remote branch is what tells
+    // a later rebase that this history is already out there.
+    await repo.git(['push', '-q', 'origin', 'HEAD:refs/heads/feature'])
+
+    // The second copy pushes its own direction of history onto main.
+    other.write('f.txt', 'changed elsewhere\n')
+    await other.git(['commit', '-aqm', 'Other change'])
+    await other.git(['push', '-q', 'origin', 'main'])
+
+    await fetchRemotes(runner, repo.path)
+    // HEAD is published on origin/feature, so the requested rebase falls
+    // back to a merge instead of rewriting commits others may have taken.
+    const pulled = await pull(runner, repo.path, 'rebase')
+    expect(pulled.ok).toBe(true)
+    expect(pulled.conflicts).toBe(0)
+    expect(await remoteHead(remote)).not.toBe(await head(repo))
+    expect((await repo.git(['rev-list', '--count', '--merges', 'HEAD'])).trim()).toBe('1')
+    expect((await repo.git(['log', '--format=%s'])).split('\n')).toEqual(
+      expect.arrayContaining(['Other change', 'Local change'])
+    )
+  })
+
+  it('pull fails the ordinary way when the branch has no upstream', async () => {
+    const remote = await bareRemote()
+    const repo = await repository(remote)
+    await firstCommit(repo)
+
+    await expect(pull(runner, repo.path, 'merge')).rejects.toThrow(/no upstream/)
   })
 })
