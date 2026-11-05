@@ -39,9 +39,7 @@ describe('checkoutTarget', () => {
   })
 
   it('checks out a remote branch and names the local tracking branch', () => {
-    const commit = candidate('feature', [
-      { name: 'origin/feature/pitagoras', kind: 'remote' }
-    ])
+    const commit = candidate('feature', [{ name: 'origin/feature/pitagoras', kind: 'remote' }])
     expect(checkoutTarget(commits, 'main', commit)).toEqual({
       kind: 'branch',
       branch: 'origin/feature/pitagoras',

@@ -148,9 +148,7 @@ export default function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
         <select
           className="dialog__input"
           value={settings?.syntaxTheme ?? 'seam'}
-          onChange={(e) =>
-            changeSetting({ syntaxTheme: e.target.value as SyntaxThemePreference })
-          }
+          onChange={(e) => changeSetting({ syntaxTheme: e.target.value as SyntaxThemePreference })}
         >
           {SYNTAX_OPTIONS.map(([value, label]) => (
             <option key={value} value={value}>

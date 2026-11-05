@@ -97,4 +97,3 @@ export function checkoutRelation(
 
   return 'other'
 }
-

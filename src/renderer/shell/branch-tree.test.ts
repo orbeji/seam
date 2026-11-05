@@ -34,7 +34,10 @@ describe('buildBranchTree', () => {
   })
 
   it('nests one folder deeper per extra "/"', () => {
-    const nodes = buildBranchTree([{ name: 'fork/depth/nested' }] satisfies Item[], (item) => item.name)
+    const nodes = buildBranchTree(
+      [{ name: 'fork/depth/nested' }] satisfies Item[],
+      (item) => item.name
+    )
 
     expect(leafLabels(folderOf(folderOf(nodes, 'fork').children, 'depth').children)).toEqual([
       'nested'
@@ -69,7 +72,7 @@ describe('buildBranchTree', () => {
 
     // The leaf keeps the full checkout name even though it is shown under "feature".
     const feature = folderOf(nodes, 'feature')
-    expect((feature.children[0] as BranchLeaf<typeof remotes[number]>).item.fullname).toBe(
+    expect((feature.children[0] as BranchLeaf<(typeof remotes)[number]>).item.fullname).toBe(
       'origin/feature/fun-1234'
     )
     expect(leafLabels(nodes)).toEqual(['tool'])

@@ -87,9 +87,7 @@ function parseHighlight(value: unknown): HighlightPreference {
 }
 
 function parseSyntaxTheme(value: unknown): SyntaxThemePreference {
-  return value === 'seam' || value === 'github' || value === 'vivid'
-    ? value
-    : DEFAULT_SYNTAX_THEME
+  return value === 'seam' || value === 'github' || value === 'vivid' ? value : DEFAULT_SYNTAX_THEME
 }
 
 /**

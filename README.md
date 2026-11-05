@@ -1,7 +1,9 @@
 # Seam
 
-A desktop Git client for Windows and Linux with a staging-area commit flow,
-diff viewer and three-pane conflict resolver.
+Seam is a desktop Git client for Windows and Linux with a graphical interface.
+It covers the everyday flow (staging, commits, branches, merges and push) and
+adds a dedicated three-pane merge conflict resolver for when a merge, rebase,
+cherry-pick or stash pop stops. A diff viewer is built into both.
 
 Seam drives the real `git` executable as a child process instead of
 reimplementing it, so hooks, configuration, credential helpers and attributes
@@ -11,25 +13,11 @@ expose the regions the merge editor needs.
 
 ## Status
 
-Phase 2 (merge engine). Phases 0 and 1 are done.
-
-Phase 0 lays the foundations: the window opens over a chosen folder and lists
-its staged, unstaged, untracked and conflicting changes, read through the real
-`git` executable. The interface is translated into English and Spanish, and the
-language is detected from the system.
-
-Phase 1 adds the line-level diff engine and its viewer: side-by-side and unified
-modes over CodeMirror, word and character diffs, the whitespace options,
-collapsed unchanged blocks, and language detection.
-
-Phase 2 adds the three-way merge engine in `src/core/merge`, with no interface.
-Given a base and the two sides it builds the merge regions, classifies them
-(left-only, right-only, same, conflict), and exposes the operations that build
-the result (apply the non-conflicting regions, accept, ignore, revert, resolve
-simple conflicts). It is checked against the real `git merge-file -p` with
-thousands of random cases, and its own invariants (the sides must be
-reconstructible from the regions, and the result ranges must stay sound) hold
-over thousands more.
+Phases 0 to 8 are implemented, along with branches, merges and GitFlow: the
+repository and change list, the diff viewer, the three-way merge engine,
+staging, commits, the conflict list, the merge editor, finish and abort for
+merge, rebase, cherry-pick and stash pop, push, and the branch operations.
+Phase 9 (packaging and the 0.1.0 release) is still pending.
 
 ## Requirements
 
