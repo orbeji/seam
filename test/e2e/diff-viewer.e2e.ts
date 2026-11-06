@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { _electron as electron, type ElectronApplication, type Page } from 'playwright-core'
@@ -16,13 +16,14 @@ import { createSampleRepositories } from '../fixtures/sample-repositories'
 const temporaries: string[] = []
 let application: ElectronApplication
 let page: Page
+let userData: string
 
 beforeAll(async () => {
   const base = mkdtempSync(join(tmpdir(), 'seam-e2e-diff-'))
   temporaries.push(base)
   const samples = await createSampleRepositories(base)
 
-  const userData = mkdtempSync(join(tmpdir(), 'seam-e2e-diff-user-'))
+  userData = mkdtempSync(join(tmpdir(), 'seam-e2e-diff-user-'))
   temporaries.push(userData)
 
   application = await electron.launch({
@@ -78,14 +79,54 @@ async function closeDiff(): Promise<void> {
   await page.waitForSelector('[data-testid=staged]')
 }
 
+/** Waits until a write has reached the settings file on disk. */
+async function waitForSetting(key: string, expected: unknown): Promise<void> {
+  await waitFor(
+    async () => {
+      try {
+        const settings = JSON.parse(
+          readFileSync(join(userData, 'settings.json'), 'utf8')
+        ) as Record<string, unknown>
+        return settings[key] === expected
+      } catch {
+        return false
+      }
+    },
+    `${key} to be ${String(expected)}`
+  )
+}
+
+/**
+ * Changes one viewer option from the settings dialog. The viewer reads the
+ * settings again after every write, so the caller still waits for the effect.
+ */
+async function setViewerSetting(id: string, value: string | boolean): Promise<void> {
+  await page.locator('[data-testid=settings]').click()
+  await page.waitForSelector('[data-testid=settings-dialog][data-ready=true]')
+  const key = id.replace('settings-', '')
+  if (typeof value === 'boolean') {
+    const control = page.locator(`[data-testid=${id}]`)
+    if ((await control.isChecked()) !== value) {
+      await control.click()
+      await waitFor(async () => (await control.isChecked()) === value, `${id} to be ${value}`)
+    }
+  } else {
+    await page.selectOption(`[data-testid=${id}]`, value)
+  }
+  await waitForSetting(key, value)
+  await page.locator('[data-testid=settings-close]').click()
+  await page.waitForSelector('[data-testid=settings-dialog]', { state: 'detached' })
+}
+
 async function countText(): Promise<string> {
   return (await page.locator('[data-testid=diff-count]').textContent()) ?? ''
 }
 
-/** The difference count, independent of the interface language. */
+/** The total difference count, independent of the interface language. */
 async function differenceCount(): Promise<number> {
-  const match = /\d+/.exec(await countText())
-  return match ? Number(match[0]) : Number.NaN
+  const matches = [...(await countText()).matchAll(/\d+/g)]
+  const last = matches.at(-1)
+  return last ? Number(last[0]) : Number.NaN
 }
 
 /** Inline changed-word marks, which the "none" highlight turns off. */
@@ -113,45 +154,48 @@ describe('the diff viewer over the mixed repository', () => {
 
   it('counts the changed ranges of a file', async () => {
     await openFile('tracked.txt')
-    await page.selectOption('[data-testid=diff-granularity]', 'lines')
+    await setViewerSetting('settings-highlight', 'lines')
     await waitFor(async () => (await differenceCount()) === 1, 'one difference')
   })
 
-  it('changes the highlight from the toolbar', async () => {
+  it('changes the highlight from the settings', async () => {
     await openFile('tracked.txt')
-    for (const granularity of ['words', 'lines', 'split', 'characters', 'none']) {
-      await page.selectOption('[data-testid=diff-granularity]', granularity)
-      await waitForEditors(2)
-    }
-
-    await page.selectOption('[data-testid=diff-granularity]', 'words')
+    await setViewerSetting('settings-highlight', 'words')
     await waitFor(async () => (await changedTextMarks()) > 0, 'inline changed words')
 
     // "None" drops the inline changed-word highlighting.
-    await page.selectOption('[data-testid=diff-granularity]', 'none')
+    await setViewerSetting('settings-highlight', 'none')
     await waitFor(async () => (await changedTextMarks()) === 0, 'no inline highlighting')
+    await waitForEditors(1)
+
+    await setViewerSetting('settings-highlight', 'words')
+    await waitFor(async () => (await changedTextMarks()) > 0, 'inline changed words again')
   })
 
-  it('ignores whitespace from the toolbar', async () => {
+  it('ignores whitespace from the settings', async () => {
     await openFile('spaces.txt')
-    await page.selectOption('[data-testid=diff-granularity]', 'lines')
+    await setViewerSetting('settings-highlight', 'lines')
     await waitFor(async () => (await differenceCount()) === 1, 'one difference')
 
     for (const mode of ['trim', 'ignore', 'ignore-and-blank']) {
-      await page.selectOption('[data-testid=diff-whitespace]', mode)
+      await setViewerSetting('settings-whitespace', mode)
       await waitFor(async () => (await differenceCount()) === 0, `no difference under ${mode}`)
     }
+
+    await setViewerSetting('settings-whitespace', 'none')
+    await waitFor(async () => (await differenceCount()) === 1, 'the original difference again')
   })
 
   it('folds unchanged blocks and expands them again', async () => {
     await openFile('context.txt')
-    await page.check('[data-testid=diff-collapse]')
+    expect(await page.locator(`${PANES} .cm-collapsedLines`).count()).toBe(0)
+    await setViewerSetting('settings-collapse', true)
     await waitFor(
       async () => (await page.locator(`${PANES} .cm-collapsedLines`).count()) > 0,
       'a folded block'
     )
 
-    await page.uncheck('[data-testid=diff-collapse]')
+    await setViewerSetting('settings-collapse', false)
     await waitFor(
       async () => (await page.locator(`${PANES} .cm-collapsedLines`).count()) === 0,
       'the folded block to expand'
@@ -160,7 +204,7 @@ describe('the diff viewer over the mixed repository', () => {
 
   it('moves to the next file when navigation runs off the end', async () => {
     await openFile('tracked.txt')
-    await page.selectOption('[data-testid=diff-granularity]', 'lines')
+    await setViewerSetting('settings-highlight', 'lines')
 
     // The first "next" reaches the only change; the second runs off the end.
     await page.click('[data-testid=diff-next]')
@@ -196,6 +240,7 @@ describe('the diff viewer over the mixed repository', () => {
       async () => (await page.locator('[data-testid=diff-large]').count()) > 0,
       'the large file notice'
     )
-    expect(await page.locator('[data-testid=diff-granularity]').isDisabled()).toBe(true)
+    // The viewer forces line granularity even when the setting asks for words.
+    expect(await page.locator(DIFF).getAttribute('data-granularity')).toBe('lines')
   })
 })

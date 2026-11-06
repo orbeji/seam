@@ -114,7 +114,8 @@ export default tseslint.config(
       'src/preload/**/*.ts',
       'src/shared/**/*.ts',
       'src/core/**/*.ts',
-      'test/**/*.ts'
+      'test/**/*.ts',
+      'scripts/**/*.mjs'
     ],
     languageOptions: {
       globals: { ...globals.node }

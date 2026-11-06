@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { _electron as electron, type ElectronApplication, type Page } from 'playwright-core'
@@ -9,8 +9,8 @@ import { GitRunner } from '../../src/core/git'
 import { createRepository, type SampleRepository } from '../fixtures/repository'
 
 /**
- * The phase 4 author and sign-off test: the box can sign as someone else and add
- * Git's `Signed-off-by` trailer, and both stay set for the next commit.
+ * The phase 4 sign-off test: the setting adds Git's `Signed-off-by` trailer and
+ * stays set for the next commit.
  */
 
 const runner = new GitRunner()
@@ -35,6 +35,23 @@ async function waitFor(condition: () => Promise<boolean>, what: string): Promise
   throw new Error(`Timed out waiting for ${what}`)
 }
 
+/** Waits until the checkbox's write has reached the settings file on disk. */
+async function waitForSetting(key: string, expected: unknown): Promise<void> {
+  await waitFor(
+    async () => {
+      try {
+        const settings = JSON.parse(
+          readFileSync(join(userData, 'settings.json'), 'utf8')
+        ) as Record<string, unknown>
+        return settings[key] === expected
+      } catch {
+        return false
+      }
+    },
+    `${key} to be ${String(expected)}`
+  )
+}
+
 beforeAll(async () => {
   userData = mkdtempSync(join(tmpdir(), 'seam-e2e-author-user-'))
   temporaries.push(userData)
@@ -47,7 +64,7 @@ afterAll(async () => {
 })
 
 describe('signing the commit', () => {
-  it('signs as another author, adds the trailer and keeps both options', async () => {
+  it('adds the trailer from the setting and keeps it for the next commit', async () => {
     const repo = await repository()
     await runner.runOrThrow(['config', 'user.name', 'Seam Test'], { cwd: repo.path })
     await runner.runOrThrow(['config', 'user.email', 'seam@example.com'], { cwd: repo.path })
@@ -66,8 +83,17 @@ describe('signing the commit', () => {
     await page.waitForSelector('[data-testid=commit-message]')
     await page.waitForSelector('[data-testid=staged] [data-testid=entry]')
 
-    await page.locator('[data-testid=commit-author]').fill('Ada Lovelace <ada@example.com>')
-    await page.locator('[data-testid=commit-signoff]').check()
+    await page.locator('[data-testid=settings]').click()
+    await page.waitForSelector('[data-testid=settings-dialog][data-ready=true]')
+    await page.locator('[data-testid=settings-signoff]').click()
+    await waitFor(
+      async () => await page.locator('[data-testid=settings-signoff]').isChecked(),
+      'the sign-off setting'
+    )
+    await waitForSetting('signoff', true)
+    await page.locator('[data-testid=settings-close]').click()
+    await page.waitForSelector('[data-testid=settings-dialog]', { state: 'detached' })
+
     await page.locator('[data-testid=commit-message]').fill('first')
     await page.locator('[data-testid=commit-button]').click()
     await waitFor(
@@ -76,7 +102,7 @@ describe('signing the commit', () => {
     )
 
     expect((await repo.git(['log', '-1', '--format=%an <%ae>'])).trim()).toBe(
-      'Ada Lovelace <ada@example.com>'
+      'Seam Test <seam@example.com>'
     )
     expect((await repo.git(['log', '-1', '--format=%cn <%ce>'])).trim()).toBe(
       'Seam Test <seam@example.com>'
@@ -85,11 +111,12 @@ describe('signing the commit', () => {
       'Signed-off-by: Seam Test <seam@example.com>'
     )
 
-    // Both options are still set, so the next commit is signed the same way.
-    expect(await page.locator('[data-testid=commit-author]').inputValue()).toBe(
-      'Ada Lovelace <ada@example.com>'
-    )
-    expect(await page.locator('[data-testid=commit-signoff]').isChecked()).toBe(true)
+    // The setting is still set, so the next commit is signed the same way.
+    await page.locator('[data-testid=settings]').click()
+    await page.waitForSelector('[data-testid=settings-dialog][data-ready=true]')
+    expect(await page.locator('[data-testid=settings-signoff]').isChecked()).toBe(true)
+    await page.locator('[data-testid=settings-close]').click()
+    await page.waitForSelector('[data-testid=settings-dialog]', { state: 'detached' })
 
     repo.write('g.txt', 'two\n')
     await repo.git(['add', 'g.txt'])
@@ -108,7 +135,7 @@ describe('signing the commit', () => {
     )
 
     expect((await repo.git(['log', '-1', '--format=%an <%ae>'])).trim()).toBe(
-      'Ada Lovelace <ada@example.com>'
+      'Seam Test <seam@example.com>'
     )
     expect(await repo.git(['log', '-1', '--format=%B'])).toContain(
       'Signed-off-by: Seam Test <seam@example.com>'

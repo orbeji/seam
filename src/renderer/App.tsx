@@ -53,6 +53,7 @@ import { splitPath } from './paths'
 import PushDialog, { type PushChoice } from './push/PushDialog'
 import BranchDialog from './shell/BranchDialog'
 import CloneDialog from './shell/CloneDialog'
+import GitRequired from './shell/GitRequired'
 import RepositoryTabs from './shell/RepositoryTabs'
 import TopBar from './shell/TopBar'
 import SettingsPanel from './shell/SettingsPanel'
@@ -74,6 +75,16 @@ type MergeView = { state: 'loading' } | { state: 'ready'; data: MergeState }
 
 /** The GitFlow popup's contents: loading, or the configuration and branches. */
 type GitFlowView = { state: 'loading' } | { state: 'ready'; data: GitFlowState }
+
+/**
+ * The startup Git check. Nothing else is rendered until it passes, so a missing
+ * or too-old Git becomes a help screen rather than a failure on the first
+ * repository the user opens.
+ */
+type GitGate =
+  | { state: 'checking' }
+  | { state: 'ready' }
+  | { state: 'blocked'; code: IpcErrorCode; message: string }
 
 /** The file the viewer shows and the two versions it compares. */
 interface Selection {
@@ -253,6 +264,9 @@ function SyncToast({
 export default function App() {
   const { t, i18n } = useTranslation()
   const [view, setView] = useState<View>({ state: 'idle' })
+  // Whether Seam may start: it waits for the Git check, then blocks on a help
+  // screen when the system has no usable Git.
+  const [gitGate, setGitGate] = useState<GitGate>({ state: 'checking' })
   const [recent, setRecent] = useState<string[]>([])
   // The repositories with an open tab, in the order they were opened, and the
   // one whose tab is showing. Tabs stay open while another repository is used.
@@ -1575,6 +1589,26 @@ export default function App() {
     })
   }, [view, conflictsView, dialogOperation, conflictsBusy, closeConflicts, showSyncNotice, t])
 
+  // The repositories and the repository passed on the command line are read
+  // only after Git itself is usable, so the first screen is either the app or
+  // the help screen that explains how to install Git.
+  const finishStartup = useCallback(async () => {
+    setRecent(await window.seam.listRecentRepositories())
+    const initial = await window.seam.initialRepository()
+    if (initial) await open(initial)
+  }, [open])
+
+  const retryGit = useCallback(async () => {
+    setGitGate({ state: 'checking' })
+    const status = await window.seam.readGitStatus()
+    if (!status.ok) {
+      setGitGate({ state: 'blocked', code: status.code, message: status.message })
+      return
+    }
+    setGitGate({ state: 'ready' })
+    await finishStartup()
+  }, [finishStartup])
+
   useEffect(() => {
     void (async () => {
       const settings = await window.seam.readSettings()
@@ -1587,11 +1621,16 @@ export default function App() {
           i18n.changeLanguage(settings.value.language)
         }
       }
-      setRecent(await window.seam.listRecentRepositories())
-      const initial = await window.seam.initialRepository()
-      if (initial) await open(initial)
+
+      const status = await window.seam.readGitStatus()
+      if (!status.ok) {
+        setGitGate({ state: 'blocked', code: status.code, message: status.message })
+        return
+      }
+      setGitGate({ state: 'ready' })
+      await finishStartup()
     })()
-  }, [open, i18n])
+  }, [finishStartup, i18n])
 
   useEffect(() => {
     // The watcher refreshes a change to the working tree or the git folder as
@@ -1944,6 +1983,17 @@ export default function App() {
     const index = files.findIndex((file) => sameFile(file, current))
     const next = index === -1 ? undefined : files[index + direction]
     if (next !== undefined) setSelected(next)
+  }
+
+  if (gitGate.state !== 'ready') {
+    return (
+      <GitRequired
+        code={gitGate.state === 'blocked' ? gitGate.code : null}
+        message={gitGate.state === 'blocked' ? gitGate.message : ''}
+        checking={gitGate.state === 'checking'}
+        onRetry={() => void retryGit()}
+      />
+    )
   }
 
   if (mergeEditor !== null) {

@@ -27,6 +27,7 @@ import {
   initGitFlow as initGitFlowInRepo,
   listBranches as listBranchesInRepo,
   mergeBranch as mergeBranchInRepo,
+  MINIMUM_GIT_VERSION,
   readCommitChanges as readCommitChangesFromRepo,
   readCommitComparison as readCommitComparisonFromRepo,
   readCommitTemplate,
@@ -64,6 +65,7 @@ import {
   type GitFlowFinishOutcome,
   type GitFlowKind,
   type GitFlowState,
+  type GitVersion,
   type HeadCommit,
   type MergeOutcome,
   type MergeState,
@@ -74,6 +76,7 @@ import {
 } from '../../core/git'
 import type {
   FileComparison,
+  GitStatus,
   HunkRange,
   IpcErrorCode,
   IpcResult,
@@ -140,7 +143,7 @@ function isDirectory(path: string): boolean {
  * a failed command when Git is missing or too old.
  */
 export class RepositoryService {
-  private versionChecked: Promise<unknown> | null = null
+  private versionChecked: Promise<GitVersion> | null = null
   /** The commit running right now, so a hook that will not end can be stopped. */
   private commitInFlight: { readonly repo: string; readonly controller: AbortController } | null =
     null
@@ -151,6 +154,36 @@ export class RepositoryService {
   constructor(private readonly runner: GitRunner = new GitRunner()) {}
 
   /**
+   * Checks Git itself, before a repository is involved. A rejected version
+   * check is not cached, so the Retry button works after the user installs Git
+   * while Seam is open.
+   */
+  async gitStatus(): Promise<IpcResult<GitStatus>> {
+    try {
+      const version = await this.ensureVersion(process.cwd())
+      return {
+        ok: true,
+        value: {
+          executable: this.runner.executable,
+          version: version.raw,
+          minimum: `${MINIMUM_GIT_VERSION.major}.${MINIMUM_GIT_VERSION.minor}`
+        }
+      }
+    } catch (error) {
+      return failureFrom(error)
+    }
+  }
+
+  /** Runs the version check once, forgetting a failure so it can be retried. */
+  private ensureVersion(cwd: string): Promise<GitVersion> {
+    this.versionChecked ??= this.runner.ensureVersion(cwd).catch((error: unknown) => {
+      this.versionChecked = null
+      throw error
+    })
+    return this.versionChecked
+  }
+
+  /**
    * Clones a repository into a new folder. The path is the full destination,
    * not a parent, and must not exist yet unless it is an empty folder Git can
    * fill. The path is left out of the recent list; the handler adds it only
@@ -159,8 +192,7 @@ export class RepositoryService {
   async clone(url: string, destination: string): Promise<IpcResult<string>> {
     try {
       const target = await cloneRepositoryInRepo(this.runner, url, destination)
-      this.versionChecked ??= this.runner.ensureVersion(target)
-      await this.versionChecked
+      await this.ensureVersion(target)
       return { ok: true, value: target }
     } catch (error) {
       return failureFrom(error)
@@ -910,8 +942,7 @@ export class RepositoryService {
     }
 
     try {
-      this.versionChecked ??= this.runner.ensureVersion(repo)
-      await this.versionChecked
+      await this.ensureVersion(repo)
       const probe = await this.runner.run(['rev-parse', '--git-dir'], { cwd: repo, readOnly: true })
       if (probe.code !== 0) {
         return failure('not-a-repository', probe.stderr.trim() || repo)

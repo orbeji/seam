@@ -38,6 +38,7 @@ import {
   type GitFlowFinishRequest,
   type GitFlowInitRequest,
   type GitFlowStartRequest,
+  type GitStatus,
   type HunkWriteRequest,
   type IdentityWriteRequest,
   type IndexWriteRequest,
@@ -73,6 +74,10 @@ const seamApi: SeamApi = {
     ipcRenderer.invoke(IPC_CHANNELS.removeRecentRepository, repo) as Promise<IpcResult<null>>,
   initialRepository: () =>
     ipcRenderer.invoke(IPC_CHANNELS.initialRepository) as Promise<string | null>,
+  readGitStatus: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.readGitStatus) as Promise<IpcResult<GitStatus>>,
+  openExternal: (url: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.openExternal, url) as Promise<IpcResult<null>>,
   readRepositoryStatus: (repo: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.readRepositoryStatus, repo) as Promise<
       IpcResult<RepositorySnapshot>

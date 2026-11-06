@@ -153,6 +153,11 @@ export class GitRunner {
     this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS
   }
 
+  /** The executable every call starts, as the locator resolved it. */
+  get executable(): string {
+    return this.gitPath
+  }
+
   private getWriteQueue(cwd: string): WriteQueue {
     // Normalise the key so the same repository always shares one queue, even
     // when callers pass the path with a trailing separator.

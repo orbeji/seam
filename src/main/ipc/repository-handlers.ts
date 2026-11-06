@@ -5,6 +5,7 @@ import {
   clipboard,
   dialog,
   ipcMain,
+  shell,
   type OpenDialogOptions,
   type WebContents
 } from 'electron'
@@ -46,6 +47,18 @@ import type { RepositoryService } from '../session/repository-service'
 import type { Settings } from '../session/settings'
 
 const OPEN_DIRECTORY: OpenDialogOptions = { properties: ['openDirectory'] }
+
+/**
+ * The only pages the interface may open in the system browser. Keeping the
+ * list here means a compromised renderer cannot use the bridge to launch an
+ * arbitrary URL.
+ */
+const HELP_URLS = new Set([
+  'https://git-scm.com/downloads',
+  'https://git-scm.com/download/linux',
+  'https://git-scm.com/download/win',
+  'https://github.com/orbeji/seam#readme'
+])
 
 const VERSION_SOURCES: readonly FileVersionSource[] = [
   'head',
@@ -439,6 +452,10 @@ function parseSettingsPatch(value: unknown): SettingsPatch | null {
     if (typeof raw['collapse'] !== 'boolean') return null
     patch.collapse = raw['collapse']
   }
+  if ('signoff' in raw) {
+    if (typeof raw['signoff'] !== 'boolean') return null
+    patch.signoff = raw['signoff']
+  }
   return patch
 }
 
@@ -538,6 +555,16 @@ export function registerRepositoryHandlers(
   })
 
   ipcMain.handle(IPC_CHANNELS.initialRepository, () => initialRepository)
+
+  ipcMain.handle(IPC_CHANNELS.readGitStatus, () => service.gitStatus())
+
+  ipcMain.handle(IPC_CHANNELS.openExternal, async (_event, url: unknown) => {
+    if (typeof url !== 'string' || !HELP_URLS.has(url)) {
+      return { ok: false, code: 'unknown', message: 'URL not allowed' }
+    }
+    await shell.openExternal(url)
+    return { ok: true, value: null }
+  })
 
   ipcMain.handle(IPC_CHANNELS.readRepositoryStatus, async (event, repo: unknown) => {
     const path = typeof repo === 'string' ? repo : ''

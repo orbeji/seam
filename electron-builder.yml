@@ -1,0 +1,74 @@
+appId: dev.orbeji.seam
+productName: Seam
+copyright: Copyright © 2026 Ender
+
+directories:
+  output: release
+  buildResources: build
+
+# Only the compiled application and its runtime metadata go inside the asar.
+# The sources, tests and documentation stay out of the installer.
+files:
+  - out/**/*
+  - package.json
+  - LICENSE
+
+asar: true
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: build/icon.ico
+  executableName: seam
+  artifactName: ${productName}-${version}-windows-${arch}.${ext}
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowElevation: true
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Seam
+  deleteAppDataOnUninstall: false
+  runAfterFinish: true
+  artifactName: ${productName}-${version}-windows-setup.${ext}
+
+linux:
+  target:
+    - target: AppImage
+      arch: [x64]
+    - target: deb
+      arch: [x64]
+  icon: build/icons
+  executableName: seam
+  syncDesktopName: true
+  category: Development
+  maintainer: Ender <orbeji@users.noreply.github.com>
+  synopsis: Git client with a staging-area commit flow and merge editor
+  description: |
+    Seam is a desktop Git client for Windows and Linux. It covers staging,
+    commits, branches, merges, push and GitFlow, and adds a three-pane merge
+    conflict resolver and a side-by-side diff viewer.
+  desktop:
+    entry:
+      Name: Seam
+      Comment: Desktop Git client
+      Categories: Development;VersionControl;
+  artifactName: ${productName}-${version}-linux-${arch}.${ext}
+
+deb:
+  # Electron's own runtime dependencies, plus the system Git that Seam drives.
+  # Git is not bundled in 0.1.0; the .deb asks the package manager for it.
+  depends:
+    - git
+    - libgtk-3-0
+    - libnotify4
+    - libnss3
+    - libxss1
+    - libxtst6
+    - xdg-utils
+    - libatspi2.0-0
+    - libuuid1
+    - libsecret-1-0

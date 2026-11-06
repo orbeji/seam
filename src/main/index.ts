@@ -2,9 +2,11 @@
 
 import { app, BrowserWindow } from 'electron'
 import { join } from 'node:path'
+import { GitRunner } from '../core/git'
 import { registerRepositoryHandlers } from './ipc/repository-handlers'
 import { CommitDrafts } from './session/commit-drafts'
 import { CommitHistory } from './session/commit-history'
+import { findGitExecutable } from './session/git-locator'
 import { repositoryFromArgv } from './session/launch-arguments'
 import { RecentRepositories } from './session/recent-repositories'
 import { RepositoryService } from './session/repository-service'
@@ -23,6 +25,10 @@ if (userData !== undefined && userData !== '') {
  * the desktop's focus.
  */
 const HIDDEN_WINDOW = process.env['SEAM_HIDDEN_WINDOW'] === '1'
+
+// A stable identity for the Windows taskbar and notifications. It must match
+// the appId electron-builder writes into the installer.
+app.setAppUserModelId('dev.orbeji.seam')
 
 function createWindow(): BrowserWindow {
   const window = new BrowserWindow({
@@ -68,8 +74,9 @@ void app.whenReady().then(() => {
   const settings = new Settings(join(app.getPath('userData'), 'settings.json'))
   const initialRepository = repositoryFromArgv(process.argv)
   if (initialRepository) recent.remember(initialRepository)
+  const gitPath = findGitExecutable()
   registerRepositoryHandlers(
-    new RepositoryService(),
+    new RepositoryService(gitPath === null ? new GitRunner() : new GitRunner({ gitPath })),
     recent,
     drafts,
     history,

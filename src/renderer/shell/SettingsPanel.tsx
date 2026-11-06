@@ -99,7 +99,11 @@ export default function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
   if (!isOpen) return null
 
   return (
-    <div className="dialog dialog--stacked" data-testid="settings-dialog">
+    <div
+      className="dialog dialog--stacked"
+      data-testid="settings-dialog"
+      data-ready={settings === null ? 'false' : 'true'}
+    >
       <div
         className="dialog__panel"
         role="dialog"
@@ -113,6 +117,7 @@ export default function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
         <div className="dialog__label">{t('settings.language')}</div>
         <select
           className="dialog__input"
+          data-testid="settings-language"
           value={language}
           onChange={(e) => changeLanguage(e.target.value)}
         >
@@ -147,6 +152,7 @@ export default function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
         <div className="dialog__label">{t('settings.syntaxTheme')}</div>
         <select
           className="dialog__input"
+          data-testid="settings-syntax"
           value={settings?.syntaxTheme ?? 'seam'}
           onChange={(e) => changeSetting({ syntaxTheme: e.target.value as SyntaxThemePreference })}
         >
@@ -160,6 +166,7 @@ export default function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
         <div className="dialog__label">{t('settings.whitespace')}</div>
         <select
           className="dialog__input"
+          data-testid="settings-whitespace"
           value={settings?.whitespace ?? 'none'}
           onChange={(e) => changeSetting({ whitespace: e.target.value as WhitespacePreference })}
         >
@@ -173,6 +180,7 @@ export default function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
         <div className="dialog__label">{t('settings.highlight')}</div>
         <select
           className="dialog__input"
+          data-testid="settings-highlight"
           value={settings?.highlight ?? 'words'}
           onChange={(e) => changeSetting({ highlight: e.target.value as HighlightPreference })}
         >
@@ -186,6 +194,7 @@ export default function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
         <label className="diff__control diff__control--check" title={t('settings.hooksHint')}>
           <input
             className="diff__check-input"
+            data-testid="settings-hooks"
             type="checkbox"
             checked={settings?.runHooks ?? true}
             onChange={(e) => changeSetting({ runHooks: e.target.checked })}
@@ -211,6 +220,7 @@ export default function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
         <label className="diff__control diff__control--check" title={t('settings.signoffHint')}>
           <input
             className="diff__check-input"
+            data-testid="settings-signoff"
             type="checkbox"
             checked={settings?.signoff ?? false}
             onChange={(e) => changeSetting({ signoff: e.target.checked })}
@@ -236,6 +246,7 @@ export default function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
         <label className="diff__control diff__control--check" title={t('settings.collapse')}>
           <input
             className="diff__check-input"
+            data-testid="settings-collapse"
             type="checkbox"
             checked={settings?.collapse ?? false}
             onChange={(e) => changeSetting({ collapse: e.target.checked })}
@@ -262,7 +273,12 @@ export default function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
           <button type="button" className="dialog__button" onClick={onClose}>
             {t('identity.cancel')}
           </button>
-          <button type="button" className="dialog__button button" onClick={onClose}>
+          <button
+            type="button"
+            className="dialog__button button"
+            data-testid="settings-close"
+            onClick={onClose}
+          >
             {t('settings.save')}
           </button>
         </div>

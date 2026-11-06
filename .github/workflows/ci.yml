@@ -12,12 +12,10 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# CI runs only the deterministic unit suite. The integration suite (real Git)
-# and the end-to-end suite (real Electron) stay local; neither binary is needed
-# here.
 jobs:
+  # Fast feedback: no Git repository or Electron process is started here.
   check:
-    name: ${{ matrix.os }}
+    name: Check · ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -45,3 +43,93 @@ jobs:
 
       - name: Unit tests
         run: npm run test:unit
+
+      - name: Check dependency licences
+        run: npm run licenses:check
+
+  # The integration suite drives the real Git executable. It runs on both
+  # platforms so path, CRLF and process-handling differences are caught.
+  integration:
+    name: Integration · ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Integration tests
+        run: npm run test:integration
+
+  # The oldest Git the application supports, built from source once per run.
+  # This proves the commands and parsers still work on 2.30, not only on the
+  # version the runner happens to ship.
+  integration-git-2-30:
+    name: Integration · Git 2.30
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Build Git 2.30
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libssl-dev libcurl4-openssl-dev libexpat1-dev gettext zlib1g-dev
+          curl -fsSL https://github.com/git/git/archive/refs/tags/v2.30.2.tar.gz | tar -xz
+          make -C git-2.30.2 -j"$(nproc)" NO_TCLTK=1 NO_GETTEXT=1 prefix="$RUNNER_TEMP/git-2.30" install
+          echo "$RUNNER_TEMP/git-2.30/bin" >> "$GITHUB_PATH"
+
+      - name: Show Git version
+        run: git --version
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Integration tests
+        run: npm run test:integration
+
+  # End-to-end tests launch the built Electron window and use Playwright.
+  # Linux needs a virtual display; Windows runs the window directly.
+  e2e:
+    name: End-to-end · ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install virtual display
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y xvfb
+
+      - name: End-to-end tests (Linux)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a npm run test:e2e
+
+      - name: End-to-end tests (Windows)
+        if: runner.os == 'Windows'
+        run: npm run test:e2e

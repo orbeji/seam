@@ -1,9 +1,9 @@
 # Seam
 
 Seam is a desktop Git client for Windows and Linux with a graphical interface.
-It covers the everyday flow (staging, commits, branches, merges and push) and
-adds a dedicated three-pane merge conflict resolver for when a merge, rebase,
-cherry-pick or stash pop stops. A diff viewer is built into both.
+It covers the everyday flow (staging, commits, branches, merges, push and
+GitFlow) and adds a dedicated three-pane merge conflict resolver for when a
+merge, rebase, cherry-pick or stash pop stops. A diff viewer is built into both.
 
 Seam drives the real `git` executable as a child process instead of
 reimplementing it, so hooks, configuration, credential helpers and attributes
@@ -11,18 +11,71 @@ behave exactly as they do in the terminal. The three-way merge engine and the
 line-level diff are the only parts written from scratch, because Git does not
 expose the regions the merge editor needs.
 
-## Status
+## Screenshots
 
-Phases 0 to 8 are implemented, along with branches, merges and GitFlow: the
-repository and change list, the diff viewer, the three-way merge engine,
-staging, commits, the conflict list, the merge editor, finish and abort for
-merge, rebase, cherry-pick and stash pop, push, and the branch operations.
-Phase 9 (packaging and the 0.1.0 release) is still pending.
+| Changes                                                                      | Diff                                                                   |
+| ---------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| ![Working tree with staged and unstaged files](docs/screenshots/changes.png) | ![Side-by-side diff with line highlighting](docs/screenshots/diff.png) |
+
+| Conflicts                                                              | Merge editor                                                           |
+| ---------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| ![Conflicted file list and operations](docs/screenshots/conflicts.png) | ![Three-pane merge conflict editor](docs/screenshots/merge-editor.png) |
+
+## Install
+
+### Windows
+
+Download `Seam-0.1.0-windows-setup.exe` from the
+[latest release](https://github.com/orbeji/seam/releases/latest) and run it. The
+installer is per-user and does not need administrator rights.
+
+The 0.1.0 installer is **not code-signed**, so Windows SmartScreen shows an
+unknown publisher warning. Choose **More info → Run anyway** only if the
+SHA-256 of the download matches the `SHA256SUMS.txt` published with the release.
+
+### Linux
+
+Download the `.deb` or the `.AppImage` from the
+[latest release](https://github.com/orbeji/seam/releases/latest).
+
+```bash
+# Debian, Ubuntu and derivatives. Git is installed as a dependency.
+sudo apt install ./Seam-0.1.0-linux-amd64.deb
+
+# AppImage: make it executable and run it. It may need FUSE 2.
+chmod +x Seam-0.1.0-linux-x86_64.AppImage
+./Seam-0.1.0-linux-x86_64.AppImage
+```
+
+If the AppImage refuses to start because FUSE is missing, install `libfuse2`
+(FUSE 2) or use the `.deb`. The `.deb` is the recommended package on Debian and
+Ubuntu.
 
 ## Requirements
 
-- Node.js 22 or newer
-- Git 2.30 or newer on the `PATH`
+- Git 2.30 or newer on the `PATH`. On Windows, Seam also looks in the usual Git
+  for Windows install folders. Missing or older Git shows a help screen with a
+  download link instead of failing when a repository is opened.
+- A 64-bit Windows 10/11 or a 64-bit Linux distribution with GTK 3.
+
+Seam does not bundle Git in 0.1.0. See [What Seam 0.1.0 does not do](docs/limitaciones.md)
+for this and the other limits of the version.
+
+## Build from source
+
+Node.js 22 or newer is required.
+
+```bash
+npm install
+npm run dev      # hot reload while developing
+npm run build    # type-check and produce out/
+npm run pack     # unpacked application in release/
+npm run dist     # installers for the current platform
+```
+
+`npm run dist:linux` produces the AppImage and `.deb`; `npm run dist:win`
+produces the NSIS installer. The configuration is in `electron-builder.yml` and
+the icons are in `build/`.
 
 ## Scripts
 
@@ -37,14 +90,27 @@ Phase 9 (packaging and the 0.1.0 release) is still pending.
 | `npm test`                 | Runs the unit and integration suites once              |
 | `npm run test:unit`        | Runs the unit suite (the one CI runs)                  |
 | `npm run test:integration` | Runs the suite that drives real `git`                  |
-| `npm run test:e2e`         | Builds and runs the Playwright smoke test              |
+| `npm run test:e2e`         | Builds and runs the Playwright end-to-end suite        |
+| `npm run pack`             | Builds an unpacked application in `release/`           |
+| `npm run dist`             | Builds the installers for the current platform         |
+| `npm run licenses`         | Prints the licence summary of the dependencies         |
+| `npm run release:notes`    | Prints the changelog section of the current version    |
 
-The unit suite never starts Git or Electron, so GitHub Actions runs only
-`npm run test:unit`. Name a test that needs either one
-`*.integration.test.ts` or `*.e2e.ts`; those suites are local only. The
+The unit suite never starts Git or Electron. Name a test that needs either one
+`*.integration.test.ts` or `*.e2e.ts`; those suites run separately. The
 integration suite needs Git on the `PATH`; the end-to-end suite launches the
-built application and needs a display. Run both locally, under `xvfb-run` on a
-headless Linux machine.
+built application and needs a display. Run both locally, under `xvfb-run -a` on
+a headless Linux machine.
+
+The package smoke test launches an installer's executable instead of the
+development build:
+
+```bash
+npm run pack
+npm run test:e2e:packaged
+# or point it at an installed copy
+SEAM_EXECUTABLE=/opt/Seam/seam npm run test:e2e:packaged
+```
 
 ## Opening a repository
 
@@ -85,11 +151,26 @@ src/
 test/
   fixtures/   scripts that build sample repositories
   *.integration.test.ts  tests that drive real Git
-  e2e/        Playwright tests
-docs/         specification, implementation plan and screen designs
+  e2e/        Playwright tests, including the packaged smoke test
+build/        packaging icons
+docs/         specification, implementation plan, screen designs and limits
+scripts/      release helpers
 ```
 
 The import rules between `core`, `main` and `renderer` are enforced by ESLint.
+
+## Releases
+
+CI runs on every pull request and every push to `main`. Pushing a tag that
+matches the version in `package.json` (for example `v0.1.0`) builds the three
+installers, runs the end-to-end and packaged smoke tests, computes the SHA-256
+checksums and creates a **draft** GitHub Release. A person reviews and
+publishes it. The notes come from [CHANGELOG.md](CHANGELOG.md).
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow, the test
+layout and how to add a language.
 
 ## Licence
 

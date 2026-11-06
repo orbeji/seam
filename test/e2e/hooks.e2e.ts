@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { _electron as electron, type ElectronApplication, type Page } from 'playwright-core'
@@ -38,6 +38,23 @@ async function waitFor(condition: () => Promise<boolean>, what: string): Promise
     await new Promise((resolve) => setTimeout(resolve, 50))
   }
   throw new Error(`Timed out waiting for ${what}`)
+}
+
+/** Waits until the checkbox's write has reached the settings file on disk. */
+async function waitForSetting(key: string, expected: unknown): Promise<void> {
+  await waitFor(
+    async () => {
+      try {
+        const settings = JSON.parse(
+          readFileSync(join(userData, 'settings.json'), 'utf8')
+        ) as Record<string, unknown>
+        return settings[key] === expected
+      } catch {
+        return false
+      }
+    },
+    `${key} to be ${String(expected)}`
+  )
 }
 
 beforeAll(async () => {
@@ -82,8 +99,17 @@ describe('running hooks', () => {
     expect(await page.locator('[data-testid=commit-message]').inputValue()).toBe('blocked')
     expect((await repo.run(['rev-parse', '--verify', 'HEAD'])).code).not.toBe(0)
 
-    // Turning the hooks off lets the same commit through.
-    await page.locator('[data-testid=commit-hooks]').uncheck()
+    // Turning the hooks off in the settings lets the same commit through.
+    await page.locator('[data-testid=settings]').click()
+    await page.waitForSelector('[data-testid=settings-dialog][data-ready=true]')
+    await page.locator('[data-testid=settings-hooks]').click()
+    await waitFor(
+      async () => !(await page.locator('[data-testid=settings-hooks]').isChecked()),
+      'the hooks setting'
+    )
+    await waitForSetting('runHooks', false)
+    await page.locator('[data-testid=settings-close]').click()
+    await page.waitForSelector('[data-testid=settings-dialog]', { state: 'detached' })
     await page.locator('[data-testid=commit-button]').click()
     await waitFor(
       async () => (await repo.run(['rev-parse', '--verify', 'HEAD'])).code === 0,

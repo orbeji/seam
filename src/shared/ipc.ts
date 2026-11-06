@@ -34,7 +34,7 @@ import type {
  * interface. Bump it whenever a message shape changes so the three layers can
  * detect a mismatch instead of failing silently.
  */
-export const IPC_CONTRACT_VERSION = 30
+export const IPC_CONTRACT_VERSION = 31
 
 /** Channel names shared by the main process and the preload bridge. */
 export const IPC_CHANNELS = {
@@ -52,6 +52,10 @@ export const IPC_CHANNELS = {
   writeIndex: 'staging:write-index',
   revertHunks: 'staging:revert-hunks',
   initialRepository: 'app:initial-repository',
+  /** Checks the system Git before any repository is opened. */
+  readGitStatus: 'app:git-status',
+  /** Opens one of the few documentation pages the help screens link to. */
+  openExternal: 'app:open-external',
   /** Sent from main to the interface when Git changed a repository on disk. */
   repositoryChanged: 'repo:changed',
   stageFiles: 'repo:stage',
@@ -152,6 +156,17 @@ export interface CloneRequest {
 export type IpcResult<T> =
   | { readonly ok: true; readonly value: T }
   | { readonly ok: false; readonly code: IpcErrorCode; readonly message: string }
+
+/**
+ * What the startup check found. The executable is the one Seam will run, so the
+ * help screen can show it, and the version is what Git printed. A failure comes
+ * back as an `IpcResult` error (`git-not-found` or `git-too-old`).
+ */
+export interface GitStatus {
+  readonly executable: string
+  readonly version: string
+  readonly minimum: string
+}
 
 /** Where a version of a file comes from, for the diff viewer. */
 export type FileVersionSource = 'head' | 'index' | 'worktree' | 'stage1' | 'stage2' | 'stage3'
@@ -586,6 +601,13 @@ export interface SeamApi {
   removeRecentRepository(repo: string): Promise<IpcResult<null>>
   /** The repository passed on the command line with `--repo`, or null. */
   initialRepository(): Promise<string | null>
+  /**
+   * Checks that a usable Git is installed, so the window can explain how to
+   * install it instead of failing when a repository is opened; never throws.
+   */
+  readGitStatus(): Promise<IpcResult<GitStatus>>
+  /** Opens one of the documentation pages the help screens link to; never throws. */
+  openExternal(url: string): Promise<IpcResult<null>>
   /** Reads a repository's status; never throws, returns an error result instead. */
   readRepositoryStatus(repo: string): Promise<IpcResult<RepositorySnapshot>>
   /** Reads two versions of a file for the diff viewer; never throws. */

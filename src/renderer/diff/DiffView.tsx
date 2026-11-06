@@ -959,6 +959,7 @@ export default function DiffView({
       className={`diff${layout === 'three-pane' ? ' diff--three-pane' : ''}`}
       data-testid="diff"
       data-language={languageId ?? ''}
+      data-granularity={effectiveGranularity}
     >
       <div className="diff__toolbar" data-testid="diff-toolbar">
         {/* The changes panel always shows the unified view. A conflict preview
@@ -1004,7 +1005,7 @@ export default function DiffView({
 
         {differenceCount !== null && (
           <div className="diff__difference-nav" aria-live="polite">
-            <span className="diff__difference">
+            <span className="diff__difference" data-testid="diff-count">
               {t('diff.differenceOf', {
                 current: shownDifference,
                 total: differenceCount
@@ -1014,8 +1015,9 @@ export default function DiffView({
               <button
                 type="button"
                 className="icon-button diff__nav-button"
+                data-testid="diff-previous"
                 aria-label={t('diff.navigation.previous')}
-                disabled={shownDifference <= 1 || totalDifferences === 0}
+                disabled={totalDifferences === 0}
                 onClick={() => navigate(-1)}
               >
                 <svg
@@ -1033,8 +1035,9 @@ export default function DiffView({
               <button
                 type="button"
                 className="icon-button diff__nav-button"
+                data-testid="diff-next"
                 aria-label={t('diff.navigation.next')}
-                disabled={shownDifference >= totalDifferences || totalDifferences === 0}
+                disabled={totalDifferences === 0}
                 onClick={() => navigate(1)}
               >
                 <svg

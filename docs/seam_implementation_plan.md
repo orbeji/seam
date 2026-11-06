@@ -189,11 +189,11 @@ En total son unas 14 semanas de trabajo a tiempo completo (estimación aproximad
 
 ### Fase 9: empaquetado y versión 0.1.0
 
-- [ ] Decidir si el instalador incluye Git o exige tenerlo instalado, y si el instalador de Windows se firma.
-- [ ] Instalador para Windows y AppImage y .deb para Linux con electron-builder.
-- [ ] Prueba de humo de cada instalador en un sistema limpio.
-- [ ] Revisar las traducciones al inglés y al español de todas las pantallas, manteniendo los términos Git (`push`, `pull`, `merge`, `commit`...) sin traducir, que es como se usan en la industria.
-- [ ] README con capturas, guía de contribución y licencia.
+- [x] Decidir si el instalador incluye Git o exige tenerlo instalado, y si el instalador de Windows se firma.
+- [x] Instalador para Windows y AppImage y .deb para Linux con electron-builder.
+- [x] Prueba de humo de cada instalador en un sistema limpio.
+- [x] Revisar las traducciones al inglés y al español de todas las pantallas, manteniendo los términos Git (`push`, `pull`, `merge`, `commit`...) sin traducir, que es como se usan en la industria.
+- [x] README con capturas, guía de contribución y licencia.
 - [ ] Etiqueta 0.1.0 y publicación de los binarios.
 
 ## Pruebas
@@ -269,6 +269,6 @@ Seis decisiones están tomadas y las restantes se aplazan a la fase 9, cuando se
 
 **Aplazadas a la fase 9**
 
-- [ ] Git en el instalador o instalado aparte. Hasta entonces Seam usa el Git que haya instalado.
-- [ ] Firma de código en Windows para la 0.1.0: certificado de pago o publicar sin firma.
+- [x] Git en el instalador o instalado aparte. Decidido: se usa el Git del sistema; el `.deb` lo declara como dependencia y Windows lo busca en el PATH y en las rutas habituales.
+- [x] Firma de código en Windows para la 0.1.0: certificado de pago o publicar sin firma. Decidido: se publica sin firma, con sumas SHA-256 y un aviso claro.
 - [ ] Yours y Theirs durante un rebase: la propuesta (capítulo de la fase 5) es que Yours sean tus commits repetidos, que Git llama `theirs`.
