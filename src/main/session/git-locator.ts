@@ -51,15 +51,20 @@ export function windowsGitCandidates(env: NodeJS.ProcessEnv = process.env): stri
 }
 
 /**
- * The Git executable Seam should run. On Linux and macOS the PATH is the only
- * location, so `git` is returned and the runner reports a clear error when it
- * is missing. On Windows the PATH and the usual installer folders are tried so
- * a normal install is found even when its `cmd` folder is not on the PATH.
+ * The Git executable Seam should run. `SEAM_GIT_PATH` wins when it is set, so
+ * a portable copy can be pointed at without touching the PATH and the help
+ * screen can be exercised on a machine that does have Git. An empty value marks
+ * Git as absent. On Linux and macOS the PATH is otherwise the only location, so
+ * `git` is returned and the runner reports a clear error when it is missing. On
+ * Windows the PATH and the usual installer folders are tried so a normal
+ * install is found even when its `cmd` folder is not on the PATH.
  */
 export function findGitExecutable(
   env: NodeJS.ProcessEnv = process.env,
   platform: NodeJS.Platform = process.platform
 ): string | null {
+  const override = env['SEAM_GIT_PATH']
+  if (override !== undefined) return override.trim() === '' ? null : override
   if (platform !== 'win32') return 'git'
 
   for (const candidate of windowsGitCandidates(env)) {

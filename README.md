@@ -55,7 +55,8 @@ Ubuntu.
 
 - Git 2.30 or newer on the `PATH`. On Windows, Seam also looks in the usual Git
   for Windows install folders. Missing or older Git shows a help screen with a
-  download link instead of failing when a repository is opened.
+  download link instead of failing when a repository is opened. Set
+  `SEAM_GIT_PATH` to use a specific executable, such as a portable copy.
 - A 64-bit Windows 10/11 or a 64-bit Linux distribution with GTK 3.
 
 Seam does not bundle Git in 0.1.0. See [What Seam 0.1.0 does not do](docs/limitaciones.md)

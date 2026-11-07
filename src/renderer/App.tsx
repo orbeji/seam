@@ -1645,6 +1645,25 @@ export default function App() {
     }
   }, [refresh])
 
+  useEffect(() => {
+    // While an operation is in progress a terminal can finish it. The watcher
+    // normally reports that, but a file system that misses the marker being
+    // removed would leave the dialog open forever; a slow poll is the fallback
+    // that makes the interface notice even there.
+    if (view.state !== 'ready' || view.snapshot.operation === null) return
+    let cancelled = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const poll = async (): Promise<void> => {
+      await refresh()
+      if (!cancelled) timer = setTimeout(() => void poll(), 1_500)
+    }
+    timer = setTimeout(() => void poll(), 1_500)
+    return () => {
+      cancelled = true
+      if (timer !== undefined) clearTimeout(timer)
+    }
+  }, [view, refresh])
+
   // A push prints while it runs, so its output is appended to the dialog. The
   // last few thousand characters are enough to see what the remote is doing.
   useEffect(() => {

@@ -68,6 +68,19 @@ describe('findGitExecutable', () => {
       )
     ).toBeNull()
   })
+
+  it('uses SEAM_GIT_PATH when it is set', () => {
+    expect(findGitExecutable({ SEAM_GIT_PATH: '/opt/git/bin/git' }, 'linux')).toBe(
+      '/opt/git/bin/git'
+    )
+    expect(findGitExecutable({ SEAM_GIT_PATH: 'C:\\Portable\\git.exe' }, 'win32')).toBe(
+      'C:\\Portable\\git.exe'
+    )
+  })
+
+  it('treats an empty SEAM_GIT_PATH as no Git at all', () => {
+    expect(findGitExecutable({ SEAM_GIT_PATH: '', PATH: '/usr/bin' }, 'linux')).toBeNull()
+  })
 })
 
 describe('windowsGitCandidates', () => {
