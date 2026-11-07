@@ -73,6 +73,9 @@ describe('branch, merge and GitFlow dialogs', () => {
     try {
       await page.click('[data-testid=branch-button]')
       await page.waitForSelector('[data-testid=branch-dialog]', { timeout: WAIT_MS })
+      // The dialog opens before the branches are read, so the list appears a
+      // moment later on a slow runner.
+      await page.waitForSelector('[data-testid=branch-list]', { timeout: WAIT_MS })
       expect(await page.locator('[data-testid=branch-list]').count()).toBe(1)
       await page.click('[data-testid=branch-dialog] .dialog__actions .dialog__button')
 

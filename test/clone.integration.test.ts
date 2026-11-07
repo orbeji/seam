@@ -46,7 +46,9 @@ describe('cloneRepository', () => {
 
     expect(clonedPath).toBe(resolve(target))
     const cloned = new SampleRepository(clonedPath, runner)
-    expect(cloned.read('a.txt')).toBe('hello from the source\n')
+    // The working copy's line endings follow the machine's `core.autocrlf`; the
+    // committed blob is what the clone must carry, so it is the stable check.
+    expect(await cloned.git(['show', 'HEAD:a.txt'])).toBe('hello from the source\n')
     expect((await cloned.git(['rev-parse', '--abbrev-ref', 'HEAD'])).trim()).toBe('main')
   })
 
@@ -61,7 +63,9 @@ describe('cloneRepository', () => {
     )
 
     expect(clonedPath).toBe(resolve(parent, 'trimmed'))
-    expect(new SampleRepository(clonedPath, runner).read('a.txt')).toBe('hello from the source\n')
+    expect(await new SampleRepository(clonedPath, runner).git(['show', 'HEAD:a.txt'])).toBe(
+      'hello from the source\n'
+    )
   })
 
   it('refuses a missing parent folder instead of creating a chain of it', async () => {
