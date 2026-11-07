@@ -55,8 +55,13 @@ export interface GitVersion {
 }
 
 export interface GitRunnerOptions {
-  /** Path to the Git executable. Defaults to `git` from the PATH. */
-  gitPath?: string
+  /**
+   * Path to the Git executable. Defaults to `git` from the PATH. `null` marks
+   * Git as absent, so every call fails at once instead of starting a process
+   * that the system cannot find; on Windows that failed start can otherwise
+   * wait for the command timeout.
+   */
+  gitPath?: string | null
   /** Arguments prepended to every call. Defaults to `-c core.quotepath=false`. */
   globalArgs?: readonly string[]
   /** Extra environment variables for every call. */
@@ -140,14 +145,14 @@ function abortReason(signal: AbortSignal, stdout: string, stderr: string): Error
  * repository is the call's `cwd` and each command is one `run`.
  */
 export class GitRunner {
-  private readonly gitPath: string
+  private readonly gitPath: string | null
   private readonly globalArgs: readonly string[]
   private readonly env: Record<string, string>
   private readonly timeoutMs: number
   private readonly writeQueues = new Map<string, WriteQueue>()
 
   constructor(options: GitRunnerOptions = {}) {
-    this.gitPath = options.gitPath ?? 'git'
+    this.gitPath = options.gitPath === null ? null : (options.gitPath ?? 'git')
     this.globalArgs = options.globalArgs ?? ['-c', 'core.quotepath=false']
     this.env = options.env ?? {}
     this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS
@@ -155,7 +160,7 @@ export class GitRunner {
 
   /** The executable every call starts, as the locator resolved it. */
   get executable(): string {
-    return this.gitPath
+    return this.gitPath ?? 'git'
   }
 
   private getWriteQueue(cwd: string): WriteQueue {
@@ -214,12 +219,16 @@ export class GitRunner {
    * like. Use {@link runOrThrow} when a non-zero status is an error.
    */
   private executeGit(args: readonly string[], options: GitRunOptions): Promise<GitRunResult> {
+    const gitPath = this.gitPath
+    if (gitPath === null) {
+      return Promise.reject(new GitNotFoundError('git'))
+    }
     const timeoutMs = options.timeoutMs ?? this.timeoutMs
     const argv = [...this.globalArgs, ...args]
     const signal = options.signal
 
     return new Promise<GitRunResult>((resolve, reject) => {
-      const child = spawn(this.gitPath, argv, {
+      const child = spawn(gitPath, argv, {
         cwd: options.cwd,
         env: {
           ...process.env,
@@ -306,7 +315,7 @@ export class GitRunner {
       child.on('error', (error: NodeJS.ErrnoException) => {
         finish(() => {
           if (error.code === 'ENOENT') {
-            reject(new GitNotFoundError(this.gitPath, { cause: error }))
+            reject(new GitNotFoundError(gitPath, { cause: error }))
           } else {
             reject(new GitError(`Failed to start Git: ${error.message}`, { cause: error }))
           }

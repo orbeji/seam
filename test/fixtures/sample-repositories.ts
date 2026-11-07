@@ -29,6 +29,8 @@ function sampleRunner(): GitRunner {
       '-c',
       'core.quotepath=false',
       '-c',
+      'core.autocrlf=false',
+      '-c',
       'user.name=Seam Sample',
       '-c',
       'user.email=sample@example.com',
@@ -47,6 +49,17 @@ async function git(runner: GitRunner, repo: string, args: readonly string[]): Pr
     throw new Error(`git ${args.join(' ')} failed in ${repo}: ${result.stderr.trim()}`)
   }
   return result.stdout.toString('utf8')
+}
+
+/**
+ * Initialises a sample repository with line endings pinned in its own config.
+ * The application runs Git without the fixture's `-c` arguments, so a Windows
+ * runner whose global `core.autocrlf` is true would otherwise check files out
+ * with CRLF and every assertion that reads a working copy would fail.
+ */
+async function initRepository(runner: GitRunner, repo: string): Promise<void> {
+  await git(runner, repo, ['init', '-q'])
+  await git(runner, repo, ['config', 'core.autocrlf', 'false'])
 }
 
 function write(repo: string, name: string, contents: string | Uint8Array): void {
@@ -78,7 +91,7 @@ function numberedLines(count: number, changedLine: number | null): string {
 }
 
 async function makeClean(runner: GitRunner, repo: string): Promise<void> {
-  await git(runner, repo, ['init', '-q'])
+  await initRepository(runner, repo)
   write(repo, 'a.txt', 'first\n')
   await git(runner, repo, ['add', 'a.txt'])
   await git(runner, repo, ['commit', '-qm', 'First commit'])
@@ -89,7 +102,7 @@ async function makeClean(runner: GitRunner, repo: string): Promise<void> {
 }
 
 async function makeMixed(runner: GitRunner, repo: string): Promise<void> {
-  await git(runner, repo, ['init', '-q'])
+  await initRepository(runner, repo)
   write(repo, 'tracked.txt', 'tracked\n')
   write(repo, 'renamed.txt', 'to be renamed\n')
   write(repo, 'deleted.txt', 'to be deleted\n')
@@ -145,7 +158,7 @@ async function makeMixed(runner: GitRunner, repo: string): Promise<void> {
 }
 
 async function makeConflicts(runner: GitRunner, repo: string): Promise<void> {
-  await git(runner, repo, ['init', '-q'])
+  await initRepository(runner, repo)
   write(repo, 'both.txt', 'base\n')
   write(repo, 'deleted-by-us.txt', 'base\n')
   write(repo, 'deleted-by-them.txt', 'base\n')
@@ -180,7 +193,7 @@ async function makeConflicts(runner: GitRunner, repo: string): Promise<void> {
 
 /** Commits a base and two branches that change the same line. */
 async function competingBranches(runner: GitRunner, repo: string): Promise<void> {
-  await git(runner, repo, ['init', '-q'])
+  await initRepository(runner, repo)
   write(repo, 'f.txt', 'base\n')
   await git(runner, repo, ['add', '.'])
   await git(runner, repo, ['commit', '-qm', 'Base'])
@@ -211,7 +224,7 @@ async function makeCherryPick(runner: GitRunner, repo: string): Promise<void> {
 }
 
 async function makeStash(runner: GitRunner, repo: string): Promise<void> {
-  await git(runner, repo, ['init', '-q'])
+  await initRepository(runner, repo)
   write(repo, 'f.txt', 'base\n')
   await git(runner, repo, ['add', '.'])
   await git(runner, repo, ['commit', '-qm', 'Base'])

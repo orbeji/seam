@@ -3,6 +3,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   GitError,
+  GitNotFoundError,
   GitRunner,
   GitVersionError,
   isAtLeast,
@@ -62,5 +63,16 @@ describe('ensureVersion', () => {
     const promise = new OldGitRunner().ensureVersion(cwd)
     await expect(promise).rejects.toBeInstanceOf(GitVersionError)
     await expect(promise).rejects.toThrow(/2\.30 or newer is required, found git version 2\.29\.0/)
+  })
+})
+
+describe('a runner told that Git is absent', () => {
+  it('reports the missing executable without starting a process', async () => {
+    const runner = new GitRunner({ gitPath: null })
+    expect(runner.executable).toBe('git')
+    await expect(runner.run(['--version'], { cwd, readOnly: true })).rejects.toBeInstanceOf(
+      GitNotFoundError
+    )
+    await expect(runner.run(['status'], { cwd })).rejects.toBeInstanceOf(GitNotFoundError)
   })
 })

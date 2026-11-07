@@ -76,7 +76,10 @@ void app.whenReady().then(() => {
   if (initialRepository) recent.remember(initialRepository)
   const gitPath = findGitExecutable()
   registerRepositoryHandlers(
-    new RepositoryService(gitPath === null ? new GitRunner() : new GitRunner({ gitPath })),
+    // A null path means the locator found no Git on Windows. Handing that to
+    // the runner makes every call report the missing executable at once
+    // instead of starting a process the system cannot find.
+    new RepositoryService(new GitRunner({ gitPath })),
     recent,
     drafts,
     history,
