@@ -69,12 +69,30 @@ export class SampleRepository {
   }
 }
 
-export async function createRepository(options: GitRunnerOptions = {}): Promise<SampleRepository> {
+export interface SampleRepositoryOptions extends GitRunnerOptions {
+  /**
+   * Writes a local identity into the repository. It makes the fixture
+   * independent of the machine's global Git configuration, which the CI
+   * runners do not set. Tests about the missing identity turn it off.
+   */
+  identity?: boolean
+}
+
+export async function createRepository(
+  options: SampleRepositoryOptions = {}
+): Promise<SampleRepository> {
+  const { identity = true, ...runnerOptions } = options
   const path = mkdtempSync(join(tmpdir(), 'seam-repo-'))
-  const repository = new SampleRepository(path, new GitRunner(options))
+  const repository = new SampleRepository(path, new GitRunner(runnerOptions))
   await repository.git(['init', '-q'])
   // The fixtures decide their own line endings; a global `core.autocrlf=true`,
   // as Git for Windows installs, must not override them.
   await repository.git(['config', 'core.autocrlf', 'false'])
+  // Commands that the application runs without the `-c` arguments of the
+  // fixture, such as a merge commit, still find an identity.
+  if (identity) {
+    await repository.git(['config', 'user.name', 'Seam'])
+    await repository.git(['config', 'user.email', 'seam@example.com'])
+  }
   return repository
 }

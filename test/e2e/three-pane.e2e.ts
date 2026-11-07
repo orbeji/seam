@@ -70,27 +70,50 @@ async function pending(): Promise<void> {
 
 beforeEach(pending)
 
-afterEach(async () => {
-  // Done already leaves the three-pane view, so the Close button can vanish
-  // between this check and the click; the wait for the pane to detach is what
-  // the cleanup needs.
-  const pane = page.locator('[data-testid=three-pane]')
-  if ((await pane.count()) > 0) {
-    await page
-      .locator('[data-testid=three-close]')
-      .click({ timeout: 2_000 })
-      .catch(() => undefined)
-    await page.waitForSelector('[data-testid=three-pane]', { state: 'detached' })
-  }
+/**
+ * Closes the open file, whatever layout it is in. The tab bar is hidden while
+ * the three-pane screen is up, so its Close button cannot be clicked with the
+ * pointer; dispatching the event reaches React all the same and avoids waiting
+ * on an element the layout has hidden. If the renderer does not react, a reload
+ * is the clean slate the next test needs.
+ */
+async function closeFile(): Promise<void> {
   const close = page.locator('[data-testid=diff-close]')
-  if ((await close.count()) > 0) await close.click()
-  await page.waitForSelector('[data-testid=staged]')
+  if ((await close.count()) === 0) return
+  await close.dispatchEvent('click').catch(() => undefined)
+  try {
+    await page.waitForSelector('[data-testid=diff-close]', { state: 'detached', timeout: 5_000 })
+  } catch {
+    await page.reload()
+    await page.waitForSelector('[data-testid=staged]', { timeout: WAIT_MS })
+  }
+}
+
+afterEach(async () => {
+  await closeFile().catch(() => undefined)
+  await page.waitForSelector('[data-testid=staged]', { timeout: WAIT_MS }).catch(() => undefined)
 })
+
+/**
+ * Opens `f.txt`, retrying while a background refresh replaces the list under
+ * the pointer: the click can land on a row that is about to be swapped out, and
+ * a second click on the rebuilt list is what finally selects the file.
+ */
+async function openFile(): Promise<void> {
+  const entry = page.locator('[data-testid=unstaged] [data-testid=entry]', { hasText: 'f.txt' })
+  const deadline = Date.now() + WAIT_MS
+  while (Date.now() < deadline) {
+    if ((await page.locator(PANES).count()) > 0) return
+    await entry.dispatchEvent('click').catch(() => undefined)
+    await page.waitForTimeout(100)
+  }
+  throw new Error('the diff viewer did not open')
+}
 
 /** Opens the file and switches the viewer to the three-pane layout. */
 async function openThreePane(): Promise<void> {
-  await page.locator('[data-testid=unstaged] [data-testid=entry]', { hasText: 'f.txt' }).click()
-  await page.waitForSelector(PANES)
+  await closeFile()
+  await openFile()
   await page.selectOption(LAYOUT, 'three-pane')
   await page.waitForSelector(GRID)
 }

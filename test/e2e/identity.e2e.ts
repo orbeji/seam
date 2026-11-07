@@ -20,7 +20,7 @@ let application: ElectronApplication | null = null
 let page: Page
 
 async function repository(): Promise<SampleRepository> {
-  const created = await createRepository()
+  const created = await createRepository({ identity: false })
   repositories.push(created)
   return created
 }

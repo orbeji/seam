@@ -25,7 +25,7 @@ function isolated(): GitRunner {
 }
 
 async function repository(): Promise<SampleRepository> {
-  const created = await createRepository()
+  const created = await createRepository({ identity: false })
   repositories.push(created)
   return created
 }
