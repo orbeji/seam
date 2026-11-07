@@ -86,6 +86,15 @@ describe('the merge editor', () => {
     await row('both.txt').locator('[data-testid=resolve-manually]').click()
     await page.waitForSelector('[data-testid=merge-editor]', { timeout: WAIT_MS })
 
+    // The editor opens before the conflict model is read, so its header says
+    // "No conflicts" for a moment even when there is one.
+    await waitFor(
+      async () =>
+        (await page.locator('[data-testid=merge-conflict-of]').textContent()) === 'Conflict 1 of 1',
+      'the first conflict to load'
+    )
+    await page.waitForSelector('[data-testid=merge-result-line]', { timeout: WAIT_MS })
+
     expect(await page.locator('[data-testid=merge-path]').textContent()).toBe('both.txt')
     expect(await page.locator('[data-testid=merge-conflict-of]').textContent()).toBe(
       'Conflict 1 of 1'
