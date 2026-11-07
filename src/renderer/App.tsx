@@ -319,6 +319,10 @@ export default function App() {
   // The conflicts dialog: null when closed, loading while the main process
   // reads the list, and ready with the files and the name of each side.
   const [conflictsView, setConflictsView] = useState<ConflictsView | null>(null)
+  // The operation the dialog was opened for. It is kept apart from the list
+  // because the operation can end before the list finishes loading, and the
+  // "finished outside" notice still has to fire in that case.
+  const [dialogOperation, setDialogOperation] = useState<GitOperation | null>(null)
   // Whether a conflict action is running, so its buttons cannot be pressed twice.
   const [conflictsBusy, setConflictsBusy] = useState(false)
   // A failed conflict action, shown inside the dialog without closing it.
@@ -462,6 +466,12 @@ export default function App() {
   // Identifies the status read in flight, so switching tabs quickly discards
   // the answer for the repository that was left behind.
   const statusRequest = useRef(0)
+  // Identifies the conflict read in flight, so a list that arrives after the
+  // dialog closed or was reopened cannot put it back on screen.
+  const conflictsRequest = useRef(0)
+  // The operation in the latest snapshot, for a dialog that opens before its
+  // own list has been read.
+  const operationRef = useRef<GitOperation | null>(null)
 
   /** Drops everything that belonged to the repository that was showing. */
   const resetRepositoryState = useCallback(() => {
@@ -477,7 +487,10 @@ export default function App() {
     setCommitNotice(null)
     setCopied(false)
     setIdentityPrompt(null)
+    conflictsRequest.current += 1
+    operationRef.current = null
     setConflictsView(null)
+    setDialogOperation(null)
     setConflictsError(null)
     setConflictsNotice(null)
     setOverwrite(null)
@@ -531,8 +544,10 @@ export default function App() {
       const result = await window.seam.readRepositoryStatus(repo)
       if (request !== statusRequest.current) return
       if (result.ok) {
+        operationRef.current = result.value.operation
         setView({ state: 'ready', snapshot: result.value })
       } else {
+        operationRef.current = null
         setView({ state: 'error', code: result.code, message: result.message })
       }
     },
@@ -635,6 +650,7 @@ export default function App() {
     const result = await window.seam.readRepositoryStatus(repo)
     if (request !== statusRequest.current) return
     if (result.ok) {
+      operationRef.current = result.value.operation
       setView({ state: 'ready', snapshot: result.value })
     }
   }, [])
@@ -702,7 +718,9 @@ export default function App() {
   const reloadConflicts = useCallback(async () => {
     const repo = repoRef.current
     if (repo === null) return
+    const request = conflictsRequest.current
     const result = await window.seam.readConflicts(repo)
+    if (request !== conflictsRequest.current) return
     if (result.ok) setConflictsView({ state: 'ready', data: result.value })
     else setConflictsError(result.message)
   }, [])
@@ -711,12 +729,16 @@ export default function App() {
   const openConflicts = useCallback(async (prompt: 'abort' | null = null) => {
     const repo = repoRef.current
     if (repo === null) return
+    const request = conflictsRequest.current + 1
+    conflictsRequest.current = request
+    setDialogOperation(operationRef.current)
     setConflictsPrompt(prompt)
     setConflictsView({ state: 'loading' })
     setConflictsError(null)
     setConflictsNotice(null)
     setOverwrite(null)
     const result = await window.seam.readConflicts(repo)
+    if (request !== conflictsRequest.current) return
     if (result.ok) {
       setConflictsView({ state: 'ready', data: result.value })
     } else {
@@ -1386,7 +1408,9 @@ export default function App() {
   )
 
   const closeConflicts = useCallback(() => {
+    conflictsRequest.current += 1
     setConflictsView(null)
+    setDialogOperation(null)
     setConflictsError(null)
     setConflictsNotice(null)
     setOverwrite(null)
@@ -1575,8 +1599,6 @@ export default function App() {
   // The operation can also end from a terminal while the dialog is open: the
   // watcher refreshes the status, the marker disappears and the dialog closes
   // with a note instead of pretending the list is still live.
-  const dialogOperation =
-    conflictsView?.state === 'ready' ? conflictsView.data.sides.operation : null
   useEffect(() => {
     if (conflictsView === null || dialogOperation === null || view.state !== 'ready') return
     if (conflictsBusy || view.snapshot.operation !== null) return
