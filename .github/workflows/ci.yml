@@ -89,11 +89,14 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential libssl-dev libexpat1-dev gettext zlib1g-dev
-          curl -fsSL https://github.com/git/git/archive/refs/tags/v2.30.2.tar.gz | tar -xz
+          curl -fsSL --retry 5 --retry-delay 2 https://github.com/git/git/archive/refs/tags/v2.30.2.tar.gz | tar -xz
           # NO_CURL: Git 2.30.2 does not compile against libcurl 8 (its
           # CURLFTPSSL_TRY compatibility macro was removed), and the
           # integration suite only exercises local repositories anyway.
-          make -C git-2.30.2 -j"$(nproc)" NO_TCLTK=1 NO_GETTEXT=1 NO_CURL=1 prefix="$RUNNER_TEMP/git-2.30" install
+          # CFLAGS: GCC 15 defaults to C23, where thread_local is a keyword
+          # that clashes with a struct in Git 2.30's index-pack.
+          make -C git-2.30.2 -j"$(nproc)" NO_TCLTK=1 NO_GETTEXT=1 NO_CURL=1 \
+            CFLAGS="-g -O2 -Wall -std=gnu17" prefix="$RUNNER_TEMP/git-2.30" install
           echo "$RUNNER_TEMP/git-2.30/bin" >> "$GITHUB_PATH"
 
       - name: Show Git version
