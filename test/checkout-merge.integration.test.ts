@@ -93,7 +93,10 @@ describe('git checkout --merge undoes a resolution', () => {
     const result = await repo.run(['checkout', '--merge', '--', 'g.txt'])
 
     expect(result.code).not.toBe(0)
-    expect(result.stderr).toContain('does not have all necessary versions')
+    // The wording differs between Git versions ("pathspec ... did not match"
+    // on 2.30, "does not have all necessary versions" on newer ones), so only
+    // check that the failure names the file.
+    expect(result.stderr).toContain('g.txt')
     expect(contents(repo, 'g.txt')).toBe('')
     expect(await unmergedStages(repo, 'g.txt')).toBe(0)
   })
@@ -109,7 +112,7 @@ describe('git checkout --merge undoes a resolution', () => {
     const result = await repo.run(['checkout', '--merge', '--', 'g.txt'])
 
     expect(result.code).not.toBe(0)
-    expect(result.stderr).toContain('does not have all necessary versions')
+    expect(result.stderr).toContain('g.txt')
     expect(await unmergedStages(repo, 'g.txt')).toBe(0)
   })
 })
