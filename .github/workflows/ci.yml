@@ -89,7 +89,9 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential libssl-dev libexpat1-dev gettext zlib1g-dev
-          curl -fsSL --retry 5 --retry-delay 2 https://github.com/git/git/archive/refs/tags/v2.30.2.tar.gz | tar -xz
+          curl -fsSL --retry 5 --retry-delay 2 -O https://www.kernel.org/pub/software/scm/git/git-2.30.2.tar.gz
+          echo "9ddea08fc7c38f1823a54a014ae2e9ecd45e1b4a06e919025f4c41f2c6a8061b  git-2.30.2.tar.gz" | sha256sum -c -
+          tar -xzf git-2.30.2.tar.gz
           # NO_CURL: Git 2.30.2 does not compile against libcurl 8 (its
           # CURLFTPSSL_TRY compatibility macro was removed), and the
           # integration suite only exercises local repositories anyway.
