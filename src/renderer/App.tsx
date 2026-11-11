@@ -1,6 +1,14 @@
 // SPDX-License-Identifier: MIT
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent
+} from 'react'
 import { useTranslation } from 'react-i18next'
 import type {
   ChangeSummary,
@@ -24,12 +32,15 @@ import type {
   PushOutcome,
   PushState
 } from '../shared/git'
-import type {
-  CloneRequest,
-  CrlfChoice,
-  FileVersionSource,
-  IpcErrorCode,
-  RepositorySnapshot
+import {
+  DEFAULT_HISTORY_WIDTH,
+  MAX_HISTORY_WIDTH,
+  MIN_HISTORY_WIDTH,
+  type CloneRequest,
+  type CrlfChoice,
+  type FileVersionSource,
+  type IpcErrorCode,
+  type RepositorySnapshot
 } from '../shared/ipc'
 import { fileBadge, type FileBadge } from './changes/entry-view'
 import ChangesView from './changes/ChangesView'
@@ -48,6 +59,7 @@ import {
   type HistoryCheckout,
   type HistoryView
 } from './history/HistoryPanel'
+import { clampHistoryWidth, maxHistoryWidth } from './history/panel-width'
 import MergeEditor from './merge/MergeEditor'
 import { splitPath } from './paths'
 import PushDialog, { type PushChoice } from './push/PushDialog'
@@ -356,6 +368,16 @@ export default function App() {
   const [historyView, setHistoryView] = useState<HistoryView | null>(null)
   // Whether the persistent history panel is shown beside the file sidebar.
   const [historyVisible, setHistoryVisible] = useState(true)
+  // The history panel's width. It is dragged by the handle between the panel
+  // and the file sidebar, and stored so the next run opens with the same split.
+  const [historyWidth, setHistoryWidth] = useState(DEFAULT_HISTORY_WIDTH)
+  const historyWidthRef = useRef(DEFAULT_HISTORY_WIDTH)
+  const [resizingHistory, setResizingHistory] = useState(false)
+  const historyResizeStart = useRef<{
+    pointerId: number
+    x: number
+    width: number
+  } | null>(null)
   // The commit whose files and diff are open, or null while the working tree
   // is showing. The graph stays selected on this commit.
   const [selectedCommit, setSelectedCommit] = useState<HistoryCommit | null>(null)
@@ -1086,6 +1108,85 @@ export default function App() {
     setHistoryVisible((visible) => !visible)
   }, [historyVisible, loadHistory])
 
+  /** Applies a panel width, keeping it inside what the current window can show. */
+  const applyHistoryWidth = useCallback((width: number) => {
+    const next = clampHistoryWidth(width, window.innerWidth)
+    historyWidthRef.current = next
+    setHistoryWidth(next)
+  }, [])
+
+  /** Stores the split the drag left, so the next run opens with it. */
+  const saveHistoryWidth = useCallback(() => {
+    void window.seam.writeSettings({ historyWidth: historyWidthRef.current })
+  }, [])
+
+  /** Starts a drag from wherever the panel's right edge is now. */
+  const startHistoryResize = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return
+    event.preventDefault()
+    event.currentTarget.setPointerCapture(event.pointerId)
+    historyResizeStart.current = {
+      pointerId: event.pointerId,
+      x: event.clientX,
+      width: historyWidthRef.current
+    }
+    setResizingHistory(true)
+  }, [])
+
+  /** Follows the pointer, moving the panel's right edge with it. */
+  const moveHistoryResize = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      const start = historyResizeStart.current
+      if (start === null || start.pointerId !== event.pointerId) return
+      applyHistoryWidth(start.width + event.clientX - start.x)
+    },
+    [applyHistoryWidth]
+  )
+
+  /** Ends the drag and stores the width it reached. */
+  const endHistoryResize = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      const start = historyResizeStart.current
+      if (start === null || start.pointerId !== event.pointerId) return
+      historyResizeStart.current = null
+      setResizingHistory(false)
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId)
+      }
+      saveHistoryWidth()
+    },
+    [saveHistoryWidth]
+  )
+
+  /** Returns the panel to the width it opens at. */
+  const resetHistoryWidth = useCallback(() => {
+    applyHistoryWidth(DEFAULT_HISTORY_WIDTH)
+    saveHistoryWidth()
+  }, [applyHistoryWidth, saveHistoryWidth])
+
+  /** Moves the panel's edge from the keyboard, for a user who cannot drag. */
+  const resizeHistoryWithKeyboard = useCallback(
+    (event: ReactKeyboardEvent<HTMLDivElement>) => {
+      const step = event.shiftKey ? 48 : 16
+      if (event.key === 'ArrowLeft') applyHistoryWidth(historyWidthRef.current - step)
+      else if (event.key === 'ArrowRight') applyHistoryWidth(historyWidthRef.current + step)
+      else if (event.key === 'Home') applyHistoryWidth(MIN_HISTORY_WIDTH)
+      else if (event.key === 'End') applyHistoryWidth(maxHistoryWidth(window.innerWidth))
+      else return
+      event.preventDefault()
+      saveHistoryWidth()
+    },
+    [applyHistoryWidth, saveHistoryWidth]
+  )
+
+  // A window that becomes narrower than the stored width allows brings the
+  // panel back inside, so the file sidebar and the diff keep their room.
+  useEffect(() => {
+    const onResize = (): void => applyHistoryWidth(historyWidthRef.current)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [applyHistoryWidth])
+
   /** Returns the file sidebar to the working tree's own changes. */
   const showWorkingTree = useCallback(() => {
     setSelectedCommit(null)
@@ -1635,6 +1736,7 @@ export default function App() {
     void (async () => {
       const settings = await window.seam.readSettings()
       if (settings.ok) {
+        applyHistoryWidth(settings.value.historyWidth)
         if (settings.value.theme) {
           document.documentElement.style.setProperty('color-scheme', settings.value.theme)
           document.documentElement.setAttribute('data-theme', settings.value.theme)
@@ -1652,7 +1754,7 @@ export default function App() {
       setGitGate({ state: 'ready' })
       await finishStartup()
     })()
-  }, [finishStartup, i18n])
+  }, [applyHistoryWidth, finishStartup, i18n])
 
   useEffect(() => {
     // The watcher refreshes a change to the working tree or the git folder as
@@ -2097,17 +2199,46 @@ export default function App() {
         branchesError={branchesError}
       />
 
-      <div className={historyVisible && currentRepo !== null ? 'shell' : 'shell shell--no-history'}>
+      <div
+        className={historyVisible && currentRepo !== null ? 'shell' : 'shell shell--no-history'}
+        style={
+          historyVisible && currentRepo !== null
+            ? ({ '--history-width': `${historyWidth}px` } as CSSProperties)
+            : undefined
+        }
+      >
         {historyVisible && currentRepo !== null && (
-          <aside className="history-panel" aria-label={t('history.title')}>
-            <HistoryPanel
-              repo={currentRepo}
-              view={historyView ?? { state: 'loading' }}
-              selectedOid={selectedCommit?.oid ?? null}
-              onSelect={selectCommit}
-              onCheckedOut={(result) => void historyCheckedOut(result)}
+          <>
+            <aside className="history-panel" aria-label={t('history.title')}>
+              <HistoryPanel
+                repo={currentRepo}
+                view={historyView ?? { state: 'loading' }}
+                selectedOid={selectedCommit?.oid ?? null}
+                onSelect={selectCommit}
+                onCheckedOut={(result) => void historyCheckedOut(result)}
+              />
+            </aside>
+            <div
+              className={
+                resizingHistory ? 'shell__resizer shell__resizer--active' : 'shell__resizer'
+              }
+              role="separator"
+              aria-orientation="vertical"
+              aria-label={t('history.resize')}
+              aria-valuemin={MIN_HISTORY_WIDTH}
+              aria-valuemax={MAX_HISTORY_WIDTH}
+              aria-valuenow={historyWidth}
+              title={t('history.resize')}
+              tabIndex={0}
+              data-testid="history-resizer"
+              onPointerDown={startHistoryResize}
+              onPointerMove={moveHistoryResize}
+              onPointerUp={endHistoryResize}
+              onPointerCancel={endHistoryResize}
+              onDoubleClick={resetHistoryWidth}
+              onKeyDown={resizeHistoryWithKeyboard}
             />
-          </aside>
+          </>
         )}
 
         <aside

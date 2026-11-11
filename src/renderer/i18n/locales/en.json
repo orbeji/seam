@@ -76,6 +76,7 @@
   },
   "history": {
     "title": "Commit history",
+    "resize": "Resize the history panel",
     "loading": "Reading the commit history…",
     "empty": "This repository has no commits yet.",
     "count_one": "{{count}} commit",

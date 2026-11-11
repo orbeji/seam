@@ -456,6 +456,11 @@ function parseSettingsPatch(value: unknown): SettingsPatch | null {
     if (typeof raw['signoff'] !== 'boolean') return null
     patch.signoff = raw['signoff']
   }
+  if ('historyWidth' in raw) {
+    const historyWidth = raw['historyWidth']
+    if (typeof historyWidth !== 'number' || !Number.isFinite(historyWidth)) return null
+    patch.historyWidth = historyWidth
+  }
   return patch
 }
 

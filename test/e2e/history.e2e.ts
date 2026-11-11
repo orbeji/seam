@@ -164,4 +164,32 @@ describe('the persistent commit history', () => {
       (await git.runOrThrow(['rev-parse', 'HEAD'], { cwd: samples.clean })).stdout.toString().trim()
     ).toBe(older)
   })
+
+  it('resizes the panel with its handle and keeps the split when it is hidden', async () => {
+    const panel = page.locator('.history-panel')
+    const handle = page.locator('[data-testid=history-resizer]')
+    const before = (await panel.boundingBox())?.width ?? 0
+    const box = await handle.boundingBox()
+    if (box === null) throw new Error('the history panel has no resize handle')
+
+    const startX = box.x + box.width / 2
+    const startY = box.y + box.height / 2
+    await page.mouse.move(startX, startY)
+    await page.mouse.down()
+    await page.mouse.move(startX + 120, startY, { steps: 6 })
+    await page.mouse.up()
+
+    await expect
+      .poll(async () => (await panel.boundingBox())?.width ?? 0)
+      .toBeGreaterThan(before + 100)
+
+    // The width belongs to the panel, not to this visit: hiding and showing it
+    // again restores the split the drag left.
+    await page.click('[data-testid=history-button]')
+    await page.waitForSelector('.history-panel', { state: 'detached' })
+    await page.click('[data-testid=history-button]')
+    await page.waitForSelector('.history-panel')
+    const kept = (await panel.boundingBox())?.width ?? 0
+    expect(Math.abs(kept - (before + 120))).toBeLessThan(2)
+  })
 })

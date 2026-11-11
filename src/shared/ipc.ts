@@ -34,7 +34,7 @@ import type {
  * interface. Bump it whenever a message shape changes so the three layers can
  * detect a mismatch instead of failing silently.
  */
-export const IPC_CONTRACT_VERSION = 31
+export const IPC_CONTRACT_VERSION = 32
 
 /** Channel names shared by the main process and the preload bridge. */
 export const IPC_CHANNELS = {
@@ -357,6 +357,15 @@ export type HighlightPreference = 'words' | 'lines' | 'split' | 'characters' | '
 /** The syntax colours the code viewers use in the light colour scheme. */
 export type SyntaxThemePreference = 'seam' | 'github' | 'vivid'
 
+/** The width the history panel opens at, before it is ever dragged. */
+export const DEFAULT_HISTORY_WIDTH = 300
+
+/** How narrow the history panel can be dragged before it stops being readable. */
+export const MIN_HISTORY_WIDTH = 220
+
+/** How wide the history panel can be dragged, whatever the window size. */
+export const MAX_HISTORY_WIDTH = 720
+
 /** The preferences the interface reads at startup and stores when changed. */
 export interface SettingsData {
   /** Whether Git's `pre-commit` and `commit-msg` hooks run. */
@@ -375,6 +384,8 @@ export interface SettingsData {
   readonly collapse: boolean
   /** Whether commits include the `Signed-off-by` trailer by default. */
   readonly signoff: boolean
+  /** The width of the history panel, in pixels. */
+  readonly historyWidth: number
 }
 
 /** A change to the stored preferences; fields left out keep their value. */
@@ -395,6 +406,8 @@ export interface SettingsPatch {
   collapse?: boolean
   /** Whether commits include the `Signed-off-by` trailer by default. */
   signoff?: boolean
+  /** The width of the history panel, in pixels. */
+  historyWidth?: number
 }
 
 /** One side of a conflict to accept, with the working copy the dialog saw. */

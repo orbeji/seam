@@ -970,7 +970,9 @@ textarea {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 300px 360px minmax(0, 1fr);
+  /* The first column follows the history panel's handle; the thin column after
+     it is the handle itself, between the panel and the file sidebar. */
+  grid-template-columns: var(--history-width, 300px) 6px 360px minmax(0, 1fr);
 }
 
 /* Without the history panel the file sidebar keeps the width it had before. */
@@ -986,8 +988,43 @@ textarea {
   display: flex;
   flex-direction: column;
   background: var(--panel);
-  border-right: 1px solid var(--border);
   overflow: hidden;
+}
+
+/* The handle that gives the history panel its width. The line sits in the
+   middle of a wider invisible strip so it is easy to grab. */
+.shell__resizer {
+  position: relative;
+  z-index: 1;
+  min-height: 0;
+  background: var(--panel);
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.shell__resizer::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+  background: var(--border);
+  transition:
+    width 120ms ease,
+    background 120ms ease;
+}
+
+.shell__resizer:hover::after,
+.shell__resizer:focus-visible::after,
+.shell__resizer--active::after {
+  width: 2px;
+  background: var(--accent);
+}
+
+.shell__resizer:focus-visible {
+  outline: none;
 }
 
 .history__sidebar {

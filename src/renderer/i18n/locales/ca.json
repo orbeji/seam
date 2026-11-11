@@ -76,6 +76,7 @@
   },
   "history": {
     "title": "Historial de commits",
+    "resize": "Redimensiona el panell de l'historial",
     "loading": "S'està llegint l'historial de commits…",
     "empty": "Aquest repositori encara no té commits.",
     "count_one": "{{count}} commit",

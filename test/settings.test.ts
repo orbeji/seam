@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { Settings } from '../src/main/session/settings'
+import { DEFAULT_HISTORY_WIDTH, MAX_HISTORY_WIDTH, MIN_HISTORY_WIDTH } from '../src/shared/ipc'
 
 const directories: string[] = []
 
@@ -107,5 +108,26 @@ describe('Settings', () => {
 
     writeFileSync(file, JSON.stringify({ syntaxTheme: 'neon' }))
     expect(new Settings(file).read().syntaxTheme).toBe('seam')
+  })
+
+  it('opens the history panel at its default width and remembers a dragged one', () => {
+    const file = tempFile()
+    expect(new Settings(file).read().historyWidth).toBe(DEFAULT_HISTORY_WIDTH)
+
+    new Settings(file).update({ historyWidth: 420 })
+    expect(new Settings(file).read().historyWidth).toBe(420)
+  })
+
+  it('keeps a stored history width inside the panel limits', () => {
+    const tooNarrow = tempFile()
+    writeFileSync(tooNarrow, JSON.stringify({ historyWidth: 10 }))
+    const tooWide = tempFile()
+    writeFileSync(tooWide, JSON.stringify({ historyWidth: 5000 }))
+    const unusable = tempFile()
+    writeFileSync(unusable, JSON.stringify({ historyWidth: 'wide' }))
+
+    expect(new Settings(tooNarrow).read().historyWidth).toBe(MIN_HISTORY_WIDTH)
+    expect(new Settings(tooWide).read().historyWidth).toBe(MAX_HISTORY_WIDTH)
+    expect(new Settings(unusable).read().historyWidth).toBe(DEFAULT_HISTORY_WIDTH)
   })
 })

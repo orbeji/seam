@@ -2,13 +2,16 @@
 
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
-import type {
-  HighlightPreference,
-  SettingsData,
-  SettingsPatch,
-  SyntaxThemePreference,
-  ThemePreference,
-  WhitespacePreference
+import {
+  DEFAULT_HISTORY_WIDTH,
+  MAX_HISTORY_WIDTH,
+  MIN_HISTORY_WIDTH,
+  type HighlightPreference,
+  type SettingsData,
+  type SettingsPatch,
+  type SyntaxThemePreference,
+  type ThemePreference,
+  type WhitespacePreference
 } from '../../shared/ipc'
 
 /** The stored preferences, with the value a fresh install starts from. */
@@ -29,6 +32,8 @@ interface StoredSettings {
   collapse: boolean
   /** Whether commits include the `Signed-off-by` trailer by default. */
   signoff: boolean
+  /** The width of the history panel, in pixels. */
+  historyWidth: number
   /**
    * Whether the CRLF warning appears before a commit. It comes on by default,
    * like the reference client's, and a repository can have its own answer.
@@ -53,7 +58,8 @@ const DEFAULTS: StoredSettings = {
   collapse: false,
   signoff: false,
   crlfWarning: true,
-  crlfWarningRepos: {}
+  crlfWarningRepos: {},
+  historyWidth: DEFAULT_HISTORY_WIDTH
 }
 
 /** Narrows what a settings file holds to the per-repository answers in it. */
@@ -90,6 +96,12 @@ function parseSyntaxTheme(value: unknown): SyntaxThemePreference {
   return value === 'seam' || value === 'github' || value === 'vivid' ? value : DEFAULT_SYNTAX_THEME
 }
 
+/** Keeps a stored or patched panel width inside the limits the interface draws. */
+function parseHistoryWidth(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return DEFAULT_HISTORY_WIDTH
+  return Math.min(Math.max(Math.round(value), MIN_HISTORY_WIDTH), MAX_HISTORY_WIDTH)
+}
+
 /**
  * The preferences that outlive a window, kept in a small JSON file under the
  * application data folder. Every field has a default, so a missing, empty or
@@ -112,7 +124,8 @@ export class Settings {
       highlight: this.value.highlight,
       syntaxTheme: this.value.syntaxTheme,
       collapse: this.value.collapse,
-      signoff: this.value.signoff
+      signoff: this.value.signoff,
+      historyWidth: this.value.historyWidth
     }
   }
 
@@ -126,6 +139,8 @@ export class Settings {
     if (patch.syntaxTheme !== undefined) this.value.syntaxTheme = patch.syntaxTheme
     if (patch.collapse !== undefined) this.value.collapse = patch.collapse
     if (patch.signoff !== undefined) this.value.signoff = patch.signoff
+    if (patch.historyWidth !== undefined)
+      this.value.historyWidth = parseHistoryWidth(patch.historyWidth)
     this.save()
   }
 
@@ -172,6 +187,7 @@ export class Settings {
         syntaxTheme: parseSyntaxTheme(stored['syntaxTheme']),
         collapse: typeof stored['collapse'] === 'boolean' ? stored['collapse'] : DEFAULTS.collapse,
         signoff: typeof stored['signoff'] === 'boolean' ? stored['signoff'] : DEFAULTS.signoff,
+        historyWidth: parseHistoryWidth(stored['historyWidth']),
         crlfWarning:
           typeof stored['crlfWarning'] === 'boolean' ? stored['crlfWarning'] : DEFAULTS.crlfWarning,
         crlfWarningRepos: parseRepos(stored['crlfWarningRepos'])
