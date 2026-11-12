@@ -1,10 +1,10 @@
-# What Seam 0.1.0 does not do
+# What Seam 0.2.0 does not do
 
-This page records the limits of the first version so nobody expects a feature
+This page records the limits of this version so nobody expects a feature
 that is not there. It is a map, not a promise of order: the next version will
 pick from it.
 
-## Missing from the first version
+## Missing from this version
 
 - **Starting a rebase, cherry-pick, revert or stash pop.** Seam detects them
   when they are already running (for example, after a `git pull --rebase` in a
@@ -27,10 +27,10 @@ pick from it.
   download can be verified.
 - **Automatic updates.** A new version is installed by downloading and running
   the new installer.
-- **macOS, Flatpak and Snap.** 0.1.0 ships NSIS for Windows and AppImage and
+- **macOS, Flatpak and Snap.** 0.2.0 ships NSIS for Windows and AppImage and
   `.deb` for Linux.
-- **Submodules, Git LFS, worktrees and sparse checkout.** These repositories
-  can be opened, but the specialised views and commands are not implemented.
+- **Submodules, Git LFS and sparse checkout.** These repositories can be
+  opened, but the specialised views and commands are not implemented.
 - **Binary conflicts.** A binary file that conflicts can be accepted from one
   side, but the three-pane editor only edits text.
 - **Blame, file history, search and file-level checkout.** The graph shows the

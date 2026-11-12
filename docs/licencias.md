@@ -1,6 +1,6 @@
 # Dependency licences
 
-Checked on 2026-11-06 for Seam 0.1.0.
+Checked on 2026-11-12 for Seam 0.2.0.
 
 The application is MIT-licensed. Its dependency tree may only contain licences
 that allow redistribution in a proprietary or MIT project and do not impose a

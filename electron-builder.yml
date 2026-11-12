@@ -60,7 +60,7 @@ linux:
 
 deb:
   # Electron's own runtime dependencies, plus the system Git that Seam drives.
-  # Git is not bundled in 0.1.0; the .deb asks the package manager for it.
+  # Git is not bundled in 0.2.0; the .deb asks the package manager for it.
   depends:
     - git
     - libgtk-3-0

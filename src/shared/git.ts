@@ -433,6 +433,22 @@ export interface MergeOutcome {
   readonly output: string
 }
 
+/**
+ * What came of merging one worktree's changes into another branch. When the
+ * target branch needed a temporary worktree, the merge may leave changes there
+ * that the user has to finish.
+ */
+export interface MergeWorktreeOutcome {
+  readonly outcome: MergeOutcome
+  /**
+   * The folder the interface should open: the worktree that holds the target
+   * branch, or the temporary worktree kept when it left conflicts or squashed
+   * changes to finish. Null when the merge ran in a throwaway worktree and
+   * nothing is left to do.
+   */
+  readonly worktreePath: string | null
+}
+
 /** What the merge dialog reads before it starts. */
 export interface MergeState {
   /** The checked-out branch, or null when HEAD is detached. */
@@ -534,6 +550,43 @@ export interface GitFlowFinishOutcome {
   readonly tag: string | null
   /** Everything Git printed, for the popup's output panel. */
   readonly output: string
+}
+
+/** One worktree Git has registered for a repository. */
+export interface WorktreeInfo {
+  /** The absolute folder Git checks this worktree out into. */
+  readonly path: string
+  /** The commit the worktree's HEAD points at, or null before the first commit. */
+  readonly head: string | null
+  /** The checked-out branch, or null when HEAD is detached or the entry is bare. */
+  readonly branch: string | null
+  readonly detached: boolean
+  readonly bare: boolean
+  /** The reason the worktree is locked, or null when it is not. */
+  readonly locked: string | null
+  /** Why Git considers the worktree removable, or null when it is healthy. */
+  readonly prunable: string | null
+  /** Whether this is the repository's main worktree. */
+  readonly main: boolean
+}
+
+/**
+ * A worktree with what the changes screen would show for it. The summary is
+ * read in the main process, without opening the worktree as a tab, so the
+ * manager can list every worktree's pending changes at once.
+ */
+export interface WorktreeStatus extends WorktreeInfo {
+  /** The four change lists, or null when the worktree could not be read. */
+  readonly summary: ChangeSummary | null
+  /** The operation left in progress in the worktree, or null. */
+  readonly operation: GitOperation | null
+  /** Why the worktree could not be read, or null when it was. */
+  readonly error: string | null
+}
+
+/** The worktrees registered for a repository, the main one first. */
+export interface WorktreeList {
+  readonly worktrees: readonly WorktreeStatus[]
 }
 
 /** The result of accepting a side: whether the user must confirm an overwrite. */

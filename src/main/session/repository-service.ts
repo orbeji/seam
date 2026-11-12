@@ -6,6 +6,7 @@ import { revertHunks, stageHunks, stageSelection, unstageHunks } from '../../cor
 import {
   acceptConflict as acceptConflictSide,
   abortOperation as abortOperationInRepo,
+  addWorktree as addWorktreeInRepo,
   applyMerge as applyMergeResult,
   checkoutBranch as checkoutBranchInRepo,
   checkoutCommit as checkoutCommitInRepo,
@@ -26,8 +27,13 @@ import {
   GitVersionError,
   initGitFlow as initGitFlowInRepo,
   listBranches as listBranchesInRepo,
+  listWorktrees as listWorktreesInRepo,
+  lockWorktree as lockWorktreeInRepo,
   mergeBranch as mergeBranchInRepo,
+  mergeWorktree as mergeWorktreeInRepo,
   MINIMUM_GIT_VERSION,
+  moveWorktree as moveWorktreeInRepo,
+  pruneWorktrees as pruneWorktreesInRepo,
   readCommitChanges as readCommitChangesFromRepo,
   readCommitComparison as readCommitComparisonFromRepo,
   readCommitTemplate,
@@ -44,7 +50,9 @@ import {
   readRepositoryHistory as readRepositoryHistoryFromRepo,
   readStatus,
   removeIndexPaths,
+  removeWorktree as removeWorktreeInRepo,
   renameBranch as renameBranchInRepo,
+  repairWorktrees as repairWorktreesInRepo,
   resolveSimpleConflicts as resolveSimple,
   revertConflict as revertConflictResolution,
   skipOperation as skipOperationInRepo,
@@ -52,6 +60,7 @@ import {
   startGitFlow as startGitFlowInRepo,
   summarizeChanges,
   unstagePaths,
+  unlockWorktree as unlockWorktreeInRepo,
   updateForPush as updateForPushInRepo,
   fetchRemotes as fetchRemotesInRepo,
   pull as pullInRepo,
@@ -82,6 +91,7 @@ import type {
   IpcResult,
   MergeApplyRequest,
   MergeEditorModel,
+  MergeWorktreeRequest,
   RepositorySnapshot,
   StagingModel
 } from '../../shared/ipc'
@@ -93,12 +103,14 @@ import type {
   ConflictState,
   Identity,
   IdentityScope,
+  MergeWorktreeOutcome,
   OperationOutcome,
   PushOutcome,
   PushState,
   PushUpdateOutcome,
   RepositoryHistory,
-  ResolveSimpleOutcome
+  ResolveSimpleOutcome,
+  WorktreeList
 } from '../../shared/git'
 import { GitWatcher } from './git-watcher'
 
@@ -685,6 +697,119 @@ export class RepositoryService {
 
     try {
       return { ok: true, value: await listBranchesInRepo(this.runner, repo) }
+    } catch (error) {
+      return failureFrom(error)
+    }
+  }
+
+  /**
+   * Lists every worktree Git registered, with the changes each one has pending.
+   * The status of a worktree is read in place, without opening it as a tab, so
+   * the manager can show all of them at once. A worktree that cannot be read
+   * - because it is bare, prunable or its folder is gone - keeps its row with
+   * an explanation instead of hiding it.
+   */
+  async readWorktrees(repo: string): Promise<IpcResult<WorktreeList>> {
+    const opened = await this.open(repo)
+    if (!opened.ok) return opened
+
+    try {
+      const entries = await listWorktreesInRepo(this.runner, repo)
+      const worktrees = await Promise.all(
+        entries.map(async (entry) => {
+          if (entry.bare || entry.prunable !== null) {
+            return {
+              ...entry,
+              summary: null,
+              operation: null,
+              error: entry.bare ? null : entry.prunable
+            }
+          }
+
+          try {
+            const status = await readStatus(this.runner, entry.path)
+            const operation = await detectOperation(this.runner, entry.path)
+            return {
+              ...entry,
+              summary: summarizeChanges(status),
+              operation,
+              error: null
+            }
+          } catch (error) {
+            return {
+              ...entry,
+              summary: null,
+              operation: null,
+              error: error instanceof Error ? error.message : String(error)
+            }
+          }
+        })
+      )
+      return { ok: true, value: { worktrees } }
+    } catch (error) {
+      return failureFrom(error)
+    }
+  }
+
+  /** Adds a worktree on an existing branch, a new one or a detached HEAD. */
+  async addWorktree(
+    repo: string,
+    options: {
+      readonly path: string
+      readonly branch: string
+      readonly newBranch: boolean
+      readonly startPoint: string | null
+      readonly detach: boolean
+    }
+  ): Promise<IpcResult<null>> {
+    return this.write(repo, () => addWorktreeInRepo(this.runner, repo, options))
+  }
+
+  /** Removes a worktree, forcing it when the caller confirmed the loss. */
+  removeWorktree(repo: string, path: string, force: boolean): Promise<IpcResult<null>> {
+    return this.write(repo, () => removeWorktreeInRepo(this.runner, repo, path, force))
+  }
+
+  /** Moves a linked worktree to a new folder. */
+  moveWorktree(repo: string, path: string, destination: string): Promise<IpcResult<null>> {
+    return this.write(repo, () => moveWorktreeInRepo(this.runner, repo, path, destination))
+  }
+
+  /** Locks a worktree, with the optional reason Git keeps with it. */
+  lockWorktree(repo: string, path: string, reason: string | null): Promise<IpcResult<null>> {
+    return this.write(repo, () => lockWorktreeInRepo(this.runner, repo, path, reason))
+  }
+
+  /** Unlocks a worktree. */
+  unlockWorktree(repo: string, path: string): Promise<IpcResult<null>> {
+    return this.write(repo, () => unlockWorktreeInRepo(this.runner, repo, path))
+  }
+
+  /** Drops the records of worktrees whose folders no longer exist. */
+  pruneWorktrees(repo: string): Promise<IpcResult<null>> {
+    return this.write(repo, () => pruneWorktreesInRepo(this.runner, repo))
+  }
+
+  /** Repairs one moved worktree's records, or every registered one. */
+  repairWorktrees(repo: string, path: string | null): Promise<IpcResult<null>> {
+    return this.write(repo, () => repairWorktreesInRepo(this.runner, repo, path))
+  }
+
+  /** Merges one worktree's changes into a local branch. */
+  async mergeWorktree(request: MergeWorktreeRequest): Promise<IpcResult<MergeWorktreeOutcome>> {
+    const opened = await this.open(request.repo)
+    if (!opened.ok) return opened
+
+    try {
+      return {
+        ok: true,
+        value: await mergeWorktreeInRepo(this.runner, request.repo, {
+          sourcePath: request.sourcePath,
+          target: request.target,
+          strategy: request.strategy,
+          message: request.message
+        })
+      }
     } catch (error) {
       return failureFrom(error)
     }

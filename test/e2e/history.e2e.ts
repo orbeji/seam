@@ -192,4 +192,33 @@ describe('the persistent commit history', () => {
     const kept = (await panel.boundingBox())?.width ?? 0
     expect(Math.abs(kept - (before + 120))).toBeLessThan(2)
   })
+
+  it('fills the window with the graph and returns to the sidebar split', async () => {
+    const panel = page.locator('.history-panel')
+    const splitWidth = (await panel.boundingBox())?.width ?? 0
+
+    // The header button trades the split for the whole window, so the graph
+    // gets every pixel; the file sidebar and its handle step aside.
+    await page.click('[data-testid=history-expand]')
+    await expect
+      .poll(async () => (await panel.boundingBox())?.width ?? 0)
+      .toBeGreaterThan(splitWidth + 100)
+    expect(await page.locator('[data-testid=history-expand]').getAttribute('aria-pressed')).toBe(
+      'true'
+    )
+    expect(await page.locator('.sidebar').isVisible()).toBe(false)
+    expect(await page.locator('[data-testid=history-resizer]').count()).toBe(0)
+    await page.waitForSelector('[data-testid=history-commits]')
+
+    // The same button restores the split, with the width the panel had before.
+    await page.click('[data-testid=history-expand]')
+    await page.waitForSelector('.sidebar')
+    await page.waitForSelector('[data-testid=history-resizer]')
+    await expect
+      .poll(async () => Math.abs(((await panel.boundingBox())?.width ?? 0) - splitWidth))
+      .toBeLessThan(2)
+    expect(await page.locator('[data-testid=history-expand]').getAttribute('aria-pressed')).toBe(
+      'false'
+    )
+  })
 })

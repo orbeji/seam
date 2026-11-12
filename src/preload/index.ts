@@ -17,11 +17,14 @@ import type {
   PushState,
   PushUpdateOutcome,
   RepositoryHistory,
-  ResolveSimpleOutcome
+  ResolveSimpleOutcome,
+  WorktreeList,
+  MergeWorktreeOutcome
 } from '../shared/git'
 import {
   IPC_CHANNELS,
   IPC_CONTRACT_VERSION,
+  type AddWorktreeRequest,
   type BranchList,
   type CheckoutBranchRequest,
   type CheckoutCommitRequest,
@@ -43,14 +46,19 @@ import {
   type IdentityWriteRequest,
   type IndexWriteRequest,
   type IpcResult,
+  type LockWorktreeRequest,
   type MergeApplyRequest,
   type MergeEditorModel,
   type MergeEditorRequest,
   type MergeRequest,
+  type MergeWorktreeRequest,
+  type MoveWorktreeRequest,
   type PushProgress,
   type PushRequest,
   type PushUpdateRequest,
+  type RemoveWorktreeRequest,
   type RenameBranchRequest,
+  type RepairWorktreesRequest,
   type RepositorySnapshot,
   type RevertHunksRequest,
   type SeamApi,
@@ -170,6 +178,26 @@ const seamApi: SeamApi = {
     ipcRenderer.invoke(IPC_CHANNELS.readPushState, repo) as Promise<IpcResult<PushState>>,
   listBranches: (repo: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.listBranches, repo) as Promise<IpcResult<BranchList>>,
+  listWorktrees: (repo: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.listWorktrees, repo) as Promise<IpcResult<WorktreeList>>,
+  addWorktree: (request: AddWorktreeRequest) =>
+    ipcRenderer.invoke(IPC_CHANNELS.addWorktree, request) as Promise<IpcResult<null>>,
+  removeWorktree: (request: RemoveWorktreeRequest) =>
+    ipcRenderer.invoke(IPC_CHANNELS.removeWorktree, request) as Promise<IpcResult<null>>,
+  moveWorktree: (request: MoveWorktreeRequest) =>
+    ipcRenderer.invoke(IPC_CHANNELS.moveWorktree, request) as Promise<IpcResult<null>>,
+  lockWorktree: (request: LockWorktreeRequest) =>
+    ipcRenderer.invoke(IPC_CHANNELS.lockWorktree, request) as Promise<IpcResult<null>>,
+  unlockWorktree: (request: LockWorktreeRequest) =>
+    ipcRenderer.invoke(IPC_CHANNELS.unlockWorktree, request) as Promise<IpcResult<null>>,
+  pruneWorktrees: (repo: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.pruneWorktrees, repo) as Promise<IpcResult<null>>,
+  repairWorktrees: (request: RepairWorktreesRequest) =>
+    ipcRenderer.invoke(IPC_CHANNELS.repairWorktrees, request) as Promise<IpcResult<null>>,
+  mergeWorktree: (request: MergeWorktreeRequest) =>
+    ipcRenderer.invoke(IPC_CHANNELS.mergeWorktree, request) as Promise<
+      IpcResult<MergeWorktreeOutcome>
+    >,
   checkoutBranch: (request: CheckoutBranchRequest) =>
     ipcRenderer.invoke(IPC_CHANNELS.checkoutBranch, request) as Promise<IpcResult<null>>,
   createBranch: (request: CreateBranchRequest) =>

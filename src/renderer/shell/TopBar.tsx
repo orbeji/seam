@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import type { WorktreeStatus } from '../../shared/git'
 import { buildBranchTree, type BranchNode } from './branch-tree'
 
 interface TopBarProps {
@@ -25,6 +26,8 @@ interface TopBarProps {
   readonly canPull: boolean
   /** Whether the branch dialog can open for the open repository. */
   readonly canBranch: boolean
+  /** Whether the worktree manager can open for the open repository. */
+  readonly canWorktree: boolean
   /** Whether a merge can start in the open repository. */
   readonly canMerge: boolean
   /** Whether the GitFlow popup can open for the open repository. */
@@ -35,6 +38,7 @@ interface TopBarProps {
   readonly onFetch: () => void
   readonly onPull: () => void
   readonly onBranch: () => void
+  readonly onWorktrees: () => void
   readonly onMerge: () => void
   readonly onGitFlow: () => void
   readonly onSettings: () => void
@@ -51,6 +55,18 @@ interface TopBarProps {
   readonly loadingBranches: boolean
   /** Error message if branch loading failed. */
   readonly branchesError: string | null
+  /** The folder whose tab is showing, marked in the worktree list. */
+  readonly currentRepo: string | null
+  /** The worktrees Git registered for the open repository. */
+  readonly worktrees: readonly WorktreeStatus[] | null
+  /** Whether the worktree list is being read. */
+  readonly loadingWorktrees: boolean
+  /** Error message if reading the worktrees failed. */
+  readonly worktreesError: string | null
+  /** Called to read the worktree list. */
+  readonly onLoadWorktrees: () => void
+  /** Called when a worktree is selected, moving to its folder. */
+  readonly onOpenWorktree: (path: string) => void
 }
 
 /**
@@ -67,6 +83,17 @@ function displayPath(item: BranchListItem): string {
   if (item.kind !== 'remote') return item.name
   if (item.remote === '' || !item.name.startsWith(`${item.remote}/`)) return item.name
   return item.name.slice(item.remote.length + 1)
+}
+
+/** The last segment of a folder path, which names a worktree's row. */
+function folderName(path: string): string {
+  const parts = path.split(/[\\/]/).filter((part) => part !== '')
+  return parts.at(-1) ?? path
+}
+
+/** Compares two folder paths, ignoring a trailing separator. */
+function sameFolder(a: string, b: string | null): boolean {
+  return b !== null && a.replace(/[\\/]+$/, '') === b.replace(/[\\/]+$/, '')
 }
 
 function BranchRows({
@@ -183,6 +210,7 @@ export default function TopBar({
   canFetch,
   canPull,
   canBranch,
+  canWorktree,
   canMerge,
   canGitFlow,
   onRefresh,
@@ -191,6 +219,7 @@ export default function TopBar({
   onFetch,
   onPull,
   onBranch,
+  onWorktrees,
   onMerge,
   onGitFlow,
   onSettings,
@@ -198,7 +227,13 @@ export default function TopBar({
   onLoadBranches,
   branches,
   loadingBranches,
-  branchesError
+  branchesError,
+  currentRepo,
+  worktrees,
+  loadingWorktrees,
+  worktreesError,
+  onLoadWorktrees,
+  onOpenWorktree
 }: TopBarProps) {
   const { t } = useTranslation()
   // The badge only makes sense when there is something to send; zero leaves the
@@ -240,11 +275,19 @@ export default function TopBar({
     if (branches === null && !loadingBranches) {
       onLoadBranches()
     }
+    if (worktrees === null && !loadingWorktrees) {
+      onLoadWorktrees()
+    }
   }
 
   const handleBranchSelect = (branchName: string) => {
     setBranchMenuOpen(false)
     onCheckoutBranch(branchName)
+  }
+
+  const handleWorktreeSelect = (path: string) => {
+    setBranchMenuOpen(false)
+    onOpenWorktree(path)
   }
 
   const handleFold = (path: string) => {
@@ -261,6 +304,26 @@ export default function TopBar({
   const branchBadgeRemote =
     branches === null ? new Set<string>() : new Set(branches.remote.map((b) => b.remote))
   const showRemote = branchBadgeRemote.size > 1
+
+  // A branch checked out in another worktree cannot be checked out here too,
+  // so it belongs only to the worktree list that moves to it. The current
+  // worktree's own branch stays, already disabled with its badge.
+  const occupiedBranches = new Set(
+    (worktrees ?? [])
+      .filter((worktree) => worktree.branch !== null && !sameFolder(worktree.path, currentRepo))
+      .map((worktree) => worktree.branch as string)
+  )
+  const localBranches =
+    branches === null ? [] : branches.local.filter((branch) => !occupiedBranches.has(branch.name))
+  const remoteBranches =
+    branches === null
+      ? []
+      : branches.remote.filter(
+          (branch) =>
+            !occupiedBranches.has(
+              displayPath({ kind: 'remote', name: branch.name, remote: branch.remote })
+            )
+        )
 
   return (
     <header className="topbar" data-testid="topbar">
@@ -313,16 +376,16 @@ export default function TopBar({
                   {branchesError}
                 </p>
               ) : branches === null ||
-                (branches.local.length === 0 && branches.remote.length === 0) ? (
+                (localBranches.length === 0 && remoteBranches.length === 0) ? (
                 <p className="topbar__menu-title">{t('topbar.branch.none')}</p>
               ) : (
                 <>
-                  {branches.local.length > 0 && (
+                  {localBranches.length > 0 && (
                     <>
                       <p className="topbar__menu-title">{t('topbar.branch.local')}</p>
                       <BranchRows
                         nodes={buildBranchTree(
-                          branches.local.map((b) => ({
+                          localBranches.map((b) => ({
                             kind: 'local' as const,
                             name: b.name,
                             current: b.current
@@ -336,12 +399,12 @@ export default function TopBar({
                       />
                     </>
                   )}
-                  {branches.remote.length > 0 && (
+                  {remoteBranches.length > 0 && (
                     <>
                       <p className="topbar__menu-title">{t('topbar.branch.remote')}</p>
                       <BranchRows
                         nodes={buildBranchTree(
-                          branches.remote.map((b) => ({
+                          remoteBranches.map((b) => ({
                             kind: 'remote' as const,
                             name: b.name,
                             remote: b.remote
@@ -356,6 +419,42 @@ export default function TopBar({
                     </>
                   )}
                 </>
+              )}
+
+              <p className="topbar__menu-title">{t('topbar.worktree.list')}</p>
+              {loadingWorktrees ? (
+                <p className="topbar__menu-title">{t('topbar.worktree.loading')}</p>
+              ) : worktreesError !== null ? (
+                <p className="topbar__menu-title" style={{ color: 'var(--conflict)' }}>
+                  {worktreesError}
+                </p>
+              ) : worktrees === null || worktrees.length === 0 ? (
+                <p className="topbar__menu-title">{t('topbar.worktree.none')}</p>
+              ) : (
+                worktrees.map((worktree) => {
+                  const current = sameFolder(worktree.path, currentRepo)
+                  const label = worktree.branch ?? t('worktree.detached')
+                  return (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      key={worktree.path}
+                      title={`${label} — ${worktree.path}`}
+                      className={`topbar__menu-item topbar__menu-item--branch ${
+                        current ? 'topbar__menu-item--current' : ''
+                      }`}
+                      disabled={current || worktree.bare || worktree.prunable !== null}
+                      onClick={() => handleWorktreeSelect(worktree.path)}
+                    >
+                      <span className="topbar__menu-name">{folderName(worktree.path)}</span>
+                      {current ? (
+                        <span className="topbar__menu-badge">{t('topbar.worktree.current')}</span>
+                      ) : (
+                        <span className="topbar__menu-path">{label}</span>
+                      )}
+                    </button>
+                  )
+                })
               )}
             </div>
           )}
@@ -442,6 +541,31 @@ export default function TopBar({
           <path d="M4 4.6v4.8M10 6.6c0 2-3 1.6-6 3" />
         </svg>
         {t('topbar.newBranch.label')}
+      </button>
+
+      <button
+        type="button"
+        className="button topbar__worktrees"
+        data-testid="worktree-button"
+        title={t('topbar.worktree.title')}
+        disabled={!canWorktree}
+        onClick={onWorktrees}
+      >
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 14 14"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M1.5 2.5h4v3h-4zM8.5 2.5h4v3h-4zM1.5 8.5h4v3h-4zM8.5 8.5h4v3h-4z" />
+          <path d="M5.5 4h3M3.5 5.5v3M10.5 5.5v3" />
+        </svg>
+        {t('topbar.worktree.label')}
       </button>
 
       <span className="topbar__divider" aria-hidden="true" />

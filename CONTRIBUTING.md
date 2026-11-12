@@ -77,15 +77,15 @@ npm run dist:win    # NSIS installer
 ```
 
 The configuration is in `electron-builder.yml`; icons for the three targets are
-in `build/`. Git is not bundled in 0.1.0. The `.deb` declares it as a
+in `build/`. Git is not bundled in 0.2.0. The `.deb` declares it as a
 dependency, and on Windows Seam looks for it on the `PATH` and in the usual Git
 for Windows install folders.
 
 ## Releases
 
 1. Update `CHANGELOG.md` and the version in `package.json` (they must match).
-2. Commit and tag: `git tag -a v0.1.0 -m "Seam 0.1.0"`.
-3. Push the tag: `git push origin v0.1.0`.
+2. Commit and tag: `git tag -a v0.2.0 -m "Seam 0.2.0"`.
+3. Push the tag: `git push origin v0.2.0`.
 4. The release workflow builds both installers, runs the package smoke test,
    computes the SHA-256 checksums, and creates a **draft** GitHub Release.
 5. Review the draft and publish it by hand.

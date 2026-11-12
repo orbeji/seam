@@ -37,6 +37,10 @@ interface HistoryPanelProps {
   readonly onSelect: (commit: HistoryCommit | null) => void
   /** Tells the window a commit or branch was checked out, so it refreshes. */
   readonly onCheckedOut: (result: HistoryCheckout) => void
+  /** Whether the panel fills the window instead of sitting beside the sidebar. */
+  readonly expanded: boolean
+  /** Switches between the full-width graph and the sidebar split. */
+  readonly onToggleExpanded: () => void
 }
 
 /** What the checkout confirmation needs to know about the picked commit. */
@@ -360,7 +364,9 @@ export function HistoryPanel({
   view,
   selectedOid,
   onSelect,
-  onCheckedOut
+  onCheckedOut,
+  expanded,
+  onToggleExpanded
 }: HistoryPanelProps) {
   const { t, i18n } = useTranslation()
   const [checkoutPrompt, setCheckoutPrompt] = useState<CheckoutPrompt | null>(null)
@@ -506,11 +512,40 @@ export function HistoryPanel({
         <div className="history__sidebar-header">
           <div className="history__sidebar-heading">
             <span className="history__sidebar-title">{t('history.title')}</span>
-            {view.state === 'ready' && (
-              <span className="history__count" data-testid="history-count">
-                {t('history.count', { count: view.data.commits.length })}
-              </span>
-            )}
+            <div className="history__sidebar-actions">
+              {view.state === 'ready' && (
+                <span className="history__count" data-testid="history-count">
+                  {t('history.count', { count: view.data.commits.length })}
+                </span>
+              )}
+              <button
+                type="button"
+                className="icon-button history__expand"
+                data-testid="history-expand"
+                title={t(expanded ? 'history.restore' : 'history.maximize')}
+                aria-label={t(expanded ? 'history.restore' : 'history.maximize')}
+                aria-pressed={expanded}
+                onClick={onToggleExpanded}
+              >
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 12 12"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  {expanded ? (
+                    <path d="M1.5 4.5h3v-3M10.5 7.5h-3v3M4.5 4.5l-3-3M7.5 7.5l3 3" />
+                  ) : (
+                    <path d="M4.5 1.5h-3v3M7.5 10.5h3v-3M1.5 1.5l3.5 3.5M10.5 10.5L7 7" />
+                  )}
+                </svg>
+              </button>
+            </div>
           </div>
           {checkoutNotice !== null && (
             <p

@@ -30,12 +30,14 @@ import type {
   MergeStrategy,
   OperationOutcome,
   PushOutcome,
-  PushState
+  PushState,
+  WorktreeStatus
 } from '../shared/git'
 import {
   DEFAULT_HISTORY_WIDTH,
   MAX_HISTORY_WIDTH,
   MIN_HISTORY_WIDTH,
+  type AddWorktreeRequest,
   type CloneRequest,
   type CrlfChoice,
   type FileVersionSource,
@@ -69,6 +71,9 @@ import GitRequired from './shell/GitRequired'
 import RepositoryTabs from './shell/RepositoryTabs'
 import TopBar from './shell/TopBar'
 import SettingsPanel from './shell/SettingsPanel'
+import WorktreeCreateDialog from './worktree/WorktreeCreateDialog'
+import WorktreeDialog from './worktree/WorktreeDialog'
+import { sameFolder } from './worktree/paths'
 
 type View =
   | { state: 'idle' }
@@ -368,6 +373,9 @@ export default function App() {
   const [historyView, setHistoryView] = useState<HistoryView | null>(null)
   // Whether the persistent history panel is shown beside the file sidebar.
   const [historyVisible, setHistoryVisible] = useState(true)
+  // Whether the history panel fills the window instead of sharing it with the
+  // file sidebar and the diff. Its header offers the way back to the split.
+  const [historyExpanded, setHistoryExpanded] = useState(false)
   // The history panel's width. It is dragged by the handle between the panel
   // and the file sidebar, and stored so the next run opens with the same split.
   const [historyWidth, setHistoryWidth] = useState(DEFAULT_HISTORY_WIDTH)
@@ -471,6 +479,16 @@ export default function App() {
   const [branchBusy, setBranchBusy] = useState(false)
   const [branchError, setBranchError] = useState<string | null>(null)
 
+  // The worktree manager and its separate creation form: every worktree Git
+  // registered, with its pending changes, and the operations that move, lock,
+  // repair or remove one.
+  const [worktreeOpen, setWorktreeOpen] = useState(false)
+  const [worktreeCreateOpen, setWorktreeCreateOpen] = useState(false)
+  const [worktrees, setWorktrees] = useState<readonly WorktreeStatus[] | null>(null)
+  const [loadingWorktrees, setLoadingWorktrees] = useState(false)
+  const [worktreeBusy, setWorktreeBusy] = useState(false)
+  const [worktreeError, setWorktreeError] = useState<string | null>(null)
+
   // The merge dialog and what the last merge did.
   const [mergeView, setMergeView] = useState<MergeView | null>(null)
   const [mergeBusy, setMergeBusy] = useState(false)
@@ -521,6 +539,7 @@ export default function App() {
     setMergeEditor(null)
     historyRequest.current += 1
     setHistoryView(null)
+    setHistoryExpanded(false)
     setSelectedCommit(null)
     setCommitChanges(null)
     setSelectedCommitPath(null)
@@ -532,6 +551,12 @@ export default function App() {
     setBranchOpen(false)
     setBranchBusy(false)
     setBranchError(null)
+    setWorktreeOpen(false)
+    setWorktreeCreateOpen(false)
+    setWorktrees(null)
+    setLoadingWorktrees(false)
+    setWorktreeBusy(false)
+    setWorktreeError(null)
     setMergeView(null)
     setMergeBusy(false)
     setMergeError(null)
@@ -852,6 +877,214 @@ export default function App() {
     [refresh, loadBranches, loadHistory, showSyncNotice, t]
   )
 
+  /** Reads the worktree list of the open repository, returning what it read. */
+  const loadWorktrees = useCallback(async (): Promise<readonly WorktreeStatus[] | null> => {
+    const repo = repoRef.current
+    if (repo === null) return null
+    setLoadingWorktrees(true)
+    setWorktreeError(null)
+    try {
+      const result = await window.seam.listWorktrees(repo)
+      if (result.ok) {
+        setWorktrees(result.value.worktrees)
+        return result.value.worktrees
+      }
+      setWorktrees([])
+      setWorktreeError(result.message)
+      return null
+    } catch (error) {
+      setWorktrees([])
+      setWorktreeError(error instanceof Error ? error.message : String(error))
+      return null
+    } finally {
+      setLoadingWorktrees(false)
+    }
+  }, [])
+
+  /** Opens the worktree manager, reading the worktrees and the branches it offers. */
+  const openWorktrees = useCallback(async () => {
+    if (repoRef.current === null) return
+    setWorktreeOpen(true)
+    setWorktreeError(null)
+    await Promise.all([loadWorktrees(), loadBranches()])
+  }, [loadWorktrees, loadBranches])
+
+  /** Opens the new-worktree form on its own, apart from the manager. */
+  const openWorktreeCreate = useCallback(async () => {
+    if (repoRef.current === null) return
+    setWorktreeOpen(false)
+    setWorktreeCreateOpen(true)
+    setWorktreeError(null)
+    if (branches === null) await loadBranches()
+  }, [branches, loadBranches])
+
+  /** Closes the form and goes back to the worktree manager. */
+  const cancelWorktreeCreate = useCallback(() => {
+    setWorktreeCreateOpen(false)
+    setWorktreeError(null)
+    void openWorktrees()
+  }, [openWorktrees])
+
+  /** Creates a worktree, closes the manager and moves to the new folder. */
+  const createWorktree = useCallback(
+    async (request: Omit<AddWorktreeRequest, 'repo'>): Promise<boolean> => {
+      const repo = repoRef.current
+      if (repo === null) return false
+      setWorktreeBusy(true)
+      setWorktreeError(null)
+      try {
+        // Read the list before adding only if the dialog has not filled it yet,
+        // so the new entry can be told apart from the ones already there.
+        const beforeList = worktrees ?? (await loadWorktrees()) ?? []
+        const before = new Set(beforeList.map((worktree) => worktree.path))
+        const result = await window.seam.addWorktree({ repo, ...request })
+        if (!result.ok) {
+          setWorktreeError(result.message)
+          return false
+        }
+        // Find the folder Git actually created, then move to it as its own tab.
+        // A relative path is resolved against the repository, so the new entry
+        // is the one that was not in the list read before the operation.
+        const list = await loadWorktrees()
+        const created =
+          (before.size === 0 ? undefined : list?.find((worktree) => !before.has(worktree.path))) ??
+          (!request.detach && request.branch !== ''
+            ? list?.find((worktree) => worktree.branch === request.branch)
+            : undefined) ??
+          list?.find((worktree) => sameFolder(worktree.path, request.path))
+        setWorktreeOpen(false)
+        setWorktreeCreateOpen(false)
+        await open(created?.path ?? request.path)
+        showSyncNotice(
+          'ok',
+          t('worktree.created', {
+            branch: request.branch === '' ? request.path : request.branch
+          })
+        )
+        return true
+      } finally {
+        setWorktreeBusy(false)
+      }
+    },
+    [loadWorktrees, open, showSyncNotice, t, worktrees]
+  )
+
+  /** Removes a worktree, forcing it when the user confirmed the loss. */
+  const removeWorktree = useCallback(
+    async (path: string, force: boolean): Promise<boolean> => {
+      const repo = repoRef.current
+      if (repo === null) return false
+      if (sameFolder(path, repo)) {
+        const target = worktrees?.find((worktree) => sameFolder(worktree.path, path))
+        setWorktreeError(
+          t(target?.main === true ? 'worktree.removeMain' : 'worktree.removeCurrent')
+        )
+        return false
+      }
+      setWorktreeBusy(true)
+      setWorktreeError(null)
+      try {
+        const result = await window.seam.removeWorktree({ repo, path, force })
+        if (!result.ok) {
+          setWorktreeError(result.message)
+          return false
+        }
+        await Promise.all([loadWorktrees(), loadBranches()])
+        showSyncNotice('ok', t('worktree.removed', { path }))
+        return true
+      } finally {
+        setWorktreeBusy(false)
+      }
+    },
+    [loadWorktrees, loadBranches, showSyncNotice, t, worktrees]
+  )
+
+  /** Drops the records of worktrees whose folders no longer exist. */
+  const pruneWorktrees = useCallback(async (): Promise<boolean> => {
+    const repo = repoRef.current
+    if (repo === null) return false
+    setWorktreeBusy(true)
+    setWorktreeError(null)
+    try {
+      const result = await window.seam.pruneWorktrees(repo)
+      if (!result.ok) {
+        setWorktreeError(result.message)
+        return false
+      }
+      await loadWorktrees()
+      showSyncNotice('ok', t('worktree.pruned'))
+      return true
+    } finally {
+      setWorktreeBusy(false)
+    }
+  }, [loadWorktrees, showSyncNotice, t])
+
+  /** Merges one worktree's branch into a local branch the user picked. */
+  const mergeWorktree = useCallback(
+    async (
+      path: string,
+      target: string,
+      strategy: MergeStrategy,
+      removeAfter: boolean
+    ): Promise<boolean> => {
+      const repo = repoRef.current
+      if (repo === null) return false
+      setWorktreeBusy(true)
+      setWorktreeError(null)
+      try {
+        const result = await window.seam.mergeWorktree({
+          repo,
+          sourcePath: path,
+          target,
+          strategy,
+          message: ''
+        })
+        if (!result.ok) {
+          setWorktreeError(result.message)
+          return false
+        }
+
+        const { outcome, worktreePath } = result.value
+        // Deleting the source is only safe once the merge finished cleanly; a
+        // conflict still needs the commits the worktree is holding.
+        let removalError: string | null = null
+        if (removeAfter && outcome.ok) {
+          const removal = await window.seam.removeWorktree({ repo, path, force: false })
+          if (removal.ok) closeRepo(path)
+          else removalError = removal.message
+        }
+
+        // Both popups close and the tab moves to the branch that received the
+        // merge (the temporary worktree when it still holds conflicts).
+        setWorktreeOpen(false)
+        if (worktreePath !== null) await open(worktreePath)
+        await loadWorktrees()
+        if (worktreePath === null && outcome.ok) {
+          await Promise.all([refresh(), loadBranches(), loadHistory()])
+        }
+
+        if (removalError !== null) {
+          showSyncNotice('error', removalError)
+        } else if (outcome.conflicts > 0) {
+          showSyncNotice(
+            'error',
+            t('worktree.mergeConflicts', { count: outcome.conflicts, target })
+          )
+        } else if (!outcome.ok) {
+          showSyncNotice('error', t('worktree.mergeFailed', { target }))
+        } else if (strategy === 'squash') {
+          showSyncNotice('busy', t('worktree.mergeSquash', { target }))
+        } else {
+          showSyncNotice('ok', t('worktree.merged', { target }))
+        }
+        return outcome.ok
+      } finally {
+        setWorktreeBusy(false)
+      }
+    },
+    [closeRepo, loadBranches, loadHistory, loadWorktrees, open, refresh, showSyncNotice, t]
+  )
+
   /** Opens the merge dialog and reads the branches it can merge in. */
   const openMerge = useCallback(async () => {
     const repo = repoRef.current
@@ -1104,9 +1337,21 @@ export default function App() {
 
   /** Shows or hides the persistent history panel, rereading it when shown. */
   const toggleHistory = useCallback(() => {
-    if (!historyVisible) void loadHistory()
-    setHistoryVisible((visible) => !visible)
+    if (!historyVisible) {
+      void loadHistory()
+      setHistoryVisible(true)
+      return
+    }
+    // Hiding the panel also leaves the full-width view, so showing it again
+    // returns to the split the user had.
+    setHistoryExpanded(false)
+    setHistoryVisible(false)
   }, [historyVisible, loadHistory])
+
+  /** Switches the history panel between the sidebar split and the full window. */
+  const toggleHistoryExpanded = useCallback(() => {
+    setHistoryExpanded((expanded) => !expanded)
+  }, [])
 
   /** Applies a panel width, keeping it inside what the current window can show. */
   const applyHistoryWidth = useCallback((width: number) => {
@@ -2180,11 +2425,13 @@ export default function App() {
         canFetch={currentRepo !== null && operation === null}
         canPull={currentRepo !== null && operation === null && branchStatus?.upstream != null}
         canBranch={currentRepo !== null && operation === null}
+        canWorktree={currentRepo !== null}
         canMerge={currentRepo !== null && operation === null && branchStatus?.head != null}
         canGitFlow={currentRepo !== null && operation === null}
         onFetch={() => void fetchRemotes()}
         onPull={() => void pullFromUpstream()}
         onBranch={() => void openBranch()}
+        onWorktrees={() => void openWorktrees()}
         onMerge={() => void openMerge()}
         onGitFlow={() => void openGitFlow()}
         onRefresh={() => void refresh()}
@@ -2197,48 +2444,60 @@ export default function App() {
         branches={branches}
         loadingBranches={loadingBranches}
         branchesError={branchesError}
+        currentRepo={currentRepo}
+        worktrees={worktrees}
+        loadingWorktrees={loadingWorktrees}
+        worktreesError={worktreeError}
+        onLoadWorktrees={() => void loadWorktrees()}
+        onOpenWorktree={(path) => void open(path)}
       />
 
       <div
-        className={historyVisible && currentRepo !== null ? 'shell' : 'shell shell--no-history'}
-        style={
+        className={
           historyVisible && currentRepo !== null
+            ? historyExpanded
+              ? 'shell shell--history-expanded'
+              : 'shell'
+            : 'shell shell--no-history'
+        }
+        style={
+          historyVisible && currentRepo !== null && !historyExpanded
             ? ({ '--history-width': `${historyWidth}px` } as CSSProperties)
             : undefined
         }
       >
         {historyVisible && currentRepo !== null && (
-          <>
-            <aside className="history-panel" aria-label={t('history.title')}>
-              <HistoryPanel
-                repo={currentRepo}
-                view={historyView ?? { state: 'loading' }}
-                selectedOid={selectedCommit?.oid ?? null}
-                onSelect={selectCommit}
-                onCheckedOut={(result) => void historyCheckedOut(result)}
-              />
-            </aside>
-            <div
-              className={
-                resizingHistory ? 'shell__resizer shell__resizer--active' : 'shell__resizer'
-              }
-              role="separator"
-              aria-orientation="vertical"
-              aria-label={t('history.resize')}
-              aria-valuemin={MIN_HISTORY_WIDTH}
-              aria-valuemax={MAX_HISTORY_WIDTH}
-              aria-valuenow={historyWidth}
-              title={t('history.resize')}
-              tabIndex={0}
-              data-testid="history-resizer"
-              onPointerDown={startHistoryResize}
-              onPointerMove={moveHistoryResize}
-              onPointerUp={endHistoryResize}
-              onPointerCancel={endHistoryResize}
-              onDoubleClick={resetHistoryWidth}
-              onKeyDown={resizeHistoryWithKeyboard}
+          <aside className="history-panel" aria-label={t('history.title')}>
+            <HistoryPanel
+              repo={currentRepo}
+              view={historyView ?? { state: 'loading' }}
+              selectedOid={selectedCommit?.oid ?? null}
+              onSelect={selectCommit}
+              onCheckedOut={(result) => void historyCheckedOut(result)}
+              expanded={historyExpanded}
+              onToggleExpanded={toggleHistoryExpanded}
             />
-          </>
+          </aside>
+        )}
+        {historyVisible && currentRepo !== null && !historyExpanded && (
+          <div
+            className={resizingHistory ? 'shell__resizer shell__resizer--active' : 'shell__resizer'}
+            role="separator"
+            aria-orientation="vertical"
+            aria-label={t('history.resize')}
+            aria-valuemin={MIN_HISTORY_WIDTH}
+            aria-valuemax={MAX_HISTORY_WIDTH}
+            aria-valuenow={historyWidth}
+            title={t('history.resize')}
+            tabIndex={0}
+            data-testid="history-resizer"
+            onPointerDown={startHistoryResize}
+            onPointerMove={moveHistoryResize}
+            onPointerUp={endHistoryResize}
+            onPointerCancel={endHistoryResize}
+            onDoubleClick={resetHistoryWidth}
+            onKeyDown={resizeHistoryWithKeyboard}
+          />
         )}
 
         <aside
@@ -2459,6 +2718,41 @@ export default function App() {
             setBranchOpen(false)
             setBranchError(null)
           }}
+        />
+      )}
+
+      {worktreeOpen && (
+        <WorktreeDialog
+          worktrees={worktrees}
+          branches={branches?.local.map((branch) => branch.name) ?? []}
+          currentRepo={currentRepo ?? ''}
+          loading={loadingWorktrees}
+          busy={worktreeBusy}
+          error={worktreeError}
+          onCreateWorktree={() => void openWorktreeCreate()}
+          onMergeWorktree={mergeWorktree}
+          onRemove={removeWorktree}
+          onPrune={pruneWorktrees}
+          onOpen={(path) => {
+            setWorktreeOpen(false)
+            void open(path)
+          }}
+          onClose={() => {
+            if (worktreeBusy) return
+            setWorktreeOpen(false)
+            setWorktreeError(null)
+          }}
+        />
+      )}
+
+      {worktreeCreateOpen && (
+        <WorktreeCreateDialog
+          branches={branches?.local.map((branch) => branch.name) ?? []}
+          currentRepo={currentRepo ?? ''}
+          busy={worktreeBusy}
+          error={worktreeError}
+          onCreate={createWorktree}
+          onCancel={cancelWorktreeCreate}
         />
       )}
 

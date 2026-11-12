@@ -19,6 +19,7 @@ import type {
   MergeOutcome,
   MergeState,
   MergeStrategy,
+  MergeWorktreeOutcome,
   OperationOutcome,
   PushOutcome,
   PushState,
@@ -26,7 +27,8 @@ import type {
   PushUpdateOutcome,
   RepoStatus,
   RepositoryHistory,
-  ResolveSimpleOutcome
+  ResolveSimpleOutcome,
+  WorktreeList
 } from './git'
 
 /**
@@ -34,7 +36,7 @@ import type {
  * interface. Bump it whenever a message shape changes so the three layers can
  * detect a mismatch instead of failing silently.
  */
-export const IPC_CONTRACT_VERSION = 32
+export const IPC_CONTRACT_VERSION = 34
 
 /** Channel names shared by the main process and the preload bridge. */
 export const IPC_CHANNELS = {
@@ -124,7 +126,25 @@ export const IPC_CHANNELS = {
   /** Refreshes the refs of every configured remote (a `git fetch --all`). */
   fetchRemotes: 'sync:fetch',
   /** Fetches and integrates the current branch's upstream (a `git pull`). */
-  pullUpstream: 'sync:pull'
+  pullUpstream: 'sync:pull',
+  /** Lists every worktree Git registered for a repository, with its changes. */
+  listWorktrees: 'worktree:list',
+  /** Creates a worktree, on an existing branch, a new one or a detached HEAD. */
+  addWorktree: 'worktree:add',
+  /** Removes a worktree, forcing it when the caller confirmed. */
+  removeWorktree: 'worktree:remove',
+  /** Moves a linked worktree to another folder. */
+  moveWorktree: 'worktree:move',
+  /** Locks a worktree, optionally with a reason. */
+  lockWorktree: 'worktree:lock',
+  /** Unlocks a worktree. */
+  unlockWorktree: 'worktree:unlock',
+  /** Drops the records of worktrees whose folders are gone. */
+  pruneWorktrees: 'worktree:prune',
+  /** Repairs the records of one moved worktree, or of all of them. */
+  repairWorktrees: 'worktree:repair',
+  /** Merges one worktree's changes into a local branch. */
+  mergeWorktree: 'worktree:merge'
 } as const
 
 /** Why a call failed, so the interface can show a translated message. */
@@ -555,6 +575,63 @@ export interface DeleteBranchRequest {
   readonly force: boolean
 }
 
+/** Creates a worktree beside the repository. */
+export interface AddWorktreeRequest {
+  readonly repo: string
+  /** The folder the new worktree is checked out into. */
+  readonly path: string
+  /** The branch to check out, or the name of the new one. */
+  readonly branch: string
+  /** Whether `branch` is a new branch (`-b`) instead of an existing one. */
+  readonly newBranch: boolean
+  /** The branch, tag or commit a new branch starts from; null uses HEAD. */
+  readonly startPoint: string | null
+  /** Whether the worktree is left with a detached HEAD. */
+  readonly detach: boolean
+}
+
+/** Removes a worktree, forcing it when its changes may be lost. */
+export interface RemoveWorktreeRequest {
+  readonly repo: string
+  readonly path: string
+  readonly force: boolean
+}
+
+/** Moves a linked worktree to a new folder. */
+export interface MoveWorktreeRequest {
+  readonly repo: string
+  readonly path: string
+  /** The full path the worktree is moved to. */
+  readonly destination: string
+}
+
+/** Locks or unlocks one worktree. */
+export interface LockWorktreeRequest {
+  readonly repo: string
+  readonly path: string
+  /** The reason Git keeps with the lock; null or empty for none. */
+  readonly reason: string | null
+}
+
+/** Repairs one worktree, or every registered one when `path` is null. */
+export interface RepairWorktreesRequest {
+  readonly repo: string
+  readonly path: string | null
+}
+
+/** Merges one worktree's branch or commit into a local branch. */
+export interface MergeWorktreeRequest {
+  /** The repository whose worktrees are inspected and where the merge runs. */
+  readonly repo: string
+  /** The worktree whose changes are merged. */
+  readonly sourcePath: string
+  /** The local branch that receives the merge. */
+  readonly target: string
+  readonly strategy: MergeStrategy
+  /** The merge commit's message for `merge-commit`; empty uses Git's default. */
+  readonly message: string
+}
+
 /** Starts a merge into the checked-out branch. */
 export interface MergeRequest {
   readonly repo: string
@@ -777,6 +854,30 @@ export interface SeamApi {
    * Lists local and remote branches; never throws.
    */
   listBranches(repo: string): Promise<IpcResult<BranchList>>
+  /**
+   * Lists every worktree Git registered, the main one first, with the changes
+   * each one has pending; never throws.
+   */
+  listWorktrees(repo: string): Promise<IpcResult<WorktreeList>>
+  /** Creates a worktree on an existing branch, a new one or a detached HEAD; never throws. */
+  addWorktree(request: AddWorktreeRequest): Promise<IpcResult<null>>
+  /** Removes a worktree, forcing it when the caller confirmed; never throws. */
+  removeWorktree(request: RemoveWorktreeRequest): Promise<IpcResult<null>>
+  /** Moves a linked worktree to another folder; never throws. */
+  moveWorktree(request: MoveWorktreeRequest): Promise<IpcResult<null>>
+  /** Locks a worktree, optionally with a reason; never throws. */
+  lockWorktree(request: LockWorktreeRequest): Promise<IpcResult<null>>
+  /** Unlocks a worktree; never throws. */
+  unlockWorktree(request: LockWorktreeRequest): Promise<IpcResult<null>>
+  /** Drops the records of worktrees whose folders no longer exist; never throws. */
+  pruneWorktrees(repo: string): Promise<IpcResult<null>>
+  /** Repairs one moved worktree's records, or every registered one; never throws. */
+  repairWorktrees(request: RepairWorktreesRequest): Promise<IpcResult<null>>
+  /**
+   * Merges one worktree's branch or commit into a local branch, checking out a
+   * temporary worktree when no worktree has that branch; never throws.
+   */
+  mergeWorktree(request: MergeWorktreeRequest): Promise<IpcResult<MergeWorktreeOutcome>>
   /**
    * Checks out a branch (local or remote). For remote branches, fetches first
    * and creates a local tracking branch; never throws.

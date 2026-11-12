@@ -4,6 +4,28 @@ All notable changes to Seam are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-11-12
+
+### Added
+
+- Worktrees: a manager that lists every worktree with its pending changes and
+  opens one as its own tab. A worktree can be created on an existing branch, a
+  new branch or a detached HEAD, and moved, locked, unlocked, repaired, pruned
+  or removed.
+- Merging one worktree's branch into another branch from the worktree manager,
+  with the option to remove the source worktree once the merge finishes.
+- The branch menu lists the registered worktrees and hides branches checked out
+  in another worktree, so a branch is never checked out twice.
+- The commit history can fill the window from a button in its header. The same
+  button returns to the split with the file sidebar and the diff.
+
+### Notes
+
+- The 0.2.0 Windows installer is unsigned, so SmartScreen shows an unknown
+  publisher warning. Verify the download with the published SHA-256 checksum.
+- Git is still not bundled. Seam uses the Git installed on the machine; the
+  `.deb` package declares `git` as a dependency.
+
 ## [0.1.0] - 2026-11-06
 
 The first public version. Seam is a desktop Git client for Windows and Linux
@@ -57,4 +79,5 @@ attributes and configuration behave as they do in a terminal.
 - Automatic updates, macOS, Flatpak and Snap are not part of this version. See
   [docs/limitaciones.md](docs/limitaciones.md).
 
+[0.2.0]: https://github.com/orbeji/seam/releases/tag/v0.2.0
 [0.1.0]: https://github.com/orbeji/seam/releases/tag/v0.1.0

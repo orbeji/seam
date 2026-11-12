@@ -10,6 +10,7 @@ import {
   type WebContents
 } from 'electron'
 import type {
+  AddWorktreeRequest,
   CheckoutBranchRequest,
   CheckoutCommitRequest,
   CloneRequest,
@@ -28,11 +29,16 @@ import type {
   HunkWriteRequest,
   IdentityWriteRequest,
   IndexWriteRequest,
+  LockWorktreeRequest,
   MergeApplyRequest,
   MergeRequest,
+  MergeWorktreeRequest,
+  MoveWorktreeRequest,
   PushRequest,
   PushUpdateRequest,
+  RemoveWorktreeRequest,
   RenameBranchRequest,
+  RepairWorktreesRequest,
   RevertHunksRequest,
   SettingsPatch,
   StagePathsRequest
@@ -281,6 +287,82 @@ function parseMergeRequest(value: unknown): MergeRequest | null {
   return { repo, source, strategy: strategy as MergeStrategy, message }
 }
 
+/** Narrows an IPC payload to a repository and the worktree it acts on. */
+function parseWorktreeTarget(value: unknown): { repo: string; path: string } | null {
+  if (typeof value !== 'object' || value === null) return null
+  const { repo, path } = value as Record<string, unknown>
+  if (typeof repo !== 'string' || typeof path !== 'string') return null
+  if (repo === '' || path === '') return null
+  return { repo, path }
+}
+
+/** Narrows an IPC payload to adding a worktree. */
+function parseAddWorktree(value: unknown): AddWorktreeRequest | null {
+  if (typeof value !== 'object' || value === null) return null
+  const { repo, path, branch, newBranch, startPoint, detach } = value as Record<string, unknown>
+  if (typeof repo !== 'string' || typeof path !== 'string' || typeof branch !== 'string') {
+    return null
+  }
+  if (repo === '' || path === '') return null
+  if (typeof newBranch !== 'boolean' || typeof detach !== 'boolean') return null
+  if (startPoint !== null && typeof startPoint !== 'string') return null
+  return { repo, path, branch, newBranch, startPoint, detach }
+}
+
+/** Narrows an IPC payload to removing a worktree. */
+function parseRemoveWorktree(value: unknown): RemoveWorktreeRequest | null {
+  const target = parseWorktreeTarget(value)
+  if (target === null) return null
+  const { force } = value as Record<string, unknown>
+  if (typeof force !== 'boolean') return null
+  return { ...target, force }
+}
+
+/** Narrows an IPC payload to moving a worktree. */
+function parseMoveWorktree(value: unknown): MoveWorktreeRequest | null {
+  const target = parseWorktreeTarget(value)
+  if (target === null) return null
+  const { destination } = value as Record<string, unknown>
+  if (typeof destination !== 'string' || destination === '') return null
+  return { ...target, destination }
+}
+
+/** Narrows an IPC payload to locking or unlocking a worktree. */
+function parseLockWorktree(value: unknown): LockWorktreeRequest | null {
+  const target = parseWorktreeTarget(value)
+  if (target === null) return null
+  const { reason } = value as Record<string, unknown>
+  if (reason !== null && typeof reason !== 'string') return null
+  return { ...target, reason }
+}
+
+/** Narrows an IPC payload to repairing one worktree or every one. */
+function parseRepairWorktrees(value: unknown): RepairWorktreesRequest | null {
+  if (typeof value !== 'object' || value === null) return null
+  const { repo, path } = value as Record<string, unknown>
+  if (typeof repo !== 'string' || repo === '') return null
+  if (path !== null && typeof path !== 'string') return null
+  return { repo, path }
+}
+
+/** Narrows an IPC payload to merging one worktree into a local branch. */
+function parseMergeWorktree(value: unknown): MergeWorktreeRequest | null {
+  if (typeof value !== 'object' || value === null) return null
+  const { repo, sourcePath, target, strategy, message } = value as Record<string, unknown>
+  if (
+    typeof repo !== 'string' ||
+    typeof sourcePath !== 'string' ||
+    typeof target !== 'string' ||
+    typeof message !== 'string'
+  ) {
+    return null
+  }
+  if (repo === '' || sourcePath === '' || target === '') return null
+  if (strategy !== 'merge-commit' && strategy !== 'fast-forward' && strategy !== 'squash') {
+    return null
+  }
+  return { repo, sourcePath, target, strategy: strategy as MergeStrategy, message }
+}
 /** Narrows an IPC payload to a GitFlow initialization request. */
 function parseGitFlowInit(value: unknown): GitFlowInitRequest | null {
   if (typeof value !== 'object' || value === null) return null
@@ -895,6 +977,76 @@ export function registerRepositoryHandlers(
       return { ok: false, code: 'unknown', message: 'Invalid branch deletion request' }
     }
     return service.deleteBranch(parsed.repo, parsed.name, parsed.force)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.listWorktrees, (_event, repo: unknown) => {
+    if (typeof repo !== 'string') {
+      return { ok: false, code: 'unknown', message: 'Invalid worktree list request' }
+    }
+    return service.readWorktrees(repo)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.addWorktree, (_event, request: unknown) => {
+    const parsed = parseAddWorktree(request)
+    if (parsed === null) {
+      return { ok: false, code: 'unknown', message: 'Invalid worktree creation request' }
+    }
+    return service.addWorktree(parsed.repo, parsed)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.removeWorktree, (_event, request: unknown) => {
+    const parsed = parseRemoveWorktree(request)
+    if (parsed === null) {
+      return { ok: false, code: 'unknown', message: 'Invalid worktree removal request' }
+    }
+    return service.removeWorktree(parsed.repo, parsed.path, parsed.force)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.moveWorktree, (_event, request: unknown) => {
+    const parsed = parseMoveWorktree(request)
+    if (parsed === null) {
+      return { ok: false, code: 'unknown', message: 'Invalid worktree move request' }
+    }
+    return service.moveWorktree(parsed.repo, parsed.path, parsed.destination)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.lockWorktree, (_event, request: unknown) => {
+    const parsed = parseLockWorktree(request)
+    if (parsed === null) {
+      return { ok: false, code: 'unknown', message: 'Invalid worktree lock request' }
+    }
+    return service.lockWorktree(parsed.repo, parsed.path, parsed.reason)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.unlockWorktree, (_event, request: unknown) => {
+    const parsed = parseLockWorktree(request)
+    if (parsed === null) {
+      return { ok: false, code: 'unknown', message: 'Invalid worktree unlock request' }
+    }
+    return service.unlockWorktree(parsed.repo, parsed.path)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.pruneWorktrees, (_event, repo: unknown) => {
+    if (typeof repo !== 'string') {
+      return { ok: false, code: 'unknown', message: 'Invalid worktree prune request' }
+    }
+    return service.pruneWorktrees(repo)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.repairWorktrees, (_event, request: unknown) => {
+    const parsed = parseRepairWorktrees(request)
+    if (parsed === null) {
+      return { ok: false, code: 'unknown', message: 'Invalid worktree repair request' }
+    }
+    return service.repairWorktrees(parsed.repo, parsed.path)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.mergeWorktree, (_event, request: unknown) => {
+    const parsed = parseMergeWorktree(request)
+    if (parsed === null) {
+      return { ok: false, code: 'unknown', message: 'Invalid worktree merge request' }
+    }
+    return service.mergeWorktree(parsed)
   })
 
   ipcMain.handle(IPC_CHANNELS.readMergeState, (_event, repo: unknown) => {

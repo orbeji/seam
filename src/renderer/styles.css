@@ -980,6 +980,17 @@ textarea {
   grid-template-columns: 400px minmax(0, 1fr);
 }
 
+/* The full-width graph: the file sidebar and the diff step aside, and the
+   history panel's own header offers the way back to the split. */
+.shell--history-expanded {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.shell--history-expanded > .sidebar,
+.shell--history-expanded > .workarea {
+  display: none;
+}
+
 /* The persistent commit graph. It is a column of its own so browsing history
    never hides the working tree's changes. */
 .history-panel {
@@ -1048,6 +1059,19 @@ textarea {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+}
+
+.history__sidebar-actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.history__expand {
+  width: 22px;
+  height: 22px;
+  margin-right: -4px;
 }
 
 .history__sidebar-title {
@@ -4978,6 +5002,246 @@ textarea {
 .branch__danger {
   color: var(--conflict);
   border-color: color-mix(in srgb, var(--conflict) 45%, var(--border));
+}
+
+/* The worktree manager: a card per registered worktree, each listing that
+   worktree's pending changes and its own actions. Creation lives in its own
+   dialog. */
+.worktree__panel {
+  width: min(760px, calc(100vw - 48px));
+  max-height: min(760px, calc(100vh - 64px));
+  overflow-y: auto;
+}
+
+.worktree__new {
+  justify-content: flex-start;
+}
+
+.worktree__create {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.worktree__options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  padding: 2px 0;
+}
+
+.worktree__list-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.worktree__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 380px;
+  overflow-y: auto;
+}
+
+.worktree__card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--background);
+}
+
+.worktree__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.worktree__identity {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.worktree__branch {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.worktree__head-id {
+  flex: none;
+  color: var(--text-dim);
+  font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+}
+
+.worktree__badge {
+  flex: none;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
+  font-size: 10px;
+}
+
+.worktree__badge--locked {
+  background: color-mix(in srgb, var(--warning, #d9a441) 18%, transparent);
+  color: var(--warning, #d9a441);
+}
+
+.worktree__badge--warn {
+  background: color-mix(in srgb, var(--conflict) 16%, transparent);
+  color: var(--conflict);
+}
+
+.worktree__path {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+  font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+}
+
+.worktree__note {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.worktree__note--error {
+  color: var(--conflict);
+}
+
+.worktree__note--warn {
+  color: var(--warning, #d9a441);
+}
+
+.worktree__counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.worktree__conflict {
+  color: var(--conflict);
+}
+
+.worktree__clean {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.worktree__files {
+  list-style: none;
+  margin: 0;
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 150px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.worktree__files li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 11px;
+}
+
+.worktree__file-badge {
+  flex: none;
+  width: 20px;
+  text-align: center;
+  color: var(--text-dim);
+  font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.worktree__file-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.worktree__more {
+  color: var(--text-dim);
+}
+
+.worktree__actions,
+.worktree__form-actions,
+.worktree__maintenance {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.worktree__danger {
+  color: var(--conflict);
+  border-color: color-mix(in srgb, var(--conflict) 45%, var(--border));
+}
+
+.worktree__form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+
+.worktree__form--remove {
+  align-items: stretch;
+}
+
+.worktree__merge-panel {
+  width: min(520px, calc(100vw - 48px));
+  max-height: min(760px, calc(100vh - 64px));
+  overflow-y: auto;
+}
+
+.worktree__form--merge {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.worktree__remove-after {
+  margin-top: 6px;
+  cursor: pointer;
+}
+
+.worktree__maintenance {
+  margin-top: 2px;
 }
 
 /* A quiet note inside a dialog, for a blocked or pending state. */

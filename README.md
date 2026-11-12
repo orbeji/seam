@@ -25,11 +25,11 @@ expose the regions the merge editor needs.
 
 ### Windows
 
-Download `Seam-0.1.0-windows-setup.exe` from the
+Download `Seam-0.2.0-windows-setup.exe` from the
 [latest release](https://github.com/orbeji/seam/releases/latest) and run it. The
 installer is per-user and does not need administrator rights.
 
-The 0.1.0 installer is **not code-signed**, so Windows SmartScreen shows an
+The 0.2.0 installer is **not code-signed**, so Windows SmartScreen shows an
 unknown publisher warning. Choose **More info → Run anyway** only if the
 SHA-256 of the download matches the `SHA256SUMS.txt` published with the release.
 
@@ -40,11 +40,11 @@ Download the `.deb` or the `.AppImage` from the
 
 ```bash
 # Debian, Ubuntu and derivatives. Git is installed as a dependency.
-sudo apt install ./Seam-0.1.0-linux-amd64.deb
+sudo apt install ./Seam-0.2.0-linux-amd64.deb
 
 # AppImage: make it executable and run it. It may need FUSE 2.
-chmod +x Seam-0.1.0-linux-x86_64.AppImage
-./Seam-0.1.0-linux-x86_64.AppImage
+chmod +x Seam-0.2.0-linux-x86_64.AppImage
+./Seam-0.2.0-linux-x86_64.AppImage
 ```
 
 If the AppImage refuses to start because FUSE is missing, install `libfuse2`
@@ -59,7 +59,7 @@ Ubuntu.
   `SEAM_GIT_PATH` to use a specific executable, such as a portable copy.
 - A 64-bit Windows 10/11 or a 64-bit Linux distribution with GTK 3.
 
-Seam does not bundle Git in 0.1.0. See [What Seam 0.1.0 does not do](docs/limitaciones.md)
+Seam does not bundle Git in 0.2.0. See [What Seam 0.2.0 does not do](docs/limitaciones.md)
 for this and the other limits of the version.
 
 ## Build from source
@@ -134,11 +134,20 @@ The top bar groups the branch actions before the remote ones:
   any other branch it starts a new one. A feature is merged into develop; a
   release or hotfix is merged into master, tagged, merged back into develop and
   deleted.
+- **Worktrees** lists every worktree with its pending changes and opens one as
+  a tab. It creates a worktree on an existing branch, a new branch or a detached
+  HEAD, moves, locks, unlocks, repairs, prunes and removes them, and merges one
+  worktree's branch into another branch. Branches checked out in another
+  worktree are hidden from the branch menu.
 
 The GitFlow configuration lives in the repository's local Git config, so a
 terminal clone keeps working with it. If a finish stops on a conflict, the
 remaining steps are stored in `.git/seam/gitflow-finish.json`; resolving the
 merge and committing resumes the finish from the popup or on its own.
+
+The commit graph stays beside the file sidebar. Selecting a commit shows its
+changed files and their diff; a button in the graph's header makes it fill the
+window, and the same button returns to the split.
 
 ## Layout
 
@@ -163,7 +172,7 @@ The import rules between `core`, `main` and `renderer` are enforced by ESLint.
 ## Releases
 
 CI runs on every pull request and every push to `main`. Pushing a tag that
-matches the version in `package.json` (for example `v0.1.0`) builds the three
+matches the version in `package.json` (for example `v0.2.0`) builds the three
 installers, runs the end-to-end and packaged smoke tests, computes the SHA-256
 checksums and creates a **draft** GitHub Release. A person reviews and
 publishes it. The notes come from [CHANGELOG.md](CHANGELOG.md).

@@ -1,6 +1,6 @@
 {
   "name": "seam",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A desktop Git client with a staging-area commit flow, diff viewer and three-pane conflict resolver.",
   "author": {
     "name": "Ender",
