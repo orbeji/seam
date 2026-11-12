@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -22,6 +22,16 @@ import { createRepository, type SampleRepository } from './fixtures/repository'
 const runner = new GitRunner()
 const repositories: SampleRepository[] = []
 const folders: string[] = []
+
+/** The folder path Git and the caller can both agree on on every platform. */
+function canonical(path: string): string {
+  const absolute = resolve(path)
+  try {
+    return realpathSync.native(absolute)
+  } catch {
+    return absolute
+  }
+}
 
 async function repository(): Promise<SampleRepository> {
   const repo = await createRepository()
@@ -58,7 +68,10 @@ describe('worktree operations', () => {
     })
 
     const worktrees = await listWorktrees(runner, repo.path)
-    expect(worktrees.map((worktree) => worktree.path)).toEqual([repo.path, linked])
+    expect(worktrees.map((worktree) => canonical(worktree.path))).toEqual([
+      canonical(repo.path),
+      canonical(linked)
+    ])
     expect(worktrees[0]?.main).toBe(true)
     expect(worktrees[1]).toMatchObject({ branch: 'feature/x', main: false })
 
@@ -80,11 +93,13 @@ describe('worktree operations', () => {
 
     await lockWorktree(runner, repo.path, linked, 'external drive')
     let worktrees = await listWorktrees(runner, repo.path)
-    expect(worktrees.find((worktree) => worktree.path === linked)?.locked).toBe('external drive')
+    expect(worktrees.find((worktree) => worktree.branch === 'feature/x')?.locked).toBe(
+      'external drive'
+    )
 
     await unlockWorktree(runner, repo.path, linked)
     worktrees = await listWorktrees(runner, repo.path)
-    expect(worktrees.find((worktree) => worktree.path === linked)?.locked).toBeNull()
+    expect(worktrees.find((worktree) => worktree.branch === 'feature/x')?.locked).toBeNull()
   })
 
   it('moves and removes a linked worktree', async () => {
@@ -101,15 +116,14 @@ describe('worktree operations', () => {
     })
 
     await moveWorktree(runner, repo.path, linked, moved)
-    expect((await listWorktrees(runner, repo.path)).map((worktree) => worktree.path)).toEqual([
-      repo.path,
-      moved
-    ])
+    expect(
+      (await listWorktrees(runner, repo.path)).map((worktree) => canonical(worktree.path))
+    ).toEqual([canonical(repo.path), canonical(moved)])
 
     await removeWorktree(runner, repo.path, moved)
-    expect((await listWorktrees(runner, repo.path)).map((worktree) => worktree.path)).toEqual([
-      repo.path
-    ])
+    expect(
+      (await listWorktrees(runner, repo.path)).map((worktree) => canonical(worktree.path))
+    ).toEqual([canonical(repo.path)])
   })
 
   it('prunes the record of a worktree whose folder was deleted', async () => {
@@ -126,12 +140,12 @@ describe('worktree operations', () => {
     rmSync(linked, { recursive: true, force: true })
 
     const before = await listWorktrees(runner, repo.path)
-    expect(before.find((worktree) => worktree.path === linked)?.prunable).not.toBeNull()
+    expect(before.find((worktree) => worktree.branch === 'feature/x')?.prunable).not.toBeNull()
 
     await pruneWorktrees(runner, repo.path)
-    expect((await listWorktrees(runner, repo.path)).map((worktree) => worktree.path)).toEqual([
-      repo.path
-    ])
+    expect(
+      (await listWorktrees(runner, repo.path)).map((worktree) => canonical(worktree.path))
+    ).toEqual([canonical(repo.path)])
   })
 
   it('refuses to reuse a branch that is already checked out', async () => {
@@ -147,9 +161,9 @@ describe('worktree operations', () => {
         detach: false
       })
     ).rejects.toThrow()
-    expect((await listWorktrees(runner, repo.path)).map((worktree) => worktree.path)).toEqual([
-      repo.path
-    ])
+    expect(
+      (await listWorktrees(runner, repo.path)).map((worktree) => canonical(worktree.path))
+    ).toEqual([canonical(repo.path)])
   })
 })
 
@@ -183,7 +197,7 @@ describe('merging a worktree', () => {
 
     expect(result.outcome).toMatchObject({ ok: true, conflicts: 0, operation: null })
     // The interface opens the worktree that holds the target branch.
-    expect(result.worktreePath).toBe(resolve(repo.path))
+    expect(canonical(result.worktreePath ?? '')).toBe(canonical(repo.path))
     expect(repo.read('file.txt')).toBe('feature\n')
   })
 
@@ -207,7 +221,7 @@ describe('merging a worktree', () => {
     })
 
     expect(result.outcome).toMatchObject({ ok: true, conflicts: 0 })
-    expect(result.worktreePath).toBe(resolve(develop))
+    expect(canonical(result.worktreePath ?? '')).toBe(canonical(develop))
     expect(readFileSync(join(develop, 'file.txt'), 'utf8')).toBe('feature\n')
   })
 
@@ -227,10 +241,9 @@ describe('merging a worktree', () => {
     expect(result.worktreePath).toBeNull()
     expect(await repo.git(['show', 'release:file.txt'])).toBe('feature\n')
     // The throwaway worktree used for the merge is gone again.
-    expect((await listWorktrees(runner, repo.path)).map((worktree) => worktree.path)).toEqual([
-      repo.path,
-      linked
-    ])
+    expect(
+      (await listWorktrees(runner, repo.path)).map((worktree) => canonical(worktree.path))
+    ).toEqual([canonical(repo.path), canonical(linked)])
   })
 
   it('leaves the temporary worktree when a squash needs a commit', async () => {
@@ -248,9 +261,9 @@ describe('merging a worktree', () => {
     expect(result.outcome.ok).toBe(true)
     const temporary = result.worktreePath
     expect(temporary).not.toBeNull()
-    expect((await listWorktrees(runner, repo.path)).map((worktree) => worktree.path)).toContain(
-      temporary
-    )
+    expect(
+      (await listWorktrees(runner, repo.path)).map((worktree) => canonical(worktree.path))
+    ).toContain(canonical(temporary as string))
     expect(await runner.runOrThrow(['show', 'release:file.txt'], { cwd: repo.path })).toMatchObject(
       { stdout: Buffer.from('base\n') }
     )
@@ -274,7 +287,7 @@ describe('merging a worktree', () => {
 
     expect(result.outcome.ok).toBe(false)
     expect(result.outcome.conflicts).toBe(1)
-    expect(result.worktreePath).toBe(resolve(repo.path))
+    expect(canonical(result.worktreePath ?? '')).toBe(canonical(repo.path))
     await repo.git(['merge', '--abort'])
   })
 })

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 
+import { realpathSync } from 'node:fs'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
@@ -250,9 +251,27 @@ export interface MergeWorktreeOptions {
   readonly message: string
 }
 
-/** Whether two folder paths point at the same place. */
-function sameFolder(a: string, b: string): boolean {
-  return resolve(a) === resolve(b)
+/** The absolute path with symlinks and Windows short names resolved. */
+function canonicalFolder(path: string): string {
+  const absolute = resolve(path)
+  try {
+    return realpathSync.native(absolute)
+  } catch {
+    // A prunable worktree has no folder left to resolve, so its absolute path
+    // is the best identity Git and the caller can agree on.
+    return absolute
+  }
+}
+
+/**
+ * Whether two folder paths point at the same place. Git reports worktree paths
+ * with forward slashes, and Windows may use a short name or different letter
+ * case for the same folder, so the paths are canonicalised before comparing.
+ */
+export function sameWorktreeFolder(a: string, b: string): boolean {
+  const left = canonicalFolder(a)
+  const right = canonicalFolder(b)
+  return process.platform === 'win32' ? left.toLowerCase() === right.toLowerCase() : left === right
 }
 
 /**
@@ -277,7 +296,7 @@ export async function mergeWorktree(
   options: MergeWorktreeOptions
 ): Promise<MergeWorktreeOutcome> {
   const worktrees = await listWorktrees(runner, repo)
-  const source = worktrees.find((worktree) => sameFolder(worktree.path, options.sourcePath))
+  const source = worktrees.find((worktree) => sameWorktreeFolder(worktree.path, options.sourcePath))
   if (source === undefined) {
     throw new GitError(`The worktree at ${options.sourcePath} is not registered.`)
   }

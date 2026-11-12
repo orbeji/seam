@@ -14,7 +14,17 @@ export function withoutTrailingSeparators(path: string): string {
   return path.trim().replace(/[\\/]+$/, '')
 }
 
+/** A path in the form Git and the folder picker can be compared in. */
+function comparable(path: string): string {
+  const normalized = path.trim().replace(/\\/g, '/').replace(/\/+$/, '')
+  // Git reports Windows paths with forward slashes, and Windows treats the
+  // drive letter and the rest of the path without case.
+  return /^[A-Za-z]:\//.test(normalized) || normalized.startsWith('//')
+    ? normalized.toLowerCase()
+    : normalized
+}
+
 /** Whether two folder paths point at the same worktree. */
-export function sameFolder(a: string, b: string): boolean {
-  return withoutTrailingSeparators(a) === withoutTrailingSeparators(b)
+export function sameFolder(a: string, b: string | null): boolean {
+  return b !== null && comparable(a) === comparable(b)
 }

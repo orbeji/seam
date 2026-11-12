@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { WorktreeStatus } from '../../shared/git'
+import { sameFolder } from '../worktree/paths'
 import { buildBranchTree, type BranchNode } from './branch-tree'
 
 interface TopBarProps {
@@ -89,11 +90,6 @@ function displayPath(item: BranchListItem): string {
 function folderName(path: string): string {
   const parts = path.split(/[\\/]/).filter((part) => part !== '')
   return parts.at(-1) ?? path
-}
-
-/** Compares two folder paths, ignoring a trailing separator. */
-function sameFolder(a: string, b: string | null): boolean {
-  return b !== null && a.replace(/[\\/]+$/, '') === b.replace(/[\\/]+$/, '')
 }
 
 function BranchRows({
