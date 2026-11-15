@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { WorktreeStatus } from '../../shared/git'
 import { sameFolder } from '../worktree/paths'
+import { useBranchOrder } from './branch-order'
 import { buildBranchTree, type BranchNode } from './branch-tree'
 
 interface TopBarProps {
@@ -45,6 +46,12 @@ interface TopBarProps {
   readonly onSettings: () => void
   /** Called when a branch is selected for checkout. */
   readonly onCheckoutBranch: (branch: string) => void
+  /** Renames a local branch; resolves true when it was renamed. */
+  readonly onRenameBranch: (name: string, newName: string) => Promise<boolean>
+  /** Deletes a local branch; resolves true when it was deleted. */
+  readonly onDeleteBranch: (name: string, force: boolean) => Promise<boolean>
+  /** A branch operation is running, so its context menu waits. */
+  readonly branchBusy: boolean
   /** Called to load the branch list. */
   readonly onLoadBranches: () => void
   /** Current branch list (local and remote). */
@@ -79,6 +86,14 @@ type BranchListItem =
   | { readonly kind: 'local'; readonly name: string; readonly current: boolean }
   | { readonly kind: 'remote'; readonly name: string; readonly remote: string }
 
+/** The small menu a right click on a local branch opens, and its two forms. */
+type BranchContext = {
+  readonly name: string
+  readonly x: number
+  readonly y: number
+  readonly mode: 'menu' | 'rename' | 'delete'
+}
+
 /** The branch list's path, with the remote prefix stripped for remote branches. */
 function displayPath(item: BranchListItem): string {
   if (item.kind !== 'remote') return item.name
@@ -97,12 +112,14 @@ function BranchRows({
   folded,
   onFold,
   onSelect,
+  onContextMenu,
   showRemote
 }: {
   readonly nodes: readonly BranchNode<BranchListItem>[]
   readonly folded: ReadonlySet<string>
   readonly onFold: (path: string) => void
   readonly onSelect: (name: string) => void
+  readonly onContextMenu: (event: ReactMouseEvent, name: string) => void
   readonly showRemote: boolean
 }) {
   const { t } = useTranslation()
@@ -157,6 +174,7 @@ function BranchRows({
                     folded={folded}
                     onFold={onFold}
                     onSelect={onSelect}
+                    onContextMenu={onContextMenu}
                     showRemote={showRemote}
                   />
                 </div>
@@ -174,8 +192,13 @@ function BranchRows({
             className={`topbar__menu-item topbar__menu-item--branch ${
               item.kind === 'local' && item.current ? 'topbar__menu-item--current' : ''
             }`}
-            onClick={() => onSelect(item.name)}
-            disabled={item.kind === 'local' && item.current}
+            aria-disabled={item.kind === 'local' && item.current}
+            onClick={() => {
+              if (!(item.kind === 'local' && item.current)) onSelect(item.name)
+            }}
+            onContextMenu={
+              item.kind === 'local' ? (event) => onContextMenu(event, item.name) : undefined
+            }
           >
             <span className="topbar__menu-name">{node.label}</span>
             {item.kind === 'local' && item.current ? (
@@ -220,6 +243,9 @@ export default function TopBar({
   onGitFlow,
   onSettings,
   onCheckoutBranch,
+  onRenameBranch,
+  onDeleteBranch,
+  branchBusy,
   onLoadBranches,
   branches,
   loadingBranches,
@@ -242,17 +268,31 @@ export default function TopBar({
   const branchMenuRef = useRef<HTMLDivElement | null>(null)
   // Folders the user folded by path, e.g. "feature" or "feature/fix".
   const [folded, setFolded] = useState<ReadonlySet<string>>(new Set())
+  // The right-click menu of a local branch, with the value its rename form
+  // starts from and whether a delete should throw unmerged commits away.
+  const [context, setContext] = useState<BranchContext | null>(null)
+  const [renameValue, setRenameValue] = useState('')
+  const [forceDelete, setForceDelete] = useState(false)
+  const contextRef = useRef<HTMLDivElement | null>(null)
+  // The order the menu lists folders and branches in.
+  const branchOrder = useBranchOrder()
 
-  // A click outside the branch menu closes it, and so does Escape.
+  // A click outside the branch menu closes it, and so does Escape. A right
+  // click belongs to the branch row's own menu, so it must not close this one.
   useEffect(() => {
     if (!branchMenuOpen) return
     const close = (event: MouseEvent): void => {
+      if (event.button !== 0) return
       if (branchMenuRef.current !== null && !branchMenuRef.current.contains(event.target as Node)) {
         setBranchMenuOpen(false)
+        setContext(null)
       }
     }
     const onKey = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') setBranchMenuOpen(false)
+      if (event.key === 'Escape') {
+        setBranchMenuOpen(false)
+        setContext(null)
+      }
     }
     window.addEventListener('mousedown', close)
     window.addEventListener('keydown', onKey)
@@ -262,9 +302,29 @@ export default function TopBar({
     }
   }, [branchMenuOpen])
 
+  // The branch context menu closes on any click outside it and on Escape.
+  useEffect(() => {
+    if (context === null) return
+    const close = (event: MouseEvent): void => {
+      if (contextRef.current !== null && !contextRef.current.contains(event.target as Node)) {
+        setContext(null)
+      }
+    }
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') setContext(null)
+    }
+    window.addEventListener('mousedown', close)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('mousedown', close)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [context])
+
   const handleBranchMenuOpen = () => {
     if (branchMenuOpen) {
       setBranchMenuOpen(false)
+      setContext(null)
       return
     }
     setBranchMenuOpen(true)
@@ -278,11 +338,13 @@ export default function TopBar({
 
   const handleBranchSelect = (branchName: string) => {
     setBranchMenuOpen(false)
+    setContext(null)
     onCheckoutBranch(branchName)
   }
 
   const handleWorktreeSelect = (path: string) => {
     setBranchMenuOpen(false)
+    setContext(null)
     onOpenWorktree(path)
   }
 
@@ -293,6 +355,27 @@ export default function TopBar({
       else next.add(path)
       return next
     })
+  }
+
+  const handleBranchContext = (event: ReactMouseEvent, name: string) => {
+    event.preventDefault()
+    event.stopPropagation()
+    setContext({ name, x: event.clientX, y: event.clientY, mode: 'menu' })
+    setRenameValue(name)
+    setForceDelete(false)
+  }
+
+  const submitRename = async (name: string): Promise<void> => {
+    const next = renameValue.trim()
+    if (next === '' || next === name || branchBusy) return
+    const renamed = await onRenameBranch(name, next)
+    if (renamed) setContext(null)
+  }
+
+  const submitDelete = async (name: string): Promise<void> => {
+    if (branchBusy) return
+    const deleted = await onDeleteBranch(name, forceDelete)
+    if (deleted) setContext(null)
   }
 
   // The remote badge only earns its place when a branch could exist in more
@@ -320,6 +403,9 @@ export default function TopBar({
               displayPath({ kind: 'remote', name: branch.name, remote: branch.remote })
             )
         )
+  // The checked-out branch can be renamed but not deleted from here.
+  const contextIsCurrent =
+    context !== null && localBranches.some((b) => b.name === context.name && b.current)
 
   return (
     <header className="topbar" data-testid="topbar">
@@ -386,11 +472,13 @@ export default function TopBar({
                             name: b.name,
                             current: b.current
                           })),
-                          displayPath
+                          displayPath,
+                          branchOrder
                         )}
                         folded={folded}
                         onFold={handleFold}
                         onSelect={handleBranchSelect}
+                        onContextMenu={handleBranchContext}
                         showRemote={showRemote}
                       />
                     </>
@@ -405,11 +493,13 @@ export default function TopBar({
                             name: b.name,
                             remote: b.remote
                           })),
-                          displayPath
+                          displayPath,
+                          branchOrder
                         )}
                         folded={folded}
                         onFold={handleFold}
                         onSelect={handleBranchSelect}
+                        onContextMenu={handleBranchContext}
                         showRemote={showRemote}
                       />
                     </>
@@ -451,6 +541,110 @@ export default function TopBar({
                     </button>
                   )
                 })
+              )}
+            </div>
+          )}
+
+          {context !== null && (
+            <div
+              ref={contextRef}
+              className="topbar__branch-context"
+              role="menu"
+              data-testid="branch-context-menu"
+              style={{
+                top: Math.min(context.y, window.innerHeight - 220),
+                left: Math.min(context.x, window.innerWidth - 280)
+              }}
+            >
+              {context.mode === 'menu' ? (
+                <>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="topbar__menu-item"
+                    disabled={branchBusy}
+                    onClick={() => setContext({ ...context, mode: 'rename' })}
+                  >
+                    {t('branch.rename')}
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="topbar__menu-item"
+                    disabled={branchBusy || contextIsCurrent}
+                    title={contextIsCurrent ? t('branch.deleteCurrent') : undefined}
+                    onClick={() => setContext({ ...context, mode: 'delete' })}
+                  >
+                    {t('branch.delete')}
+                  </button>
+                </>
+              ) : context.mode === 'rename' ? (
+                <form
+                  className="topbar__branch-context-form"
+                  noValidate
+                  onSubmit={(event) => {
+                    event.preventDefault()
+                    void submitRename(context.name)
+                  }}
+                >
+                  <input
+                    className="dialog__input"
+                    value={renameValue}
+                    aria-label={t('branch.newName')}
+                    spellCheck={false}
+                    autoFocus
+                    disabled={branchBusy}
+                    onChange={(event) => setRenameValue(event.target.value)}
+                  />
+                  <div className="topbar__branch-context-actions">
+                    <button
+                      type="submit"
+                      className="button"
+                      disabled={branchBusy || renameValue.trim() === ''}
+                    >
+                      {t('branch.saveRename')}
+                    </button>
+                    <button
+                      type="button"
+                      className="dialog__button"
+                      disabled={branchBusy}
+                      onClick={() => setContext(null)}
+                    >
+                      {t('branch.cancel')}
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                <div className="topbar__branch-context-form">
+                  <p className="topbar__branch-context-text">{t('branch.deleteExplain')}</p>
+                  <label className="branch__check">
+                    <input
+                      type="checkbox"
+                      checked={forceDelete}
+                      disabled={branchBusy}
+                      onChange={(event) => setForceDelete(event.target.checked)}
+                    />
+                    {t('branch.force')}
+                  </label>
+                  <div className="topbar__branch-context-actions">
+                    <button
+                      type="button"
+                      className="dialog__button branch__danger"
+                      disabled={branchBusy}
+                      onClick={() => void submitDelete(context.name)}
+                    >
+                      {t('branch.confirmDelete')}
+                    </button>
+                    <button
+                      type="button"
+                      className="dialog__button"
+                      disabled={branchBusy}
+                      onClick={() => setContext(null)}
+                    >
+                      {t('branch.cancel')}
+                    </button>
+                  </div>
+                </div>
               )}
             </div>
           )}

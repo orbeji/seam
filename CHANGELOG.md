@@ -4,6 +4,31 @@ All notable changes to Seam are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-11-15
+
+### Added
+
+- The commit history reads in pages of 500 and loads the next one when the
+  list reaches its end, so a large repository can be browsed back to its first
+  commit.
+- The commit graph's column can be dragged wider or narrower, and a double
+  click restores its automatic width. The lanes keep their spacing, so a narrow
+  column hides the rightmost ones instead of squeezing them.
+- Three commit graph palettes — Classic, High contrast and Pastel — in Settings.
+- Local branches can be renamed or deleted from the branch menu's right-click
+  menu; the Branch dialog only creates them.
+- Settings can list the branch menu ascending, in Git's order, or descending,
+  so the newest numbered branch comes first.
+- Repository tabs carry the repository's initial, so narrow tabs stay
+  recognisable.
+
+### Changed
+
+- The history rows are half as tall, and the sidebar shows only the date and
+  the message; the author, hash and full date appear in the full-width view.
+- Lane colours follow the branch a line comes from across joins, instead of
+  switching to the colour of the lane it merges into.
+
 ## [0.2.0] - 2026-11-12
 
 ### Added

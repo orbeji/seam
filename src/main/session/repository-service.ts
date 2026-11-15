@@ -431,12 +431,12 @@ export class RepositoryService {
   }
 
   /** The commit graph, with each commit's parents, author and refs. */
-  async readHistory(repo: string): Promise<IpcResult<RepositoryHistory>> {
+  async readHistory(repo: string, limit?: number): Promise<IpcResult<RepositoryHistory>> {
     const opened = await this.open(repo)
     if (!opened.ok) return opened
 
     try {
-      return { ok: true, value: await readRepositoryHistoryFromRepo(this.runner, repo) }
+      return { ok: true, value: await readRepositoryHistoryFromRepo(this.runner, repo, limit) }
     } catch (error) {
       return failureFrom(error)
     }

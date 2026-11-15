@@ -122,9 +122,9 @@ ones. From a shell, `seam --repo <path>` opens a repository directly.
 
 The top bar groups the branch actions before the remote ones:
 
-- **Branch** creates a local branch from HEAD, another branch or a tag, and
-  renames or deletes an existing one. Deleting refuses to throw away unmerged
-  commits unless the force box is ticked.
+- **Branch** creates a local branch from HEAD, another branch or a tag.
+  Right-click a branch in the menu to rename it or delete it; deleting refuses
+  to throw away unmerged commits unless the force box is ticked.
 - **Merge** merges a local or remote branch into the checked-out one. The
   strategy is a real merge commit (`--no-ff`), a fast-forward only, or a
   squash that leaves the changes staged for the next commit.
@@ -145,9 +145,11 @@ terminal clone keeps working with it. If a finish stops on a conflict, the
 remaining steps are stored in `.git/seam/gitflow-finish.json`; resolving the
 merge and committing resumes the finish from the popup or on its own.
 
-The commit graph stays beside the file sidebar. Selecting a commit shows its
-changed files and their diff; a button in the graph's header makes it fill the
-window, and the same button returns to the split.
+The commit graph stays beside the file sidebar and reads the history in pages
+as the list reaches its end. Selecting a commit shows its changed files and
+their diff; a button in the graph's header makes it fill the window, and the
+same button returns to the split. The graph's column can be dragged wider or
+narrower, and a double click restores its automatic width.
 
 ## Layout
 

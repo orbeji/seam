@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { Settings } from '../src/main/session/settings'
+import { parseSettingsPatch, Settings } from '../src/main/session/settings'
 import { DEFAULT_HISTORY_WIDTH, MAX_HISTORY_WIDTH, MIN_HISTORY_WIDTH } from '../src/shared/ipc'
 
 const directories: string[] = []
@@ -17,6 +17,18 @@ function tempFile(name = 'settings.json'): string {
 
 afterEach(() => {
   while (directories.length > 0) rmSync(directories.pop() ?? '', { recursive: true, force: true })
+})
+
+describe('parseSettingsPatch', () => {
+  it('keeps the branch order a renderer asks for', () => {
+    expect(parseSettingsPatch({ branchOrder: 'descending' })).toEqual({
+      branchOrder: 'descending'
+    })
+  })
+
+  it('rejects a branch order it does not know', () => {
+    expect(parseSettingsPatch({ branchOrder: 'sideways' })).toBeNull()
+  })
 })
 
 describe('Settings', () => {
@@ -108,6 +120,36 @@ describe('Settings', () => {
 
     writeFileSync(file, JSON.stringify({ syntaxTheme: 'neon' }))
     expect(new Settings(file).read().syntaxTheme).toBe('seam')
+  })
+
+  it('draws the graph with the classic palette on a fresh install', () => {
+    expect(new Settings(tempFile()).read().graphPalette).toBe('classic')
+  })
+
+  it('remembers the graph palette and falls back on a name it does not know', () => {
+    const file = tempFile()
+    const settings = new Settings(file)
+    settings.update({ graphPalette: 'pastel' })
+
+    expect(new Settings(file).read().graphPalette).toBe('pastel')
+
+    writeFileSync(file, JSON.stringify({ graphPalette: 'rainbow' }))
+    expect(new Settings(file).read().graphPalette).toBe('classic')
+  })
+
+  it('lists branches ascending on a fresh install', () => {
+    expect(new Settings(tempFile()).read().branchOrder).toBe('ascending')
+  })
+
+  it('remembers the branch order and falls back on a direction it does not know', () => {
+    const file = tempFile()
+    const settings = new Settings(file)
+    settings.update({ branchOrder: 'descending' })
+
+    expect(new Settings(file).read().branchOrder).toBe('descending')
+
+    writeFileSync(file, JSON.stringify({ branchOrder: 'sideways' }))
+    expect(new Settings(file).read().branchOrder).toBe('ascending')
   })
 
   it('opens the history panel at its default width and remembers a dragged one', () => {

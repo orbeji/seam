@@ -377,6 +377,15 @@ export type HighlightPreference = 'words' | 'lines' | 'split' | 'characters' | '
 /** The syntax colours the code viewers use in the light colour scheme. */
 export type SyntaxThemePreference = 'seam' | 'github' | 'vivid'
 
+/** The colour sets the commit graph draws its lanes with. */
+export type GraphPalettePreference = 'classic' | 'contrast' | 'pastel'
+
+/** The direction the branch menu lists folders and branches in. */
+export type BranchOrderPreference = 'ascending' | 'descending'
+
+/** Every graph palette, in the order they are meant to be offered. */
+export const GRAPH_PALETTES: readonly GraphPalettePreference[] = ['classic', 'contrast', 'pastel']
+
 /** The width the history panel opens at, before it is ever dragged. */
 export const DEFAULT_HISTORY_WIDTH = 300
 
@@ -400,6 +409,10 @@ export interface SettingsData {
   readonly highlight: HighlightPreference
   /** The syntax colours the code viewers use in the light colour scheme. */
   readonly syntaxTheme: SyntaxThemePreference
+  /** The colours the commit graph cycles through for its lanes. */
+  readonly graphPalette: GraphPalettePreference
+  /** The direction the branch menu lists folders and branches in. */
+  readonly branchOrder: BranchOrderPreference
   /** Whether unchanged lines are folded in the viewer by default. */
   readonly collapse: boolean
   /** Whether commits include the `Signed-off-by` trailer by default. */
@@ -422,6 +435,10 @@ export interface SettingsPatch {
   highlight?: HighlightPreference
   /** The syntax colours the code viewers use in the light colour scheme. */
   syntaxTheme?: SyntaxThemePreference
+  /** The colours the commit graph cycles through for its lanes. */
+  graphPalette?: GraphPalettePreference
+  /** The direction the branch menu lists folders and branches in. */
+  branchOrder?: BranchOrderPreference
   /** Whether unchanged lines are folded in the viewer by default. */
   collapse?: boolean
   /** Whether commits include the `Signed-off-by` trailer by default. */
@@ -773,10 +790,11 @@ export interface SeamApi {
   readCommitTemplate(repo: string): Promise<IpcResult<string | null>>
   /**
    * The newest commits of every branch and tag, with their parents and the refs
-   * that point at them, so the interface can draw the commit graph; never
-   * throws.
+   * that point at them, so the interface can draw the commit graph. `limit`
+   * reads that many commits plus one, so `truncated` says whether more remain;
+   * never throws.
    */
-  readRepositoryHistory(repo: string): Promise<IpcResult<RepositoryHistory>>
+  readRepositoryHistory(repo: string, limit?: number): Promise<IpcResult<RepositoryHistory>>
   /** The files one commit changed against its first parent; never throws. */
   readCommitChanges(repo: string, commit: string): Promise<IpcResult<CommitChanges>>
   /**

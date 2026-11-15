@@ -1,15 +1,13 @@
 // SPDX-License-Identifier: MIT
 
-import type { HistoryCommit, HistoryRef, HistoryRefKind, RepositoryHistory } from '../../shared/git'
+import {
+  HISTORY_PAGE_SIZE,
+  type HistoryCommit,
+  type HistoryRef,
+  type HistoryRefKind,
+  type RepositoryHistory
+} from '../../shared/git'
 import type { GitRunner } from './runner'
-
-/**
- * How many commits the history view reads at once. A repository can hold
- * hundreds of thousands of commits, and the view is a browsing aid rather than
- * a pager, so it keeps a generous window around the newest history. The result
- * says when Git held more.
- */
-export const HISTORY_LIMIT = 1000
 
 /** One record per commit: fields separated by NUL, records by a newline. */
 const HISTORY_FORMAT = '%H%x00%h%x00%P%x00%an%x00%ae%x00%aI%x00%s'
@@ -168,7 +166,7 @@ export function parseHistoryRefs(output: string, head: string | null): Map<strin
 export async function readRepositoryHistory(
   runner: GitRunner,
   repo: string,
-  limit: number = HISTORY_LIMIT
+  limit: number = HISTORY_PAGE_SIZE
 ): Promise<RepositoryHistory> {
   const [headResult, refsResult, tipResult] = await Promise.all([
     runner.run(['symbolic-ref', '--quiet', '--short', 'HEAD'], {

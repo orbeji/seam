@@ -57,8 +57,15 @@ describe('the persistent commit history', () => {
     const text = (await rows.allTextContents()).join(' ')
     expect(text).toContain('Second commit')
     expect(text).toContain('First commit')
-    expect(text).toContain('Seam Sample')
     expect(text).toContain('v1.0.0')
+
+    // The sidebar keeps the date and the message; the author and the hash
+    // belong to the full view.
+    const columns = await rows
+      .first()
+      .locator(':scope > *')
+      .evaluateAll((elements) => elements.map((element) => element.className))
+    expect(columns).toEqual(['history__graph', 'history__date', 'history__message'])
 
     // The top bar hides and restores the panel without losing the repository.
     await page.click('[data-testid=history-button]')
@@ -94,6 +101,9 @@ describe('the persistent commit history', () => {
     const before = (await git.runOrThrow(['rev-parse', 'HEAD'], { cwd: samples.clean })).stdout
       .toString()
       .trim()
+    const olderOid = (await git.runOrThrow(['rev-parse', 'HEAD~1'], { cwd: samples.clean })).stdout
+      .toString()
+      .trim()
 
     const rows = page.locator('[data-testid=history-commit]')
     expect(await rows.count()).toBe(2)
@@ -107,7 +117,7 @@ describe('the persistent commit history', () => {
     // warning must carry are checked: it talks about HEAD and shows the commit.
     expect(warning).toContain('HEAD')
     expect(await page.locator('[data-testid=history-checkout-target]').innerText()).toContain(
-      (await rows.nth(1).locator('.history__id').innerText()).trim()
+      olderOid.slice(0, 7)
     )
 
     await page.click('[data-testid=history-checkout-confirm]')
@@ -193,6 +203,46 @@ describe('the persistent commit history', () => {
     expect(Math.abs(kept - (before + 120))).toBeLessThan(2)
   })
 
+  it('resizes the graph column without redrawing the graph and resets it on a double click', async () => {
+    const graph = page.locator('.history__graph').first()
+    const handle = page.locator('[data-testid=history-graph-resizer]')
+    const columnWidth = async (): Promise<number> => (await graph.boundingBox())?.width ?? 0
+    const graphWidth = async (): Promise<number> =>
+      graph.locator('svg').evaluate((svg) => Number(svg.getAttribute('width')))
+
+    const before = await columnWidth()
+    // The graph is drawn once at its own width; the column only frames it.
+    const drawnWidth = await graphWidth()
+
+    // A wider column reveals more of the graph, but the lanes keep the spacing
+    // they were drawn with: the SVG never stretches with the column.
+    let box = await handle.boundingBox()
+    if (box === null) throw new Error('the history graph has no resize handle')
+    const startY = box.y + 40
+    await page.mouse.move(box.x + box.width / 2, startY)
+    await page.mouse.down()
+    await page.mouse.move(box.x + box.width / 2 + 40, startY, { steps: 5 })
+    await page.mouse.up()
+    await expect.poll(columnWidth).toBeGreaterThan(before + 30)
+    expect(await graphWidth()).toBe(drawnWidth)
+
+    // Narrowing the column hides the rightmost lanes instead of packing them:
+    // the message wins the room and the graph is still not redrawn.
+    const widened = await columnWidth()
+    box = await handle.boundingBox()
+    if (box === null) throw new Error('the history graph lost its resize handle')
+    await page.mouse.move(box.x + box.width / 2, startY)
+    await page.mouse.down()
+    await page.mouse.move(box.x + box.width / 2 - 300, startY, { steps: 10 })
+    await page.mouse.up()
+    await expect.poll(columnWidth).toBeLessThan(widened - 30)
+    expect(await graphWidth()).toBe(drawnWidth)
+
+    // A double click returns to the width the graph opened with.
+    await handle.dblclick()
+    await expect.poll(async () => Math.abs((await columnWidth()) - before)).toBeLessThan(2)
+  })
+
   it('fills the window with the graph and returns to the sidebar split', async () => {
     const panel = page.locator('.history-panel')
     const splitWidth = (await panel.boundingBox())?.width ?? 0
@@ -209,6 +259,20 @@ describe('the persistent commit history', () => {
     expect(await page.locator('.sidebar').isVisible()).toBe(false)
     expect(await page.locator('[data-testid=history-resizer]').count()).toBe(0)
     await page.waitForSelector('[data-testid=history-commits]')
+
+    // The full view adds the author and the hash that the sidebar leaves out.
+    const columns = await page
+      .locator('[data-testid=history-commit]')
+      .first()
+      .locator(':scope > *')
+      .evaluateAll((elements) => elements.map((element) => element.className))
+    expect(columns).toEqual([
+      'history__graph',
+      'history__date',
+      'history__message',
+      'history__author',
+      'history__id'
+    ])
 
     // The same button restores the split, with the width the panel had before.
     await page.click('[data-testid=history-expand]')

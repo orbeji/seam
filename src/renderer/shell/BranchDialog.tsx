@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useBranchOrder } from './branch-order'
+import { compareBranchNames } from './branch-tree'
 
 /** The branch names the top bar and this dialog share. */
 interface BranchOption {
@@ -28,17 +30,13 @@ interface BranchDialogProps {
     startPoint: string | null,
     checkout: boolean
   ) => Promise<boolean>
-  /** Renames a branch; resolves true when it was renamed. */
-  readonly onRename: (name: string, newName: string) => Promise<boolean>
-  /** Deletes a branch; resolves true when it was deleted. */
-  readonly onDelete: (name: string, force: boolean) => Promise<boolean>
   readonly onClose: () => void
 }
 
 /**
- * Manages local branches: creates one from HEAD, a branch or a tag, and renames
- * or deletes an existing one. Checkout stays in the top bar's branch menu, so
- * this dialog never changes the working tree unless the create asks for it.
+ * Creates a local branch from HEAD, a branch or a tag. Checkout stays in the
+ * top bar's branch menu, and renaming or deleting lives in that menu's
+ * right-click menu, so this dialog never changes an existing branch.
  */
 export default function BranchDialog({
   branches,
@@ -46,19 +44,12 @@ export default function BranchDialog({
   busy,
   error,
   onCreate,
-  onRename,
-  onDelete,
   onClose
 }: BranchDialogProps) {
   const { t } = useTranslation()
   const [name, setName] = useState('')
   const [startPoint, setStartPoint] = useState('')
   const [checkout, setCheckout] = useState(true)
-  // The branch being renamed or deleted; both open a small form under the list.
-  const [renaming, setRenaming] = useState<string | null>(null)
-  const [newName, setNewName] = useState('')
-  const [deleting, setDeleting] = useState<string | null>(null)
-  const [force, setForce] = useState(false)
   const [touched, setTouched] = useState(false)
 
   useEffect(() => {
@@ -69,10 +60,16 @@ export default function BranchDialog({
     return () => window.removeEventListener('keydown', onKey)
   }, [busy, onClose])
 
-  const local = branches?.local ?? []
+  const order = useBranchOrder()
+  const local = [...(branches?.local ?? [])].sort((a, b) =>
+    compareBranchNames(a.name, b.name, order)
+  )
+  const remote = [...(branches?.remote ?? [])].sort((a, b) =>
+    compareBranchNames(a.name, b.name, order)
+  )
   const startPoints = [
     ...local.map((branch) => branch.name),
-    ...(branches?.remote ?? []).map((branch) => branch.name)
+    ...remote.map((branch) => branch.name)
   ]
   const canCreate = name.trim() !== '' && !busy
 
@@ -84,24 +81,6 @@ export default function BranchDialog({
       setName('')
       setStartPoint('')
       setTouched(false)
-    }
-  }
-
-  const submitRename = async (branch: string): Promise<void> => {
-    if (newName.trim() === '' || busy) return
-    const renamed = await onRename(branch, newName.trim())
-    if (renamed) {
-      setRenaming(null)
-      setNewName('')
-    }
-  }
-
-  const submitDelete = async (branch: string): Promise<void> => {
-    if (busy) return
-    const deleted = await onDelete(branch, force)
-    if (deleted) {
-      setDeleting(null)
-      setForce(false)
     }
   }
 
@@ -210,101 +189,6 @@ export default function BranchDialog({
                   </span>
                   {branch.current && <span className="branch__badge">{t('branch.current')}</span>}
                 </div>
-                <div className="branch__row-actions">
-                  <button
-                    type="button"
-                    className="dialog__button"
-                    disabled={busy}
-                    onClick={() => {
-                      setDeleting(null)
-                      setRenaming(branch.name)
-                      setNewName(branch.name)
-                    }}
-                  >
-                    {t('branch.rename')}
-                  </button>
-                  <button
-                    type="button"
-                    className="dialog__button"
-                    disabled={busy || branch.current}
-                    title={branch.current ? t('branch.deleteCurrent') : undefined}
-                    onClick={() => {
-                      setRenaming(null)
-                      setDeleting(branch.name)
-                      setForce(false)
-                    }}
-                  >
-                    {t('branch.delete')}
-                  </button>
-                </div>
-
-                {renaming === branch.name && (
-                  <form
-                    className="branch__row-form"
-                    noValidate
-                    onSubmit={(event) => {
-                      event.preventDefault()
-                      void submitRename(branch.name)
-                    }}
-                  >
-                    <input
-                      className="dialog__input"
-                      value={newName}
-                      aria-label={t('branch.newName')}
-                      spellCheck={false}
-                      disabled={busy}
-                      onChange={(event) => setNewName(event.target.value)}
-                    />
-                    <button
-                      type="submit"
-                      className="button"
-                      disabled={busy || newName.trim() === ''}
-                    >
-                      {t('branch.saveRename')}
-                    </button>
-                    <button
-                      type="button"
-                      className="dialog__button"
-                      disabled={busy}
-                      onClick={() => setRenaming(null)}
-                    >
-                      {t('branch.cancel')}
-                    </button>
-                  </form>
-                )}
-
-                {deleting === branch.name && (
-                  <div className="branch__row-form branch__row-form--delete">
-                    <p className="dialog__explain">{t('branch.deleteExplain')}</p>
-                    <label className="branch__check">
-                      <input
-                        type="checkbox"
-                        checked={force}
-                        disabled={busy}
-                        onChange={(event) => setForce(event.target.checked)}
-                      />
-                      {t('branch.force')}
-                    </label>
-                    <div className="branch__row-actions">
-                      <button
-                        type="button"
-                        className="dialog__button branch__danger"
-                        disabled={busy}
-                        onClick={() => void submitDelete(branch.name)}
-                      >
-                        {t('branch.confirmDelete')}
-                      </button>
-                      <button
-                        type="button"
-                        className="dialog__button"
-                        disabled={busy}
-                        onClick={() => setDeleting(null)}
-                      >
-                        {t('branch.cancel')}
-                      </button>
-                    </div>
-                  </div>
-                )}
               </li>
             ))}
           </ul>

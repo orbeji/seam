@@ -1,7 +1,13 @@
 // SPDX-License-Identifier: MIT
 
 import { describe, expect, it } from 'vitest'
-import { buildBranchTree, type BranchGroup, type BranchLeaf, type BranchNode } from './branch-tree'
+import {
+  buildBranchTree,
+  compareBranchNames,
+  type BranchGroup,
+  type BranchLeaf,
+  type BranchNode
+} from './branch-tree'
 
 interface Item {
   readonly name: string
@@ -18,6 +24,21 @@ function folderOf<T>(nodes: readonly BranchNode<T>[], name: string): BranchGroup
   if (group === undefined) throw new Error(`no folder named ${name}`)
   return group
 }
+
+describe('compareBranchNames', () => {
+  it('sorts names ascending and reverses them descending', () => {
+    expect(['7.2', '7.10', '6.4'].sort((a, b) => compareBranchNames(a, b, 'ascending'))).toEqual([
+      '6.4',
+      '7.10',
+      '7.2'
+    ])
+    expect(['7.2', '7.10', '6.4'].sort((a, b) => compareBranchNames(a, b, 'descending'))).toEqual([
+      '7.2',
+      '7.10',
+      '6.4'
+    ])
+  })
+})
 
 describe('buildBranchTree', () => {
   it('groups branches sharing a first-segment prefix under one folder', () => {
@@ -61,6 +82,30 @@ describe('buildBranchTree', () => {
       'beta',
       'zeta'
     ])
+  })
+
+  it('reverses folders and branches together when asked to descend', () => {
+    const nodes = buildBranchTree(
+      [{ name: 'zeta' }, { name: 'alpha/one' }, { name: 'beta' }] satisfies Item[],
+      (item) => item.name,
+      'descending'
+    )
+
+    expect(nodes.map((node) => (node.kind === 'group' ? node.name : node.label))).toEqual([
+      'zeta',
+      'beta',
+      'alpha'
+    ])
+  })
+
+  it('reverses the branches inside a folder too', () => {
+    const nodes = buildBranchTree(
+      [{ name: 'feature/1' }, { name: 'feature/2' }] satisfies Item[],
+      (item) => item.name,
+      'descending'
+    )
+
+    expect(leafLabels(folderOf(nodes, 'feature').children)).toEqual(['2', '1'])
   })
 
   it("lets the caller strip a prefix, e.g. a remote branch's remote name", () => {

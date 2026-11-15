@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MIT
 
+import type { BranchOrderPreference } from '../../shared/ipc'
+
 /** A folder grouping branches that share a path prefix before a "/". */
 export interface BranchGroup<T> {
   readonly kind: 'group'
@@ -27,25 +29,36 @@ interface MutableGroup<T> {
   readonly leaves: Map<string, T>
 }
 
-/** Sorts folders and branches together by their segment, like Git's order. */
-function compareNodes<T>(a: BranchNode<T>, b: BranchNode<T>): number {
-  const aName = a.kind === 'group' ? a.name : a.label
-  const bName = b.kind === 'group' ? b.name : b.label
-  if (aName < bName) return -1
-  if (aName > bName) return 1
-  return 0
+/**
+ * Compares two branch or folder names the way Git sorts refs, or the same
+ * order reversed so the name that sorts last comes first.
+ */
+export function compareBranchNames(a: string, b: string, order: BranchOrderPreference): number {
+  const ascending = a < b ? -1 : a > b ? 1 : 0
+  return order === 'descending' ? -ascending : ascending
 }
 
-function finishGroup<T>(group: MutableGroup<T>, prefix: string): BranchNode<T>[] {
+/** Sorts folders and branches together by their segment, like Git's order. */
+function compareNodes<T>(a: BranchNode<T>, b: BranchNode<T>, order: BranchOrderPreference): number {
+  const aName = a.kind === 'group' ? a.name : a.label
+  const bName = b.kind === 'group' ? b.name : b.label
+  return compareBranchNames(aName, bName, order)
+}
+
+function finishGroup<T>(
+  group: MutableGroup<T>,
+  prefix: string,
+  order: BranchOrderPreference
+): BranchNode<T>[] {
   const nodes: BranchNode<T>[] = []
   for (const [name, folder] of group.folders) {
     const path = prefix === '' ? name : `${prefix}/${name}`
-    nodes.push({ kind: 'group', name, path, children: finishGroup(folder, path) })
+    nodes.push({ kind: 'group', name, path, children: finishGroup(folder, path, order) })
   }
   for (const [label, item] of group.leaves) {
     nodes.push({ kind: 'leaf', label, item })
   }
-  return nodes.sort(compareNodes)
+  return nodes.sort((a, b) => compareNodes(a, b, order))
 }
 
 /**
@@ -56,10 +69,14 @@ function finishGroup<T>(group: MutableGroup<T>, prefix: string): BranchNode<T>[]
  * The caller decides what a branch's display path is — a remote branch can
  * strip its remote prefix so "origin/feature/x" groups under "feature" — while
  * the leaf's `item` keeps the full information, typically the checkout name.
+ *
+ * `order` flips the sort at every level, so a descending tree shows the newest
+ * numbered branch first inside its folder too.
  */
 export function buildBranchTree<T>(
   items: readonly T[],
-  pathOf: (item: T) => string
+  pathOf: (item: T) => string,
+  order: BranchOrderPreference = 'ascending'
 ): readonly BranchNode<T>[] {
   const root: MutableGroup<T> = { folders: new Map(), leaves: new Map() }
   for (const item of items) {
@@ -77,5 +94,5 @@ export function buildBranchTree<T>(
     const label = parts[parts.length - 1] ?? ''
     if (label !== '') folder.leaves.set(label, item)
   }
-  return finishGroup(root, '')
+  return finishGroup(root, '', order)
 }

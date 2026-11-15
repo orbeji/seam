@@ -44,8 +44,18 @@ describe('layoutGraph', () => {
     expect(layout.lanes).toBe(2)
     expect(layout.rows.map((row) => row.lane)).toEqual([0, 0, 1, 0])
     expect(edge(layout.rows[0]!, 'bottom', 1).color).toBe(1)
-    expect(edge(layout.rows[2]!, 'bottom', 0).color).toBe(0)
+    // The branch keeps its own colour on the line that joins the shared parent.
+    expect(edge(layout.rows[2]!, 'bottom', 0).color).toBe(1)
     expect(layout.rows[3]?.edges.filter((candidate) => candidate.side === 'top')).toHaveLength(1)
+  })
+
+  it('keeps the new branch colour where it joins the branch it grew from', () => {
+    const layout = layoutGraph([commit('main', 'base'), commit('feature', 'base'), commit('base')])
+
+    expect(layout.rows.map((row) => row.lane)).toEqual([0, 1, 0])
+    expect(layout.rows[1]?.color).toBe(1)
+    expect(edge(layout.rows[1]!, 'through', 0).color).toBe(0)
+    expect(edge(layout.rows[1]!, 'bottom', 0).color).toBe(1)
   })
 
   it('gives a tip that no child points at a lane of its own', () => {

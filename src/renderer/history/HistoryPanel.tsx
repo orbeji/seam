@@ -1,6 +1,16 @@
 // SPDX-License-Identifier: MIT
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+  type UIEvent as ReactUIEvent
+} from 'react'
 import { useTranslation } from 'react-i18next'
 import type {
   CommitChanges,
@@ -41,6 +51,10 @@ interface HistoryPanelProps {
   readonly expanded: boolean
   /** Switches between the full-width graph and the sidebar split. */
   readonly onToggleExpanded: () => void
+  /** Whether the next page of commits is being read. */
+  readonly loadingMore: boolean
+  /** Reads the next page when the list reaches its end. */
+  readonly onLoadMore: () => void
 }
 
 /** What the checkout confirmation needs to know about the picked commit. */
@@ -56,9 +70,17 @@ interface CheckoutPrompt {
   readonly dirty: boolean
 }
 
-const LANE_WIDTH = 14
 const GUTTER_PADDING = 8
-const ROW_HEIGHT = 54
+const ROW_HEIGHT = 28
+/** The distance between lanes. Resizing the column only reveals or hides them. */
+const LANE_WIDTH = 20
+/** How many lanes the sidebar shows before the user drags the graph wider. */
+const DEFAULT_VISIBLE_LANES = 3
+/** The narrowest and widest the graph column can be dragged. */
+const MIN_GRAPH_WIDTH = 16
+const MAX_GRAPH_WIDTH = 720
+/** Room the commit's own columns keep beside the graph. */
+const MIN_TEXT_WIDTH = 180
 
 const GRAPH_COLORS = [
   'var(--graph-0)',
@@ -87,6 +109,11 @@ function colorOf(index: number): string {
   return GRAPH_COLORS[index % GRAPH_COLORS.length] ?? 'var(--accent)'
 }
 
+/** How wide the graph is when every lane is drawn at its fixed spacing. */
+function naturalGraphWidth(lanes: number): number {
+  return GUTTER_PADDING * 2 + Math.max(0, lanes - 1) * LANE_WIDTH
+}
+
 function laneX(lane: number): number {
   return GUTTER_PADDING + lane * LANE_WIDTH
 }
@@ -111,12 +138,12 @@ function edgePath(edge: GraphEdge, height: number, center: number): string {
 }
 
 /**
- * Draws one commit's lines and node. The row grows when its refs wrap, so the
- * cell measures its own height and draws the edges all the way to both borders;
- * a fixed 54px drawing would stop the line at the middle of a taller row.
+ * Draws one commit's lines and node at a fixed lane spacing. The cell is as
+ * wide as the column, so narrowing the column only hides the rightmost lanes
+ * instead of redrawing the graph at a different spacing.
  */
 function GraphCell({ row, lanes }: { readonly row: GraphRow; readonly lanes: number }) {
-  const width = Math.max(1, lanes) * LANE_WIDTH + GUTTER_PADDING * 2
+  const width = naturalGraphWidth(lanes)
   const color = colorOf(row.color)
   const cell = useRef<HTMLDivElement>(null)
   const [height, setHeight] = useState(ROW_HEIGHT)
@@ -138,7 +165,7 @@ function GraphCell({ row, lanes }: { readonly row: GraphRow; readonly lanes: num
   const center = height / 2
 
   return (
-    <div ref={cell} className="history__graph" style={{ width }} aria-hidden="true">
+    <div ref={cell} className="history__graph" aria-hidden="true">
       <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
         {row.edges.map((edge, index) => (
           <path
@@ -150,15 +177,7 @@ function GraphCell({ row, lanes }: { readonly row: GraphRow; readonly lanes: num
             strokeLinecap="round"
           />
         ))}
-        <circle
-          cx={laneX(row.lane)}
-          cy={center}
-          r={5.5}
-          fill="var(--surface)"
-          stroke={color}
-          strokeWidth={2}
-        />
-        <circle cx={laneX(row.lane)} cy={center} r={2.2} fill={color} />
+        <circle cx={laneX(row.lane)} cy={center} r={4} fill={color} />
       </svg>
     </div>
   )
@@ -173,6 +192,26 @@ function formatDate(iso: string, language: string): string {
       dateStyle: 'medium',
       timeStyle: 'short'
     }).format(date)
+  } catch {
+    return iso
+  }
+}
+
+/**
+ * A date short enough for the row's own column: the year is only spelled out
+ * for commits outside the current one. The full date stays on hover.
+ */
+function formatShortDate(iso: string, language: string): string {
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return iso
+  const sameYear = date.getFullYear() === new Date().getFullYear()
+  const options: Intl.DateTimeFormatOptions = {
+    day: 'numeric',
+    month: 'short',
+    year: sameYear ? undefined : 'numeric'
+  }
+  try {
+    return new Intl.DateTimeFormat(language, options).format(date)
   } catch {
     return iso
   }
@@ -366,7 +405,9 @@ export function HistoryPanel({
   onSelect,
   onCheckedOut,
   expanded,
-  onToggleExpanded
+  onToggleExpanded,
+  loadingMore,
+  onLoadMore
 }: HistoryPanelProps) {
   const { t, i18n } = useTranslation()
   const [checkoutPrompt, setCheckoutPrompt] = useState<CheckoutPrompt | null>(null)
@@ -392,6 +433,114 @@ export function HistoryPanel({
     () => (view.state === 'ready' ? layoutGraph(view.data.commits) : null),
     [view]
   )
+
+  // Reaching the end of the list reads the next page, so scrolling keeps going
+  // through the repository's history instead of stopping at the first window.
+  const loadMoreOnScroll = (event: ReactUIEvent<HTMLDivElement>): void => {
+    if (view.state !== 'ready' || !view.data.truncated || loadingMore) return
+    const element = event.currentTarget
+    if (element.scrollHeight - element.scrollTop - element.clientHeight > 160) return
+    onLoadMore()
+  }
+
+  // The graph column's width: no entry follows the branches, an entry is the
+  // width the user dragged it to. Keeping the repository with it means another
+  // repository starts from the automatic width again.
+  const [draggedGraphWidth, setDraggedGraphWidth] = useState<{
+    readonly repo: string
+    readonly width: number
+  } | null>(null)
+  const graphColumnWidth = draggedGraphWidth?.repo === repo ? draggedGraphWidth.width : null
+  const [graphResizing, setGraphResizing] = useState(false)
+  const graphResize = useRef<{ readonly startX: number; readonly startWidth: number } | null>(null)
+  const commitsRef = useRef<HTMLDivElement>(null)
+  const [commitsWidth, setCommitsWidth] = useState(0)
+
+  // The panel can be dragged wider, so the graph's own limit depends on the
+  // room its rows actually have.
+  useLayoutEffect(() => {
+    const element = commitsRef.current
+    if (element === null) return
+    const measure = (): void => {
+      const next = element.getBoundingClientRect().width
+      if (next > 0) setCommitsWidth((current) => (Math.abs(current - next) < 0.5 ? current : next))
+    }
+    measure()
+    if (typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(measure)
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [layout])
+
+  const maxGraphColumnWidth = useMemo(() => {
+    if (commitsWidth <= 0) return MAX_GRAPH_WIDTH
+    return Math.max(MIN_GRAPH_WIDTH, Math.min(MAX_GRAPH_WIDTH, commitsWidth - MIN_TEXT_WIDTH))
+  }, [commitsWidth])
+
+  // The graph may be dragged narrow enough to clip its lanes: the user can
+  // trade graph room for the commit's message.
+  const minGraphColumnWidth = Math.min(MIN_GRAPH_WIDTH, maxGraphColumnWidth)
+
+  // The sidebar opens at most three lanes wide, so the commit message keeps the
+  // rest of the panel; the full view has room for the whole graph. The lanes
+  // keep their fixed spacing either way, so a narrow column simply hides the
+  // rightmost.
+  const autoGraphColumnWidth =
+    layout === null
+      ? MIN_GRAPH_WIDTH
+      : Math.min(
+          naturalGraphWidth(
+            expanded ? layout.lanes : Math.min(layout.lanes, DEFAULT_VISIBLE_LANES)
+          ),
+          maxGraphColumnWidth
+        )
+
+  const graphColumn = Math.round(
+    graphColumnWidth === null
+      ? autoGraphColumnWidth
+      : Math.max(minGraphColumnWidth, Math.min(graphColumnWidth, maxGraphColumnWidth))
+  )
+
+  const setGraphWidth = (width: number): void => {
+    setDraggedGraphWidth({
+      repo,
+      width: Math.max(minGraphColumnWidth, Math.min(width, maxGraphColumnWidth))
+    })
+  }
+
+  const beginGraphResize = (event: ReactPointerEvent<HTMLDivElement>): void => {
+    if (event.button !== 0) return
+    event.preventDefault()
+    event.stopPropagation()
+    event.currentTarget.setPointerCapture(event.pointerId)
+    graphResize.current = { startX: event.clientX, startWidth: graphColumn }
+    setGraphResizing(true)
+  }
+
+  const moveGraphResize = (event: ReactPointerEvent<HTMLDivElement>): void => {
+    const start = graphResize.current
+    if (start === null) return
+    setGraphWidth(start.startWidth + (event.clientX - start.startX))
+  }
+
+  const endGraphResize = (event: ReactPointerEvent<HTMLDivElement>): void => {
+    if (graphResize.current === null) return
+    graphResize.current = null
+    setGraphResizing(false)
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+  }
+
+  const resizeGraphWithKeyboard = (event: ReactKeyboardEvent<HTMLDivElement>): void => {
+    const step = event.shiftKey ? 32 : 8
+    if (event.key === 'ArrowLeft') setGraphWidth(graphColumn - step)
+    else if (event.key === 'ArrowRight') setGraphWidth(graphColumn + step)
+    else if (event.key === 'Home') setGraphWidth(minGraphColumnWidth)
+    else if (event.key === 'End') setGraphWidth(maxGraphColumnWidth)
+    else return
+    event.preventDefault()
+  }
 
   /**
    * Reads the repository before asking to move to a commit, so the warning can
@@ -558,7 +707,7 @@ export function HistoryPanel({
           )}
         </div>
 
-        <div className="history__sidebar-scroll">
+        <div className="history__sidebar-scroll" onScroll={loadMoreOnScroll}>
           {view.state === 'loading' && (
             <p className="history__sidebar-note" data-testid="history-loading">
               {t('history.loading')}
@@ -583,33 +732,58 @@ export function HistoryPanel({
 
           {view.state === 'ready' && view.data.commits.length > 0 && layout !== null && (
             <>
-              <ol className="history__sidebar-list" data-testid="history-commits">
-                {view.data.commits.map((commit, index) => {
-                  const row = layout.rows[index]
-                  if (row === undefined) return null
-                  return (
-                    <li key={commit.oid}>
-                      <button
-                        type="button"
-                        className={
-                          selectedOid === commit.oid
-                            ? 'history__row history__row--selected'
-                            : 'history__row'
-                        }
-                        data-testid="history-commit"
-                        aria-current={selectedOid === commit.oid ? 'true' : undefined}
-                        title={t('history.checkout.hint')}
-                        onClick={() => onSelect(commit)}
-                        onDoubleClick={() => beginCheckout(commit)}
-                      >
-                        <GraphCell row={row} lanes={layout.lanes} />
-                        <div className="history__body">
-                          <div className="history__subject-line">
+              <div
+                className="history__commits"
+                ref={commitsRef}
+                style={
+                  {
+                    '--history-gutter': `${graphColumn}px`
+                  } as CSSProperties
+                }
+              >
+                <ol
+                  className={
+                    expanded
+                      ? 'history__sidebar-list'
+                      : 'history__sidebar-list history__sidebar-list--compact'
+                  }
+                  data-testid="history-commits"
+                >
+                  {view.data.commits.map((commit, index) => {
+                    const row = layout.rows[index]
+                    if (row === undefined) return null
+                    return (
+                      <li key={commit.oid}>
+                        <button
+                          type="button"
+                          className={
+                            selectedOid === commit.oid
+                              ? 'history__row history__row--selected'
+                              : 'history__row'
+                          }
+                          data-testid="history-commit"
+                          aria-current={selectedOid === commit.oid ? 'true' : undefined}
+                          title={t('history.checkout.hint')}
+                          onClick={() => onSelect(commit)}
+                          onDoubleClick={() => beginCheckout(commit)}
+                        >
+                          <GraphCell row={row} lanes={layout.lanes} />
+                          <time
+                            className="history__date"
+                            dateTime={commit.authorDate}
+                            title={formatDate(commit.authorDate, i18n.language)}
+                          >
+                            {formatShortDate(commit.authorDate, i18n.language)}
+                          </time>
+                          <span className="history__message">
                             <span className="history__subject" title={commit.subject}>
                               {commit.subject === '' ? t('history.noSubject') : commit.subject}
                             </span>
                             {commit.refs.length > 0 && (
-                              <span className="history__refs">
+                              <span
+                                className="history__refs"
+                                title={commit.refs.map((reference) => reference.name).join(', ')}
+                              >
                                 {commit.refs.map((reference) => (
                                   <HistoryRefChip
                                     key={`${reference.kind}:${reference.name}`}
@@ -618,30 +792,57 @@ export function HistoryPanel({
                                 ))}
                               </span>
                             )}
-                          </div>
-                          <div className="history__details">
-                            <code className="history__id">{commit.shortId}</code>
-                            <span className="history__author" title={commit.authorEmail}>
-                              {commit.authorName}
-                            </span>
-                            <span className="history__dot" aria-hidden="true" />
-                            <time
-                              className="history__date"
-                              dateTime={commit.authorDate}
-                              title={commit.authorDate}
-                            >
-                              {formatDate(commit.authorDate, i18n.language)}
-                            </time>
-                          </div>
-                        </div>
-                      </button>
-                    </li>
-                  )
-                })}
-              </ol>
+                          </span>
+                          {expanded && (
+                            <>
+                              <span
+                                className="history__author"
+                                title={
+                                  commit.authorEmail === ''
+                                    ? commit.authorName
+                                    : `${commit.authorName} <${commit.authorEmail}>`
+                                }
+                              >
+                                {commit.authorName}
+                              </span>
+                              <code className="history__id" title={commit.oid}>
+                                {commit.shortId}
+                              </code>
+                            </>
+                          )}
+                        </button>
+                      </li>
+                    )
+                  })}
+                </ol>
+                <div
+                  className={
+                    graphResizing
+                      ? 'history__graph-resizer history__graph-resizer--active'
+                      : 'history__graph-resizer'
+                  }
+                  data-testid="history-graph-resizer"
+                  role="separator"
+                  aria-orientation="vertical"
+                  aria-label={t('history.resizeGraph')}
+                  aria-valuemin={Math.round(minGraphColumnWidth)}
+                  aria-valuemax={Math.round(maxGraphColumnWidth)}
+                  aria-valuenow={graphColumn}
+                  title={t('history.resizeGraph')}
+                  tabIndex={0}
+                  onPointerDown={beginGraphResize}
+                  onPointerMove={moveGraphResize}
+                  onPointerUp={endGraphResize}
+                  onPointerCancel={endGraphResize}
+                  onKeyDown={resizeGraphWithKeyboard}
+                  onDoubleClick={() => setDraggedGraphWidth(null)}
+                />
+              </div>
               {view.data.truncated && (
                 <p className="history__sidebar-note" data-testid="history-truncated">
-                  {t('history.truncated', { count: view.data.commits.length })}
+                  {loadingMore
+                    ? t('history.loadingMore')
+                    : t('history.truncated', { count: view.data.commits.length })}
                 </p>
               )}
             </>

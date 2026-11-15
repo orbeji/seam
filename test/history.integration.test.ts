@@ -82,6 +82,25 @@ describe('readRepositoryHistory', () => {
     ])
   })
 
+  it('reads one page at a time and says whether more commits remain', async () => {
+    const repo = await createRepository()
+    repositories.push(repo)
+
+    for (const message of ['First', 'Second', 'Third']) {
+      repo.write('a.txt', `${message}\n`)
+      await repo.git(['add', '.'])
+      await repo.git(['commit', '-qm', message])
+    }
+
+    const page = await readRepositoryHistory(runner, repo.path, 2)
+    expect(page.commits.map((commit) => commit.subject)).toEqual(['Third', 'Second'])
+    expect(page.truncated).toBe(true)
+
+    const rest = await readRepositoryHistory(runner, repo.path, 3)
+    expect(rest.commits.map((commit) => commit.subject)).toEqual(['Third', 'Second', 'First'])
+    expect(rest.truncated).toBe(false)
+  })
+
   it('returns an empty history for a repository without commits', async () => {
     const repo = await createRepository()
     repositories.push(repo)

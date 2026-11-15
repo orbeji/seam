@@ -85,26 +85,32 @@ export function layoutGraph(commits: readonly GraphCommit[]): GraphLayout {
     const next: Array<Lane | null> = before.map((lane) =>
       lane.oid === commit.oid ? null : { ...lane }
     )
+    // A line leading down to a parent takes the colour of the branch it leaves
+    // from, so a branch keeps its own colour until it joins another one. Only a
+    // lane this commit opens is drawn with the new branch's colour.
     const parentColors = new Map<string, number>()
 
     for (const [index, parent] of commit.parents.entries()) {
-      let target = next.findIndex((lane) => lane?.oid === parent)
-      if (target === -1) {
-        // The first parent continues in the commit's lane; another parent opens
-        // the first free lane, or one at the right when there is none.
-        target =
-          index === 0 && next[nodeLane] === null
-            ? nodeLane
-            : next.findIndex((lane) => lane === null)
-        if (target === -1) {
-          target = next.length
-          next.push(null)
-        }
-        const color = index === 0 ? nodeColor : nextColor
-        if (index !== 0) nextColor += 1
-        next[target] = { oid: parent, color }
+      const existing = next.findIndex((lane) => lane?.oid === parent)
+      if (existing !== -1) {
+        // Another lane already carries this parent: this line joins it rather
+        // than opening a lane of its own.
+        parentColors.set(parent, nodeColor)
+        continue
       }
-      parentColors.set(parent, next[target]!.color)
+
+      // The first parent continues in the commit's lane; another parent opens
+      // the first free lane, or one at the right when there is none.
+      let target =
+        index === 0 && next[nodeLane] === null ? nodeLane : next.findIndex((lane) => lane === null)
+      if (target === -1) {
+        target = next.length
+        next.push(null)
+      }
+      const color = index === 0 ? nodeColor : nextColor
+      if (index !== 0) nextColor += 1
+      next[target] = { oid: parent, color }
+      parentColors.set(parent, color)
     }
 
     const after: Lane[] = next.filter((lane): lane is Lane => lane !== null)
@@ -122,9 +128,10 @@ export function layoutGraph(commits: readonly GraphCommit[]): GraphLayout {
     }
 
     // Several children can point at the same commit; each line converges on the
-    // node from the row's top edge.
+    // node from the row's top edge, keeping the colour of the child it comes
+    // from instead of taking the colour of the lane that owns the node.
     for (const index of matched) {
-      edges.push({ from: index, to: nodeLane, color: nodeColor, side: 'top' })
+      edges.push({ from: index, to: nodeLane, color: before[index]!.color, side: 'top' })
     }
 
     for (const parent of commit.parents) {

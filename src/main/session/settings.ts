@@ -4,8 +4,11 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 import {
   DEFAULT_HISTORY_WIDTH,
+  GRAPH_PALETTES,
   MAX_HISTORY_WIDTH,
   MIN_HISTORY_WIDTH,
+  type BranchOrderPreference,
+  type GraphPalettePreference,
   type HighlightPreference,
   type SettingsData,
   type SettingsPatch,
@@ -28,6 +31,10 @@ interface StoredSettings {
   highlight: HighlightPreference
   /** The syntax colours the code viewers use in the light colour scheme. */
   syntaxTheme: SyntaxThemePreference
+  /** The colours the commit graph cycles through for its lanes. */
+  graphPalette: GraphPalettePreference
+  /** The direction the branch menu lists folders and branches in. */
+  branchOrder: BranchOrderPreference
   /** Whether unchanged lines are folded in the viewer by default. */
   collapse: boolean
   /** Whether commits include the `Signed-off-by` trailer by default. */
@@ -47,6 +54,8 @@ const DEFAULT_THEME: ThemePreference = 'dark'
 const DEFAULT_WHITESPACE: WhitespacePreference = 'none'
 const DEFAULT_HIGHLIGHT: HighlightPreference = 'words'
 const DEFAULT_SYNTAX_THEME: SyntaxThemePreference = 'seam'
+const DEFAULT_GRAPH_PALETTE: GraphPalettePreference = 'classic'
+const DEFAULT_BRANCH_ORDER: BranchOrderPreference = 'ascending'
 
 const DEFAULTS: StoredSettings = {
   runHooks: true,
@@ -55,6 +64,8 @@ const DEFAULTS: StoredSettings = {
   whitespace: DEFAULT_WHITESPACE,
   highlight: DEFAULT_HIGHLIGHT,
   syntaxTheme: DEFAULT_SYNTAX_THEME,
+  graphPalette: DEFAULT_GRAPH_PALETTE,
+  branchOrder: DEFAULT_BRANCH_ORDER,
   collapse: false,
   signoff: false,
   crlfWarning: true,
@@ -96,6 +107,93 @@ function parseSyntaxTheme(value: unknown): SyntaxThemePreference {
   return value === 'seam' || value === 'github' || value === 'vivid' ? value : DEFAULT_SYNTAX_THEME
 }
 
+function parseGraphPalette(value: unknown): GraphPalettePreference {
+  return GRAPH_PALETTES.includes(value as GraphPalettePreference)
+    ? (value as GraphPalettePreference)
+    : DEFAULT_GRAPH_PALETTE
+}
+
+function parseBranchOrder(value: unknown): BranchOrderPreference {
+  return value === 'ascending' || value === 'descending' ? value : DEFAULT_BRANCH_ORDER
+}
+
+/**
+ * Narrows an IPC payload to a change of the stored preferences. Every field is
+ * checked here, so a renderer cannot store a value the interface would not
+ * understand; a field it does not know is ignored, not an error.
+ */
+export function parseSettingsPatch(value: unknown): SettingsPatch | null {
+  if (typeof value !== 'object' || value === null) return null
+  const raw = value as Record<string, unknown>
+  const patch: SettingsPatch = {}
+  if ('runHooks' in raw) {
+    if (typeof raw['runHooks'] !== 'boolean') return null
+    patch.runHooks = raw['runHooks']
+  }
+  if ('language' in raw) {
+    if (raw['language'] !== null && typeof raw['language'] !== 'string') return null
+    patch.language = raw['language']
+  }
+  if ('theme' in raw) {
+    if (raw['theme'] !== 'dark' && raw['theme'] !== 'light') return null
+    patch.theme = raw['theme']
+  }
+  if ('whitespace' in raw) {
+    const whitespace = raw['whitespace']
+    if (
+      whitespace !== 'none' &&
+      whitespace !== 'trim' &&
+      whitespace !== 'ignore' &&
+      whitespace !== 'ignore-and-blank'
+    ) {
+      return null
+    }
+    patch.whitespace = whitespace
+  }
+  if ('highlight' in raw) {
+    const highlight = raw['highlight']
+    if (
+      highlight !== 'words' &&
+      highlight !== 'lines' &&
+      highlight !== 'split' &&
+      highlight !== 'characters' &&
+      highlight !== 'none'
+    ) {
+      return null
+    }
+    patch.highlight = highlight
+  }
+  if ('syntaxTheme' in raw) {
+    const syntaxTheme = raw['syntaxTheme']
+    if (syntaxTheme !== 'seam' && syntaxTheme !== 'github' && syntaxTheme !== 'vivid') return null
+    patch.syntaxTheme = syntaxTheme
+  }
+  if ('graphPalette' in raw) {
+    const graphPalette = raw['graphPalette']
+    if (!GRAPH_PALETTES.includes(graphPalette as GraphPalettePreference)) return null
+    patch.graphPalette = graphPalette as GraphPalettePreference
+  }
+  if ('branchOrder' in raw) {
+    const branchOrder = raw['branchOrder']
+    if (branchOrder !== 'ascending' && branchOrder !== 'descending') return null
+    patch.branchOrder = branchOrder
+  }
+  if ('collapse' in raw) {
+    if (typeof raw['collapse'] !== 'boolean') return null
+    patch.collapse = raw['collapse']
+  }
+  if ('signoff' in raw) {
+    if (typeof raw['signoff'] !== 'boolean') return null
+    patch.signoff = raw['signoff']
+  }
+  if ('historyWidth' in raw) {
+    const historyWidth = raw['historyWidth']
+    if (typeof historyWidth !== 'number' || !Number.isFinite(historyWidth)) return null
+    patch.historyWidth = historyWidth
+  }
+  return patch
+}
+
 /** Keeps a stored or patched panel width inside the limits the interface draws. */
 function parseHistoryWidth(value: unknown): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) return DEFAULT_HISTORY_WIDTH
@@ -123,6 +221,8 @@ export class Settings {
       whitespace: this.value.whitespace,
       highlight: this.value.highlight,
       syntaxTheme: this.value.syntaxTheme,
+      graphPalette: this.value.graphPalette,
+      branchOrder: this.value.branchOrder,
       collapse: this.value.collapse,
       signoff: this.value.signoff,
       historyWidth: this.value.historyWidth
@@ -137,6 +237,9 @@ export class Settings {
     if (patch.whitespace !== undefined) this.value.whitespace = patch.whitespace
     if (patch.highlight !== undefined) this.value.highlight = patch.highlight
     if (patch.syntaxTheme !== undefined) this.value.syntaxTheme = patch.syntaxTheme
+    if (patch.graphPalette !== undefined) this.value.graphPalette = patch.graphPalette
+    if (patch.branchOrder !== undefined)
+      this.value.branchOrder = parseBranchOrder(patch.branchOrder)
     if (patch.collapse !== undefined) this.value.collapse = patch.collapse
     if (patch.signoff !== undefined) this.value.signoff = patch.signoff
     if (patch.historyWidth !== undefined)
@@ -185,6 +288,8 @@ export class Settings {
         whitespace: parseWhitespace(stored['whitespace']),
         highlight: parseHighlight(stored['highlight']),
         syntaxTheme: parseSyntaxTheme(stored['syntaxTheme']),
+        graphPalette: parseGraphPalette(stored['graphPalette']),
+        branchOrder: parseBranchOrder(stored['branchOrder']),
         collapse: typeof stored['collapse'] === 'boolean' ? stored['collapse'] : DEFAULTS.collapse,
         signoff: typeof stored['signoff'] === 'boolean' ? stored['signoff'] : DEFAULTS.signoff,
         historyWidth: parseHistoryWidth(stored['historyWidth']),

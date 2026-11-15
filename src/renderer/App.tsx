@@ -33,6 +33,7 @@ import type {
   PushState,
   WorktreeStatus
 } from '../shared/git'
+import { HISTORY_PAGE_SIZE } from '../shared/git'
 import {
   DEFAULT_HISTORY_WIDTH,
   MAX_HISTORY_WIDTH,
@@ -371,6 +372,9 @@ export default function App() {
   // The commit graph panel: null before a repository is open, then loading,
   // showing the read commits, or explaining why Git could not read them.
   const [historyView, setHistoryView] = useState<HistoryView | null>(null)
+  // Whether the history is reading the next page after the user reached the end.
+  const [historyLoadingMore, setHistoryLoadingMore] = useState(false)
+  const historyLoadingMoreRef = useRef(false)
   // Whether the persistent history panel is shown beside the file sidebar.
   const [historyVisible, setHistoryVisible] = useState(true)
   // Whether the history panel fills the window instead of sharing it with the
@@ -677,18 +681,46 @@ export default function App() {
     }
   }, [currentRepo])
 
-  /** Reads the commit graph of the open repository without flashing "loading". */
+  /** Reads the first page of the commit graph without flashing "loading". */
   const loadHistory = useCallback(async () => {
     const repo = repoRef.current
     if (repo === null) return
     const request = historyRequest.current + 1
     historyRequest.current = request
+    historyLoadingMoreRef.current = false
+    setHistoryLoadingMore(false)
     setHistoryView((current) => (current?.state === 'ready' ? current : { state: 'loading' }))
-    const result = await window.seam.readRepositoryHistory(repo)
+    const result = await window.seam.readRepositoryHistory(repo, HISTORY_PAGE_SIZE)
     if (request !== historyRequest.current) return
     if (result.ok) setHistoryView({ state: 'ready', data: result.value })
     else setHistoryView({ state: 'error', message: result.message })
   }, [])
+
+  /**
+   * Reads the next page of commits once the list reaches its end. The graph is
+   * laid out again over every commit read so far, so the new page continues the
+   * lanes instead of starting its own.
+   */
+  const loadMoreHistory = useCallback(async () => {
+    const repo = repoRef.current
+    const current = historyView
+    if (repo === null || current?.state !== 'ready' || !current.data.truncated) return
+    if (historyLoadingMoreRef.current) return
+    const request = historyRequest.current + 1
+    historyRequest.current = request
+    historyLoadingMoreRef.current = true
+    setHistoryLoadingMore(true)
+    const result = await window.seam.readRepositoryHistory(
+      repo,
+      current.data.commits.length + HISTORY_PAGE_SIZE
+    )
+    if (request === historyRequest.current) {
+      if (result.ok) setHistoryView({ state: 'ready', data: result.value })
+      else setHistoryView({ state: 'error', message: result.message })
+      historyLoadingMoreRef.current = false
+      setHistoryLoadingMore(false)
+    }
+  }, [historyView])
 
   const refresh = useCallback(async () => {
     const repo = repoRef.current
@@ -818,6 +850,9 @@ export default function App() {
         await refresh()
         await loadBranches()
         await loadHistory()
+        // The create form has done its job once the branch exists.
+        setBranchOpen(false)
+        setBranchError(null)
         showSyncNotice('ok', t('branch.created', { branch: name }))
         return true
       } finally {
@@ -837,7 +872,7 @@ export default function App() {
       try {
         const result = await window.seam.renameBranch({ repo, name, newName })
         if (!result.ok) {
-          setBranchError(result.message)
+          showSyncNotice('error', result.message)
           return false
         }
         await refresh()
@@ -862,7 +897,7 @@ export default function App() {
       try {
         const result = await window.seam.deleteBranch({ repo, name, force })
         if (!result.ok) {
-          setBranchError(result.message)
+          showSyncNotice('error', result.message)
           return false
         }
         await refresh()
@@ -1986,6 +2021,7 @@ export default function App() {
           document.documentElement.style.setProperty('color-scheme', settings.value.theme)
           document.documentElement.setAttribute('data-theme', settings.value.theme)
         }
+        document.documentElement.setAttribute('data-graph-palette', settings.value.graphPalette)
         if (settings.value.language) {
           i18n.changeLanguage(settings.value.language)
         }
@@ -2441,6 +2477,9 @@ export default function App() {
         onSettings={() => setSettingsOpen(true)}
         onLoadBranches={() => void loadBranches()}
         onCheckoutBranch={(branch) => void checkoutBranch(branch)}
+        onRenameBranch={renameBranch}
+        onDeleteBranch={deleteBranch}
+        branchBusy={branchBusy}
         branches={branches}
         loadingBranches={loadingBranches}
         branchesError={branchesError}
@@ -2476,6 +2515,8 @@ export default function App() {
               onCheckedOut={(result) => void historyCheckedOut(result)}
               expanded={historyExpanded}
               onToggleExpanded={toggleHistoryExpanded}
+              loadingMore={historyLoadingMore}
+              onLoadMore={() => void loadMoreHistory()}
             />
           </aside>
         )}
@@ -2711,8 +2752,6 @@ export default function App() {
           busy={branchBusy}
           error={branchError}
           onCreate={createBranch}
-          onRename={renameBranch}
-          onDelete={deleteBranch}
           onClose={() => {
             if (branchBusy) return
             setBranchOpen(false)

@@ -183,6 +183,9 @@ export interface HistoryCommit {
   readonly refs: readonly HistoryRef[]
 }
 
+/** How many commits the history reads at a time. */
+export const HISTORY_PAGE_SIZE = 500
+
 /** The commits the history view draws, newest first, and the refs they carry. */
 export interface RepositoryHistory {
   readonly commits: readonly HistoryCommit[]

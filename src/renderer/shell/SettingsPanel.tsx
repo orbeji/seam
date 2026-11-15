@@ -5,6 +5,8 @@ import { useTranslation } from 'react-i18next'
 import { SUPPORTED_LANGUAGES } from '../i18n'
 import { SETTINGS_CHANGED } from '../settings-events'
 import type {
+  BranchOrderPreference,
+  GraphPalettePreference,
   HighlightPreference,
   SettingsData,
   SettingsPatch,
@@ -39,10 +41,25 @@ const SYNTAX_OPTIONS: readonly [SyntaxThemePreference, string][] = [
   ['vivid', 'settings.syntaxVivid']
 ]
 
+const GRAPH_PALETTE_OPTIONS: readonly [GraphPalettePreference, string][] = [
+  ['classic', 'settings.graphClassic'],
+  ['contrast', 'settings.graphContrast'],
+  ['pastel', 'settings.graphPastel']
+]
+
+const BRANCH_ORDER_OPTIONS: readonly [BranchOrderPreference, string][] = [
+  ['ascending', 'settings.branchOrderAscending'],
+  ['descending', 'settings.branchOrderDescending']
+]
+
+/** The eight lane colours a palette defines, shown beside its name. */
+const GRAPH_SWATCHES = [0, 1, 2, 3, 4, 5, 6, 7] as const
+
 export default function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
   const { t, i18n } = useTranslation()
   const [settings, setSettings] = useState<SettingsData | null>(null)
   const [theme, setTheme] = useState<ThemePreference>('dark')
+  const [graphPalette, setGraphPalette] = useState<GraphPalettePreference>('classic')
   const [language, setLanguage] = useState<string>('')
 
   useEffect(() => {
@@ -53,6 +70,7 @@ export default function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
       if (result.ok) {
         setSettings(result.value)
         setTheme(result.value.theme)
+        setGraphPalette(result.value.graphPalette)
         setLanguage(result.value.language ?? '')
       }
     })
@@ -79,6 +97,15 @@ export default function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
       changeSetting({ theme: next })
       document.documentElement.style.setProperty('color-scheme', next)
       document.documentElement.setAttribute('data-theme', next)
+    },
+    [changeSetting]
+  )
+
+  const changeGraphPalette = useCallback(
+    (next: GraphPalettePreference) => {
+      setGraphPalette(next)
+      changeSetting({ graphPalette: next })
+      document.documentElement.setAttribute('data-graph-palette', next)
     },
     [changeSetting]
   )
@@ -148,6 +175,41 @@ export default function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
             {t('settings.themeLight')}
           </button>
         </div>
+
+        <div className="dialog__label">{t('settings.graphPalette')}</div>
+        <div className="dialog__graph-palette">
+          <select
+            className="dialog__input"
+            data-testid="settings-graph-palette"
+            value={graphPalette}
+            onChange={(e) => changeGraphPalette(e.target.value as GraphPalettePreference)}
+          >
+            {GRAPH_PALETTE_OPTIONS.map(([value, label]) => (
+              <option key={value} value={value}>
+                {t(label)}
+              </option>
+            ))}
+          </select>
+          <div className="dialog__graph-swatches" aria-hidden="true">
+            {GRAPH_SWATCHES.map((index) => (
+              <span key={index} style={{ background: `var(--graph-${index})` }} />
+            ))}
+          </div>
+        </div>
+
+        <div className="dialog__label">{t('settings.branchOrder')}</div>
+        <select
+          className="dialog__input"
+          data-testid="settings-branch-order"
+          value={settings?.branchOrder ?? 'ascending'}
+          onChange={(e) => changeSetting({ branchOrder: e.target.value as BranchOrderPreference })}
+        >
+          {BRANCH_ORDER_OPTIONS.map(([value, label]) => (
+            <option key={value} value={value}>
+              {t(label)}
+            </option>
+          ))}
+        </select>
 
         <div className="dialog__label">{t('settings.syntaxTheme')}</div>
         <select

@@ -40,7 +40,6 @@ import type {
   RenameBranchRequest,
   RepairWorktreesRequest,
   RevertHunksRequest,
-  SettingsPatch,
   StagePathsRequest
 } from '../../shared/ipc'
 import { IPC_CHANNELS } from '../../shared/ipc'
@@ -50,7 +49,7 @@ import type { CommitHistory } from '../session/commit-history'
 import type { GitWatcher } from '../session/git-watcher'
 import type { RecentRepositories } from '../session/recent-repositories'
 import type { RepositoryService } from '../session/repository-service'
-import type { Settings } from '../session/settings'
+import { parseSettingsPatch, type Settings } from '../session/settings'
 
 const OPEN_DIRECTORY: OpenDialogOptions = { properties: ['openDirectory'] }
 
@@ -483,69 +482,6 @@ function parseIdentityWrite(value: unknown): IdentityWriteRequest | null {
   return { repo, name, email, scope }
 }
 
-/** Narrows an IPC payload to a change of the stored preferences. */
-function parseSettingsPatch(value: unknown): SettingsPatch | null {
-  if (typeof value !== 'object' || value === null) return null
-  const raw = value as Record<string, unknown>
-  const patch: SettingsPatch = {}
-  if ('runHooks' in raw) {
-    if (typeof raw['runHooks'] !== 'boolean') return null
-    patch.runHooks = raw['runHooks']
-  }
-  if ('language' in raw) {
-    if (raw['language'] !== null && typeof raw['language'] !== 'string') return null
-    patch.language = raw['language']
-  }
-  if ('theme' in raw) {
-    if (raw['theme'] !== 'dark' && raw['theme'] !== 'light') return null
-    patch.theme = raw['theme']
-  }
-  if ('whitespace' in raw) {
-    const whitespace = raw['whitespace']
-    if (
-      whitespace !== 'none' &&
-      whitespace !== 'trim' &&
-      whitespace !== 'ignore' &&
-      whitespace !== 'ignore-and-blank'
-    ) {
-      return null
-    }
-    patch.whitespace = whitespace
-  }
-  if ('highlight' in raw) {
-    const highlight = raw['highlight']
-    if (
-      highlight !== 'words' &&
-      highlight !== 'lines' &&
-      highlight !== 'split' &&
-      highlight !== 'characters' &&
-      highlight !== 'none'
-    ) {
-      return null
-    }
-    patch.highlight = highlight
-  }
-  if ('syntaxTheme' in raw) {
-    const syntaxTheme = raw['syntaxTheme']
-    if (syntaxTheme !== 'seam' && syntaxTheme !== 'github' && syntaxTheme !== 'vivid') return null
-    patch.syntaxTheme = syntaxTheme
-  }
-  if ('collapse' in raw) {
-    if (typeof raw['collapse'] !== 'boolean') return null
-    patch.collapse = raw['collapse']
-  }
-  if ('signoff' in raw) {
-    if (typeof raw['signoff'] !== 'boolean') return null
-    patch.signoff = raw['signoff']
-  }
-  if ('historyWidth' in raw) {
-    const historyWidth = raw['historyWidth']
-    if (typeof historyWidth !== 'number' || !Number.isFinite(historyWidth)) return null
-    patch.historyWidth = historyWidth
-  }
-  return patch
-}
-
 /** One window's watch over the repository it currently shows. */
 interface WatchEntry {
   readonly repo: string
@@ -796,11 +732,14 @@ export function registerRepositoryHandlers(
     return service.readCommitTemplate(repo)
   })
 
-  ipcMain.handle(IPC_CHANNELS.readRepositoryHistory, (_event, repo: unknown) => {
+  ipcMain.handle(IPC_CHANNELS.readRepositoryHistory, (_event, repo: unknown, limit: unknown) => {
     if (typeof repo !== 'string') {
       return { ok: false, code: 'unknown', message: 'Invalid history request' }
     }
-    return service.readHistory(repo)
+    // A page size from the interface; anything else falls back to the default.
+    const page =
+      typeof limit === 'number' && Number.isInteger(limit) && limit > 0 ? limit : undefined
+    return service.readHistory(repo, page)
   })
 
   ipcMain.handle(IPC_CHANNELS.readCommitChanges, (_event, repo: unknown, commit: unknown) => {

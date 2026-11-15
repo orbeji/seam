@@ -113,6 +113,7 @@ export default function RepositoryTabs({
         {open.map((repo) => {
           const name = repositoryName(repo)
           const selected = repo === active
+          const initial = (name.match(/[a-z0-9]/i)?.[0] ?? '•').toUpperCase()
           return (
             <div
               className={selected ? 'repobar__tab repobar__tab--active' : 'repobar__tab'}
@@ -127,6 +128,9 @@ export default function RepositoryTabs({
                 title={repo}
                 onClick={() => onActivate(repo)}
               >
+                <span className="repobar__tab-mark" aria-hidden="true">
+                  {initial}
+                </span>
                 <span className="repobar__tab-name">{name}</span>
               </button>
               <button
