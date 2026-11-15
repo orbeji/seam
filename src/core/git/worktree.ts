@@ -16,9 +16,74 @@ import { mergeBranch } from './merge'
 import type { GitRunner } from './runner'
 
 /**
- * Parses `git worktree list --porcelain -z`. Each worktree is a block of
- * `key value` records whose lines are NUL-terminated, and a block ends with an
- * empty record. The first block is the main worktree.
+ * Decodes the C-style quoting Git applies to a path that holds a quote, a
+ * backslash or a control character. The runner sets `core.quotePath=false`, so
+ * any other byte arrives as plain UTF-8 and needs no decoding.
+ */
+function unquoteGitPath(value: string): string {
+  if (!value.startsWith('"') || !value.endsWith('"')) return value
+  const bytes: number[] = []
+  for (let index = 1; index < value.length - 1; index += 1) {
+    const char = value[index] as string
+    if (char !== '\\') {
+      bytes.push(...Buffer.from(char, 'utf8'))
+      continue
+    }
+    index += 1
+    const escape = value[index]
+    switch (escape) {
+      case 'a':
+        bytes.push(0x07)
+        break
+      case 'b':
+        bytes.push(0x08)
+        break
+      case 'f':
+        bytes.push(0x0c)
+        break
+      case 'n':
+        bytes.push(0x0a)
+        break
+      case 'r':
+        bytes.push(0x0d)
+        break
+      case 't':
+        bytes.push(0x09)
+        break
+      case 'v':
+        bytes.push(0x0b)
+        break
+      case '\\':
+        bytes.push(0x5c)
+        break
+      case '"':
+        bytes.push(0x22)
+        break
+      default: {
+        if (escape !== undefined && escape >= '0' && escape <= '7') {
+          // Git escapes any other control byte as three octal digits.
+          let octal = escape
+          while (octal.length < 3) {
+            const next = value[index + 1]
+            if (next === undefined || next < '0' || next > '7') break
+            octal += next
+            index += 1
+          }
+          bytes.push(Number.parseInt(octal, 8))
+        } else if (escape !== undefined) {
+          bytes.push(...Buffer.from(escape, 'utf8'))
+        }
+      }
+    }
+  }
+  return Buffer.from(bytes).toString('utf8')
+}
+
+/**
+ * Parses `git worktree list --porcelain`. Each worktree is a block of
+ * `key value` lines and a block ends with an empty line. The first block is the
+ * main worktree. `-z` is not used because `git worktree list` only learned it
+ * in 2.36, while Seam supports 2.30; the path is unquoted here instead.
  */
 export function parseWorktrees(output: string): WorktreeInfo[] {
   interface MutableWorktree {
@@ -40,7 +105,7 @@ export function parseWorktrees(output: string): WorktreeInfo[] {
     current = null
   }
 
-  for (const record of output.split('\0')) {
+  for (const record of output.split(/\r?\n/)) {
     if (record === '') {
       flush()
       continue
@@ -48,7 +113,8 @@ export function parseWorktrees(output: string): WorktreeInfo[] {
 
     const space = record.indexOf(' ')
     const key = space === -1 ? record : record.slice(0, space)
-    const value = space === -1 ? '' : record.slice(space + 1)
+    const raw = space === -1 ? '' : record.slice(space + 1)
+    const value = key === 'worktree' ? unquoteGitPath(raw) : raw
 
     if (key === 'worktree') {
       flush()
@@ -96,7 +162,7 @@ export function parseWorktrees(output: string): WorktreeInfo[] {
 
 /** Lists the worktrees Git knows about, the main one first. */
 export async function listWorktrees(runner: GitRunner, repo: string): Promise<WorktreeInfo[]> {
-  const result = await runner.runOrThrow(['worktree', 'list', '--porcelain', '-z'], {
+  const result = await runner.runOrThrow(['worktree', 'list', '--porcelain'], {
     cwd: repo,
     readOnly: true
   })

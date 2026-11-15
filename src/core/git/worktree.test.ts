@@ -14,8 +14,6 @@ import {
   unlockWorktree
 } from './worktree'
 
-const NUL = '\0'
-
 function result(stdout = '', code = 0): GitRunResult {
   return { stdout: Buffer.from(stdout, 'utf8'), stderr: code === 0 ? '' : 'boom', code }
 }
@@ -57,7 +55,7 @@ const WORKTREE_OUTPUT = [
   `detached`,
   `prunable gitdir file points to non-existent location`,
   ``
-].join(NUL)
+].join('\n')
 
 describe('parseWorktrees', () => {
   it('parses NUL-separated blocks and keeps the main worktree first', () => {
@@ -89,14 +87,38 @@ describe('parseWorktrees', () => {
 
   it('reads a lock without a reason and a bare repository', () => {
     const worktrees = parseWorktrees(
-      [`worktree /repo`, `HEAD aaa111`, `bare`, `locked`, ``].join(NUL)
+      [`worktree /repo`, `HEAD aaa111`, `bare`, `locked`, ``].join('\n')
     )
 
     expect(worktrees[0]).toMatchObject({ bare: true, locked: '', branch: null })
   })
 
+  it('keeps a path with spaces as Git prints it', () => {
+    const worktrees = parseWorktrees(
+      [`worktree C:/my repo`, `HEAD aaa111`, `branch refs/heads/main`, ``].join('\n')
+    )
+
+    expect(worktrees[0]?.path).toBe('C:/my repo')
+  })
+
+  it('unquotes a path Git had to quote', () => {
+    const worktrees = parseWorktrees(
+      [`worktree "C:/repo/say \\"hi\\""`, `HEAD aaa111`, `branch refs/heads/main`, ``].join('\n')
+    )
+
+    expect(worktrees[0]?.path).toBe('C:/repo/say "hi"')
+  })
+
   it('returns nothing for empty output', () => {
     expect(parseWorktrees('')).toEqual([])
+  })
+
+  it('reads CRLF output from Git for Windows', () => {
+    const worktrees = parseWorktrees(
+      [`worktree C:/my repo`, `HEAD aaa111`, `branch refs/heads/main`, ``, ``].join('\r\n')
+    )
+
+    expect(worktrees[0]).toMatchObject({ path: 'C:/my repo', branch: 'main' })
   })
 })
 
@@ -105,9 +127,7 @@ describe('listWorktrees', () => {
     const runner = fakeRunner()
     const worktrees = await listWorktrees(runner as never, '/repo')
 
-    expect(runner.calls.map((call) => call.args)).toEqual([
-      ['worktree', 'list', '--porcelain', '-z']
-    ])
+    expect(runner.calls.map((call) => call.args)).toEqual([['worktree', 'list', '--porcelain']])
     expect(runner.calls[0]?.options.readOnly).toBe(true)
     expect(worktrees.map((worktree) => worktree.path)).toEqual([
       '/repo',
