@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: MIT
 
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { GitRunOptions, GitRunResult } from './runner'
 import {
@@ -109,6 +112,16 @@ describe('parseWorktrees', () => {
     expect(worktrees[0]?.path).toBe('C:/repo/say "hi"')
   })
 
+  it('unquotes a lock reason Git had to quote', () => {
+    const worktrees = parseWorktrees(
+      [`worktree /repo`, `HEAD aaa111`, `branch refs/heads/main`, `locked "say \\"hi\\""`, ``].join(
+        '\n'
+      )
+    )
+
+    expect(worktrees[0]?.locked).toBe('say "hi"')
+  })
+
   it('returns nothing for empty output', () => {
     expect(parseWorktrees('')).toEqual([])
   })
@@ -127,13 +140,67 @@ describe('listWorktrees', () => {
     const runner = fakeRunner()
     const worktrees = await listWorktrees(runner as never, '/repo')
 
-    expect(runner.calls.map((call) => call.args)).toEqual([['worktree', 'list', '--porcelain']])
+    expect(runner.calls.map((call) => call.args)).toEqual([
+      ['worktree', 'list', '--porcelain'],
+      ['rev-parse', '--git-common-dir']
+    ])
     expect(runner.calls[0]?.options.readOnly).toBe(true)
     expect(worktrees.map((worktree) => worktree.path)).toEqual([
       '/repo',
       '/repo/feature',
       '/repo/gone'
     ])
+  })
+
+  it('fills in the lock reason and prune state Git 2.30 does not print', async () => {
+    const common = await mkdtemp(join(tmpdir(), 'seam-worktrees-'))
+    try {
+      const linked = join(common, 'feature')
+      const gone = join(common, 'gone')
+      const admin = join(common, 'worktrees')
+      await mkdir(join(admin, 'feature'), { recursive: true })
+      await mkdir(join(admin, 'gone'), { recursive: true })
+      await writeFile(join(admin, 'feature', 'gitdir'), `${linked}/.git\n`)
+      await writeFile(join(admin, 'feature', 'locked'), 'external drive')
+      await writeFile(join(admin, 'gone', 'gitdir'), `${gone}/.git\n`)
+
+      // Git 2.30 prints neither `locked` nor `prunable` in the porcelain list.
+      const output = [
+        `worktree ${common}`,
+        `HEAD aaa111`,
+        `branch refs/heads/main`,
+        ``,
+        `worktree ${linked}`,
+        `HEAD bbb222`,
+        `branch refs/heads/feature/x`,
+        ``,
+        `worktree ${gone}`,
+        `HEAD ccc333`,
+        `detached`,
+        ``
+      ].join('\n')
+      const calls: FakeCall[] = []
+      const runner = {
+        async run(args: readonly string[], options: GitRunOptions): Promise<GitRunResult> {
+          calls.push({ args, options })
+          return result(`${common}\n`)
+        },
+        async runOrThrow(args: readonly string[], options: GitRunOptions): Promise<GitRunResult> {
+          calls.push({ args, options })
+          return result(args[0] === 'worktree' ? output : `${common}\n`)
+        }
+      }
+
+      const worktrees = await listWorktrees(runner as never, common)
+      expect(worktrees[0]?.locked).toBeNull()
+      expect(worktrees[0]?.prunable).toBeNull()
+      expect(worktrees[1]?.locked).toBe('external drive')
+      expect(worktrees[1]?.prunable).toBeNull()
+      expect(worktrees[2]?.locked).toBeNull()
+      expect(worktrees[2]?.prunable).toBe('gitdir file points to non-existent location')
+    } finally {
+      await rm(common, { recursive: true, force: true })
+    }
   })
 })
 

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 
-import { realpathSync } from 'node:fs'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { existsSync, realpathSync } from 'node:fs'
+import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import type {
   MergeOutcome,
   MergeStrategy,
@@ -114,7 +114,8 @@ export function parseWorktrees(output: string): WorktreeInfo[] {
     const space = record.indexOf(' ')
     const key = space === -1 ? record : record.slice(0, space)
     const raw = space === -1 ? '' : record.slice(space + 1)
-    const value = key === 'worktree' ? unquoteGitPath(raw) : raw
+    // A path or a lock reason can arrive C-quoted; the other values are plain.
+    const value = key === 'worktree' || key === 'locked' ? unquoteGitPath(raw) : raw
 
     if (key === 'worktree') {
       flush()
@@ -160,13 +161,93 @@ export function parseWorktrees(output: string): WorktreeInfo[] {
   return worktrees
 }
 
+/** The lock and prune facts the porcelain output only gained in Git 2.31. */
+interface WorktreeAdminDetails {
+  locked: string | null
+  prunable: string | null
+}
+
+/** Reads one of a worktree's admin files, or null when it does not exist. */
+async function readAdminFile(path: string): Promise<string | null> {
+  try {
+    return await readFile(path, 'utf8')
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Reads the lock reason and the prune reason from `.git/worktrees/<name>`.
+ * `git worktree list --porcelain` only prints those from Git 2.31 onwards, so
+ * on 2.30 they have to come from the admin folder Git keeps for each worktree.
+ */
+async function readAdminDetails(
+  runner: GitRunner,
+  repo: string
+): Promise<Map<string, WorktreeAdminDetails>> {
+  const details = new Map<string, WorktreeAdminDetails>()
+  const common = await runner.run(['rev-parse', '--git-common-dir'], {
+    cwd: repo,
+    readOnly: true
+  })
+  if (common.code !== 0) return details
+
+  const commonDir = resolve(repo, common.stdout.toString('utf8').trim())
+  let names: string[]
+  try {
+    const entries = await readdir(join(commonDir, 'worktrees'), { withFileTypes: true })
+    names = entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name)
+  } catch {
+    // A repository without linked worktrees has no worktrees folder.
+    return details
+  }
+
+  for (const name of names) {
+    const adminDir = join(commonDir, 'worktrees', name)
+    const pointer = await readAdminFile(join(adminDir, 'gitdir'))
+    if (pointer === null) continue
+    // The gitdir file holds the path of the worktree's own `.git` pointer.
+    const gitFile = pointer.replace(/\r?\n$/, '')
+    if (gitFile === '') continue
+
+    const locked = await readAdminFile(join(adminDir, 'locked'))
+    // A locked worktree is left alone even when its folder was deleted.
+    const prunable =
+      locked === null && !existsSync(gitFile) ? 'gitdir file points to non-existent location' : null
+    details.set(canonicalFolder(dirname(gitFile)), {
+      locked: locked === null ? null : locked.replace(/\r?\n$/, ''),
+      prunable
+    })
+  }
+  return details
+}
+
 /** Lists the worktrees Git knows about, the main one first. */
 export async function listWorktrees(runner: GitRunner, repo: string): Promise<WorktreeInfo[]> {
   const result = await runner.runOrThrow(['worktree', 'list', '--porcelain'], {
     cwd: repo,
     readOnly: true
   })
-  return parseWorktrees(result.stdout.toString('utf8'))
+  const worktrees = parseWorktrees(result.stdout.toString('utf8'))
+  // Only linked worktrees can be locked or pruned, so a lone main worktree
+  // needs no second look at Git's admin folders.
+  if (worktrees.every((worktree) => worktree.main)) return worktrees
+
+  const details = await readAdminDetails(runner, repo)
+  if (details.size === 0) return worktrees
+
+  return worktrees.map((worktree) => {
+    if (worktree.main) return worktree
+    for (const [path, admin] of details) {
+      if (!sameWorktreeFolder(path, worktree.path)) continue
+      return {
+        ...worktree,
+        locked: worktree.locked ?? admin.locked,
+        prunable: worktree.prunable ?? admin.prunable
+      }
+    }
+    return worktree
+  })
 }
 
 /**
