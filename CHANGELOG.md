@@ -4,6 +4,16 @@ All notable changes to Seam are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2026-11-15
+
+### Fixed
+
+- The worktree manager works again on the Git 2.30 to 2.35 releases that Seam
+  supports. The list command no longer asks for `-z`, which `git worktree list`
+  only learned in 2.36, and the lock reason and prune state are read from Git's
+  worktree records when the older releases do not print them. Paths and lock
+  reasons Git has to quote still parse.
+
 ## [0.3.0] - 2026-11-15
 
 ### Added
