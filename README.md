@@ -13,6 +13,8 @@ expose the regions the merge editor needs.
 
 ## Screenshots
 
+![Commit history with branches and tags beside each commit](docs/screenshots/history.png)
+
 | Changes                                                                      | Diff                                                                   |
 | ---------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
 | ![Working tree with staged and unstaged files](docs/screenshots/changes.png) | ![Side-by-side diff with line highlighting](docs/screenshots/diff.png) |

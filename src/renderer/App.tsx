@@ -66,6 +66,7 @@ import { clampHistoryWidth, maxHistoryWidth } from './history/panel-width'
 import MergeEditor from './merge/MergeEditor'
 import { splitPath } from './paths'
 import PushDialog, { type PushChoice } from './push/PushDialog'
+import { followResizeDrag } from './resize-drag'
 import BranchDialog from './shell/BranchDialog'
 import CloneDialog from './shell/CloneDialog'
 import GitRequired from './shell/GitRequired'
@@ -385,11 +386,7 @@ export default function App() {
   const [historyWidth, setHistoryWidth] = useState(DEFAULT_HISTORY_WIDTH)
   const historyWidthRef = useRef(DEFAULT_HISTORY_WIDTH)
   const [resizingHistory, setResizingHistory] = useState(false)
-  const historyResizeStart = useRef<{
-    pointerId: number
-    x: number
-    width: number
-  } | null>(null)
+  const historyResizeStop = useRef<(() => void) | null>(null)
   // The commit whose files and diff are open, or null while the working tree
   // is showing. The graph stays selected on this commit.
   const [selectedCommit, setSelectedCommit] = useState<HistoryCommit | null>(null)
@@ -1401,41 +1398,24 @@ export default function App() {
   }, [])
 
   /** Starts a drag from wherever the panel's right edge is now. */
-  const startHistoryResize = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
-    if (event.button !== 0) return
-    event.preventDefault()
-    event.currentTarget.setPointerCapture(event.pointerId)
-    historyResizeStart.current = {
-      pointerId: event.pointerId,
-      x: event.clientX,
-      width: historyWidthRef.current
-    }
-    setResizingHistory(true)
-  }, [])
-
-  /** Follows the pointer, moving the panel's right edge with it. */
-  const moveHistoryResize = useCallback(
+  const startHistoryResize = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
-      const start = historyResizeStart.current
-      if (start === null || start.pointerId !== event.pointerId) return
-      applyHistoryWidth(start.width + event.clientX - start.x)
+      // A drag whose release was lost would fight this one over the same edge.
+      historyResizeStop.current?.()
+      const start = { x: event.clientX, width: historyWidthRef.current }
+      const stop = followResizeDrag(event, {
+        onMove: (clientX) => applyHistoryWidth(start.width + clientX - start.x),
+        onEnd: () => {
+          historyResizeStop.current = null
+          setResizingHistory(false)
+          saveHistoryWidth()
+        }
+      })
+      if (stop === null) return
+      historyResizeStop.current = stop
+      setResizingHistory(true)
     },
-    [applyHistoryWidth]
-  )
-
-  /** Ends the drag and stores the width it reached. */
-  const endHistoryResize = useCallback(
-    (event: ReactPointerEvent<HTMLDivElement>) => {
-      const start = historyResizeStart.current
-      if (start === null || start.pointerId !== event.pointerId) return
-      historyResizeStart.current = null
-      setResizingHistory(false)
-      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-        event.currentTarget.releasePointerCapture(event.pointerId)
-      }
-      saveHistoryWidth()
-    },
-    [saveHistoryWidth]
+    [applyHistoryWidth, saveHistoryWidth]
   )
 
   /** Returns the panel to the width it opens at. */
@@ -2533,9 +2513,6 @@ export default function App() {
             tabIndex={0}
             data-testid="history-resizer"
             onPointerDown={startHistoryResize}
-            onPointerMove={moveHistoryResize}
-            onPointerUp={endHistoryResize}
-            onPointerCancel={endHistoryResize}
             onDoubleClick={resetHistoryWidth}
             onKeyDown={resizeHistoryWithKeyboard}
           />

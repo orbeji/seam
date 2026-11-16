@@ -62,6 +62,18 @@ suite('README screenshots', () => {
         .click()
       await page.waitForSelector('[data-testid=diff]')
       await page.waitForTimeout(500)
+      // Opening a file scrolls its entry into view, which hides the staged
+      // group; scroll the list back so the screenshot shows both groups.
+      await page
+        .locator('.sidebar__scroll')
+        .first()
+        .evaluate((element) => {
+          element.scrollTop = 0
+        })
+      await page.waitForTimeout(200)
+      // Park the pointer over the diff so no entry keeps a hover highlight.
+      await page.mouse.move(1000, 400)
+      await page.waitForTimeout(100)
       await page.screenshot({ path: join(output, 'diff.png') })
     } finally {
       await application.close()
@@ -80,6 +92,21 @@ suite('README screenshots', () => {
       await page.waitForSelector('[data-testid=merge-editor]')
       await page.waitForTimeout(500)
       await page.screenshot({ path: join(output, 'merge-editor.png') })
+    } finally {
+      await application.close()
+    }
+  }, 90_000)
+
+  it('shows the commit graph with branches and tags', async () => {
+    const application = await launch(samples.showcase)
+    try {
+      const page = await application.firstWindow()
+      await page.waitForSelector('[data-testid=history-commits]')
+      // The expanded view gives the graph the whole window, so the ref pills
+      // beside each node are not clipped by the sidebar's width.
+      await page.click('[data-testid=history-expand]')
+      await page.waitForTimeout(500)
+      await page.screenshot({ path: join(output, 'history.png') })
     } finally {
       await application.close()
     }

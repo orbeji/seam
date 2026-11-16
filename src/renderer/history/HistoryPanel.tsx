@@ -22,6 +22,7 @@ import type {
   RepositoryHistory
 } from '../../shared/git'
 import { splitPath } from '../paths'
+import { followResizeDrag } from '../resize-drag'
 import { checkoutTarget, type CheckoutTarget } from './checkout'
 import { layoutGraph, type GraphEdge, type GraphRow } from './graph'
 
@@ -80,7 +81,7 @@ const DEFAULT_VISIBLE_LANES = 3
 const MIN_GRAPH_WIDTH = 16
 const MAX_GRAPH_WIDTH = 720
 /** Room the commit's own columns keep beside the graph. */
-const MIN_TEXT_WIDTH = 180
+const MIN_TEXT_WIDTH = 140
 
 const GRAPH_COLORS = [
   'var(--graph-0)',
@@ -92,6 +93,15 @@ const GRAPH_COLORS = [
   'var(--graph-6)',
   'var(--graph-7)'
 ] as const
+
+/** The narrower fonts make a ref name roughly this wide per character. */
+const REF_CHAR_WIDTH = 6.1
+/** The pill's horizontal padding and border. */
+const REF_PILL_CHROME = 14
+/** The gap between the node and the first pill, and between pills. */
+const REF_PILL_GAP = 4
+/** The tag or sync icon and the space it keeps from its name. */
+const REF_ICON_WIDTH = 12
 
 /** The letter a terminal shows for each kind of change. */
 const STATUS_LETTER: Record<CommitFileStatus, string> = {
@@ -118,6 +128,19 @@ function laneX(lane: number): number {
   return GUTTER_PADDING + lane * LANE_WIDTH
 }
 
+/** An estimate wide enough to lay out a commit's ref pills before it renders. */
+function refsPillWidth(refs: readonly HistoryRef[]): number {
+  if (refs.length === 0) return 0
+  const pills = refs.reduce((total, reference) => {
+    const icon =
+      reference.kind === 'tag' || (reference.remotes !== undefined && reference.remotes.length > 0)
+        ? REF_ICON_WIDTH
+        : 0
+    return total + REF_PILL_CHROME + reference.name.length * REF_CHAR_WIDTH + icon
+  }, 0)
+  return pills + (refs.length - 1) * REF_PILL_GAP
+}
+
 /** The path of one edge, curved when it moves sideways between rows. */
 function edgePath(edge: GraphEdge, height: number, center: number): string {
   const x1 = laneX(edge.from)
@@ -138,11 +161,20 @@ function edgePath(edge: GraphEdge, height: number, center: number): string {
 }
 
 /**
- * Draws one commit's lines and node at a fixed lane spacing. The cell is as
- * wide as the column, so narrowing the column only hides the rightmost lanes
- * instead of redrawing the graph at a different spacing.
+ * Draws one commit's lines, node and ref pills at a fixed lane spacing. The
+ * cell is as wide as the column, so narrowing the column only hides the
+ * rightmost lanes and pills instead of redrawing the graph at a different
+ * spacing.
  */
-function GraphCell({ row, lanes }: { readonly row: GraphRow; readonly lanes: number }) {
+function GraphCell({
+  row,
+  lanes,
+  refs
+}: {
+  readonly row: GraphRow
+  readonly lanes: number
+  readonly refs: readonly HistoryRef[]
+}) {
   const width = naturalGraphWidth(lanes)
   const color = colorOf(row.color)
   const cell = useRef<HTMLDivElement>(null)
@@ -165,8 +197,8 @@ function GraphCell({ row, lanes }: { readonly row: GraphRow; readonly lanes: num
   const center = height / 2
 
   return (
-    <div ref={cell} className="history__graph" aria-hidden="true">
-      <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
+    <div ref={cell} className="history__graph">
+      <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} aria-hidden="true">
         {row.edges.map((edge, index) => (
           <path
             key={`${edge.side}-${edge.from}-${edge.to}-${index}`}
@@ -179,6 +211,18 @@ function GraphCell({ row, lanes }: { readonly row: GraphRow; readonly lanes: num
         ))}
         <circle cx={laneX(row.lane)} cy={center} r={4} fill={color} />
       </svg>
+      {refs.length > 0 && (
+        <span
+          className="history__node-refs"
+          style={{ left: `${laneX(row.lane) + 8}px` }}
+          title={refs.map((reference) => reference.name).join(', ')}
+          data-testid="history-node-refs"
+        >
+          {refs.map((reference) => (
+            <HistoryRefChip key={`${reference.kind}:${reference.name}`} reference={reference} />
+          ))}
+        </span>
+      )}
     </div>
   )
 }
@@ -452,9 +496,12 @@ export function HistoryPanel({
   } | null>(null)
   const graphColumnWidth = draggedGraphWidth?.repo === repo ? draggedGraphWidth.width : null
   const [graphResizing, setGraphResizing] = useState(false)
-  const graphResize = useRef<{ readonly startX: number; readonly startWidth: number } | null>(null)
+  const graphResizeStop = useRef<(() => void) | null>(null)
   const commitsRef = useRef<HTMLDivElement>(null)
   const [commitsWidth, setCommitsWidth] = useState(0)
+
+  // Leaving the panel mid-drag must not leave the window listening for pointers.
+  useEffect(() => () => graphResizeStop.current?.(), [])
 
   // The panel can be dragged wider, so the graph's own limit depends on the
   // room its rows actually have.
@@ -484,16 +531,18 @@ export function HistoryPanel({
   // The sidebar opens at most three lanes wide, so the commit message keeps the
   // rest of the panel; the full view has room for the whole graph. The lanes
   // keep their fixed spacing either way, so a narrow column simply hides the
-  // rightmost.
-  const autoGraphColumnWidth =
-    layout === null
-      ? MIN_GRAPH_WIDTH
-      : Math.min(
-          naturalGraphWidth(
-            expanded ? layout.lanes : Math.min(layout.lanes, DEFAULT_VISIBLE_LANES)
-          ),
-          maxGraphColumnWidth
-        )
+  // rightmost. A commit's ref pills also widen the column beside its node.
+  const autoGraphColumnWidth = useMemo(() => {
+    if (layout === null || view.state !== 'ready') return MIN_GRAPH_WIDTH
+    const visibleLanes = expanded ? layout.lanes : Math.min(layout.lanes, DEFAULT_VISIBLE_LANES)
+    let width = naturalGraphWidth(visibleLanes)
+    for (const [index, commit] of view.data.commits.entries()) {
+      const row = layout.rows[index]
+      if (row === undefined || row.lane >= visibleLanes || commit.refs.length === 0) continue
+      width = Math.max(width, laneX(row.lane) + 8 + refsPillWidth(commit.refs) + GUTTER_PADDING)
+    }
+    return Math.min(width, maxGraphColumnWidth)
+  }, [layout, view, expanded, maxGraphColumnWidth])
 
   const graphColumn = Math.round(
     graphColumnWidth === null
@@ -509,27 +558,21 @@ export function HistoryPanel({
   }
 
   const beginGraphResize = (event: ReactPointerEvent<HTMLDivElement>): void => {
-    if (event.button !== 0) return
-    event.preventDefault()
     event.stopPropagation()
-    event.currentTarget.setPointerCapture(event.pointerId)
-    graphResize.current = { startX: event.clientX, startWidth: graphColumn }
+    // A drag whose release was lost would fight this one over the same edge.
+    graphResizeStop.current?.()
+    const startX = event.clientX
+    const startWidth = graphColumn
+    const stop = followResizeDrag(event, {
+      onMove: (clientX) => setGraphWidth(startWidth + clientX - startX),
+      onEnd: () => {
+        graphResizeStop.current = null
+        setGraphResizing(false)
+      }
+    })
+    if (stop === null) return
+    graphResizeStop.current = stop
     setGraphResizing(true)
-  }
-
-  const moveGraphResize = (event: ReactPointerEvent<HTMLDivElement>): void => {
-    const start = graphResize.current
-    if (start === null) return
-    setGraphWidth(start.startWidth + (event.clientX - start.startX))
-  }
-
-  const endGraphResize = (event: ReactPointerEvent<HTMLDivElement>): void => {
-    if (graphResize.current === null) return
-    graphResize.current = null
-    setGraphResizing(false)
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId)
-    }
   }
 
   const resizeGraphWithKeyboard = (event: ReactKeyboardEvent<HTMLDivElement>): void => {
@@ -767,7 +810,7 @@ export function HistoryPanel({
                           onClick={() => onSelect(commit)}
                           onDoubleClick={() => beginCheckout(commit)}
                         >
-                          <GraphCell row={row} lanes={layout.lanes} />
+                          <GraphCell row={row} lanes={layout.lanes} refs={commit.refs} />
                           <time
                             className="history__date"
                             dateTime={commit.authorDate}
@@ -779,19 +822,6 @@ export function HistoryPanel({
                             <span className="history__subject" title={commit.subject}>
                               {commit.subject === '' ? t('history.noSubject') : commit.subject}
                             </span>
-                            {commit.refs.length > 0 && (
-                              <span
-                                className="history__refs"
-                                title={commit.refs.map((reference) => reference.name).join(', ')}
-                              >
-                                {commit.refs.map((reference) => (
-                                  <HistoryRefChip
-                                    key={`${reference.kind}:${reference.name}`}
-                                    reference={reference}
-                                  />
-                                ))}
-                              </span>
-                            )}
                           </span>
                           {expanded && (
                             <>
@@ -831,9 +861,6 @@ export function HistoryPanel({
                   title={t('history.resizeGraph')}
                   tabIndex={0}
                   onPointerDown={beginGraphResize}
-                  onPointerMove={moveGraphResize}
-                  onPointerUp={endGraphResize}
-                  onPointerCancel={endGraphResize}
                   onKeyDown={resizeGraphWithKeyboard}
                   onDoubleClick={() => setDraggedGraphWidth(null)}
                 />

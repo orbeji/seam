@@ -1202,6 +1202,16 @@ textarea {
   outline: none;
 }
 
+/* While an edge is dragged the whole window keeps the resize cursor and stops
+   selecting text, even when the pointer leaves the thin strip. The class is
+   added by `followResizeDrag`, which follows the drag on the window because
+   pointer capture is not reliable on every Linux session. */
+body.resize-drag,
+body.resize-drag * {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+
 .history__sidebar {
   flex: 1;
   min-height: 0;
@@ -4724,6 +4734,24 @@ textarea {
 
 .history__graph svg {
   display: block;
+}
+
+/* A commit's branches and tags sit beside its node as pills, inside the graph's
+   own column, and are clipped when the column is dragged narrow. */
+.history__node-refs {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  overflow: hidden;
+  transform: translateY(-50%);
+}
+
+.history__node-refs .history__ref {
+  flex: none;
 }
 
 /* Every commit is one line: date, message with its refs, author and then the

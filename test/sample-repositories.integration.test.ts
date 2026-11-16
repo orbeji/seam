@@ -52,6 +52,7 @@ describe('createSampleRepositories', () => {
       'conflicts',
       'mixed',
       'rebase',
+      'showcase',
       'stash'
     ])
   })
@@ -132,13 +133,48 @@ describe('createSampleRepositories', () => {
     expect(status.entries.map((entry) => entry.path)).toEqual(['f.txt'])
   })
 
+  it('keeps a GitFlow history with branches and tags', async () => {
+    const refs = await runner.run(
+      ['for-each-ref', '--format=%(refname:short)', 'refs/heads', 'refs/tags'],
+      { cwd: samples.showcase }
+    )
+    expect(refs.stdout.toString('utf8').trim().split('\n')).toEqual(
+      expect.arrayContaining([
+        'master',
+        'develop',
+        'feature/analytics',
+        'fix/cart-total',
+        'release/1.2',
+        'hotfix/1.1.1',
+        'v1.0.0',
+        'v1.0.1',
+        'v1.1.0',
+        'v1.1.1',
+        'v1.2.0'
+      ])
+    )
+
+    const status = await readStatus(runner, samples.showcase)
+    expect(status.branch.head).toBe('develop')
+    expect(status.entries).toEqual([])
+    expect(await detectOperation(runner, samples.showcase)).toBeNull()
+  })
+
   it('prints the four lists of each repository', async () => {
     const blocks: string[] = []
-    for (const name of ['clean', 'mixed', 'conflicts', 'rebase', 'cherryPick', 'stash'] as const) {
+    for (const name of [
+      'clean',
+      'mixed',
+      'conflicts',
+      'rebase',
+      'cherryPick',
+      'stash',
+      'showcase'
+    ] as const) {
       blocks.push(listing(name, await readStatus(runner, samples[name])))
     }
     // Not an assertion: this is the listing the phase 0 criterion asks for.
     console.log(`\n${blocks.join('\n\n')}\n`)
-    expect(blocks).toHaveLength(6)
+    expect(blocks).toHaveLength(7)
   })
 })

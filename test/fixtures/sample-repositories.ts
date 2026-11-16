@@ -20,6 +20,8 @@ export interface SampleRepositories {
   cherryPick: string
   /** A stash pop that conflicted with the working copy. */
   stash: string
+  /** A GitFlow history: master, develop, features, fixes, releases and tags. */
+  showcase: string
 }
 
 /** Identity and dates are pinned so the fixtures never depend on the machine. */
@@ -43,8 +45,13 @@ function sampleRunner(): GitRunner {
   })
 }
 
-async function git(runner: GitRunner, repo: string, args: readonly string[]): Promise<string> {
-  const result = await runner.run(args, { cwd: repo })
+async function git(
+  runner: GitRunner,
+  repo: string,
+  args: readonly string[],
+  env?: Record<string, string>
+): Promise<string> {
+  const result = await runner.run(args, env === undefined ? { cwd: repo } : { cwd: repo, env })
   if (result.code !== 0) {
     throw new Error(`git ${args.join(' ')} failed in ${repo}: ${result.stderr.trim()}`)
   }
@@ -238,6 +245,147 @@ async function makeStash(runner: GitRunner, repo: string): Promise<void> {
 }
 
 /**
+ * Builds a small project that follows GitFlow: a `master` line that only
+ * receives releases, a `develop` line with features and fixes, release and
+ * hotfix branches, and a tag at every version. The branches are left in place
+ * so the graph shows them beside their commits, and every commit gets its own
+ * fixed date so the history reads in order.
+ */
+async function makeShowcase(runner: GitRunner, repo: string): Promise<void> {
+  await initRepository(runner, repo)
+  // The fixture runner initialises `main`; this repository uses the classic
+  // GitFlow names. Renaming the unborn branch keeps the first commit on master.
+  await git(runner, repo, ['checkout', '-q', '-b', 'master'])
+
+  const start = Date.UTC(2025, 0, 6, 9, 0, 0)
+  let step = 0
+  const date = (): Record<string, string> => {
+    const stamp = new Date(start + step * 8 * 60 * 60 * 1000)
+    const pad = (value: number): string => String(value).padStart(2, '0')
+    const formatted =
+      `${stamp.getUTCFullYear()}-${pad(stamp.getUTCMonth() + 1)}-${pad(stamp.getUTCDate())} ` +
+      `${pad(stamp.getUTCHours())}:${pad(stamp.getUTCMinutes())}:00 +0000`
+    step += 1
+    return { GIT_AUTHOR_DATE: formatted, GIT_COMMITTER_DATE: formatted }
+  }
+
+  const ada = 'Ada Lovelace <ada@example.com>'
+  const grace = 'Grace Hopper <grace@example.com>'
+  const linus = 'Linus Torvalds <linus@example.com>'
+  const margaret = 'Margaret Hamilton <margaret@example.com>'
+
+  const commit = async (
+    message: string,
+    files: Readonly<Record<string, string>>,
+    author: string
+  ): Promise<void> => {
+    for (const [name, contents] of Object.entries(files)) write(repo, name, contents)
+    await git(runner, repo, ['add', '-A'])
+    await git(runner, repo, ['commit', '-qm', message, `--author=${author}`], date())
+  }
+
+  const merge = async (branch: string, message: string): Promise<void> => {
+    await git(runner, repo, ['merge', '--no-ff', '-q', '-m', message, branch], date())
+  }
+
+  const branch = async (name: string, from?: string): Promise<void> => {
+    if (from !== undefined) await git(runner, repo, ['checkout', '-q', from])
+    await git(runner, repo, ['checkout', '-q', '-b', name])
+  }
+
+  const tag = async (name: string): Promise<void> => {
+    await git(runner, repo, ['tag', name])
+  }
+
+  await commit('Initial project scaffold', { 'README.md': 'demo\n' }, ada)
+  await branch('develop')
+  await commit('Add user model and migrations', { 'users.txt': 'users\n' }, grace)
+
+  await branch('feature/login', 'develop')
+  await commit('Build login form', { 'login.txt': 'login\n' }, grace)
+  await commit('Add password reset flow', { 'reset.txt': 'reset\n' }, grace)
+  await git(runner, repo, ['checkout', '-q', 'develop'])
+  await commit('Add application shell', { 'shell.txt': 'shell\n' }, ada)
+  await merge('feature/login', "Merge branch 'feature/login' into develop")
+
+  await branch('feature/checkout', 'develop')
+  await commit('Create checkout page', { 'cart.txt': 'cart\n' }, linus)
+  await commit('Add payment provider', { 'payment.txt': 'payment\n' }, linus)
+  await git(runner, repo, ['checkout', '-q', 'develop'])
+  await merge('feature/checkout', "Merge branch 'feature/checkout' into develop")
+
+  await branch('fix/session-timeout', 'develop')
+  await commit('Fix session timeout', { 'timeout.txt': 'timeout\n' }, margaret)
+  await git(runner, repo, ['checkout', '-q', 'develop'])
+  await merge('fix/session-timeout', "Merge branch 'fix/session-timeout' into develop")
+
+  // Release 1.0: cut from develop, merged into master, tagged and merged back.
+  await branch('release/1.0', 'develop')
+  await commit('Bump version to 1.0.0', { VERSION: '1.0.0\n' }, ada)
+  await git(runner, repo, ['checkout', '-q', 'master'])
+  await merge('release/1.0', "Merge branch 'release/1.0'")
+  await tag('v1.0.0')
+  await git(runner, repo, ['checkout', '-q', 'develop'])
+  await merge('release/1.0', "Merge branch 'release/1.0' into develop")
+
+  // Hotfix 1.0.1: cut from master, merged into both lines and tagged.
+  await branch('hotfix/1.0.1', 'master')
+  await commit('Escape user input in reports', { 'escape.txt': 'escape\n' }, margaret)
+  await git(runner, repo, ['checkout', '-q', 'master'])
+  await merge('hotfix/1.0.1', "Merge branch 'hotfix/1.0.1'")
+  await tag('v1.0.1')
+  await git(runner, repo, ['checkout', '-q', 'develop'])
+  await merge('hotfix/1.0.1', "Merge branch 'hotfix/1.0.1' into develop")
+
+  await branch('feature/search', 'develop')
+  await commit('Add fuzzy search', { 'search.txt': 'search\n' }, linus)
+  await commit('Index search results', { 'index.txt': 'index\n' }, linus)
+  await git(runner, repo, ['checkout', '-q', 'develop'])
+  await merge('feature/search', "Merge branch 'feature/search' into develop")
+
+  await branch('fix/cart-total', 'develop')
+  await commit('Fix cart total rounding', { 'round.txt': 'round\n' }, grace)
+  await git(runner, repo, ['checkout', '-q', 'develop'])
+  await merge('fix/cart-total', "Merge branch 'fix/cart-total' into develop")
+
+  await branch('release/1.1', 'develop')
+  await commit('Bump version to 1.1.0', { VERSION: '1.1.0\n' }, ada)
+  await git(runner, repo, ['checkout', '-q', 'master'])
+  await merge('release/1.1', "Merge branch 'release/1.1'")
+  await tag('v1.1.0')
+  await git(runner, repo, ['checkout', '-q', 'develop'])
+  await merge('release/1.1', "Merge branch 'release/1.1' into develop")
+
+  await branch('feature/api-tokens', 'develop')
+  await commit('Add API tokens', { 'tokens.txt': 'tokens\n' }, grace)
+  await commit('Document API authentication', { 'api.md': 'docs\n' }, grace)
+  await git(runner, repo, ['checkout', '-q', 'develop'])
+  await merge('feature/api-tokens', "Merge branch 'feature/api-tokens' into develop")
+
+  await branch('hotfix/1.1.1', 'master')
+  await commit('Fix token expiry check', { 'expiry.txt': 'expiry\n' }, margaret)
+  await git(runner, repo, ['checkout', '-q', 'master'])
+  await merge('hotfix/1.1.1', "Merge branch 'hotfix/1.1.1'")
+  await tag('v1.1.1')
+  await git(runner, repo, ['checkout', '-q', 'develop'])
+  await merge('hotfix/1.1.1', "Merge branch 'hotfix/1.1.1' into develop")
+
+  await branch('release/1.2', 'develop')
+  await commit('Bump version to 1.2.0', { VERSION: '1.2.0\n' }, ada)
+  await git(runner, repo, ['checkout', '-q', 'master'])
+  await merge('release/1.2', "Merge branch 'release/1.2'")
+  await tag('v1.2.0')
+  await git(runner, repo, ['checkout', '-q', 'develop'])
+  await merge('release/1.2', "Merge branch 'release/1.2' into develop")
+
+  await branch('feature/analytics', 'develop')
+  await commit('Add analytics events', { 'events.txt': 'events\n' }, ada)
+  await commit('Build analytics dashboard', { 'dashboard.txt': 'dashboard\n' }, ada)
+  await git(runner, repo, ['checkout', '-q', 'develop'])
+  await merge('feature/analytics', "Merge branch 'feature/analytics' into develop")
+}
+
+/**
  * Creates the sample repositories under `baseDir`, which should be a fresh
  * temporary directory. Returns their paths.
  */
@@ -249,7 +397,8 @@ export async function createSampleRepositories(baseDir: string): Promise<SampleR
   const rebase = join(baseDir, 'rebase')
   const cherryPick = join(baseDir, 'cherry-pick')
   const stash = join(baseDir, 'stash')
-  for (const directory of [clean, mixed, conflicts, rebase, cherryPick, stash]) {
+  const showcase = join(baseDir, 'showcase')
+  for (const directory of [clean, mixed, conflicts, rebase, cherryPick, stash, showcase]) {
     mkdirSync(directory, { recursive: true })
   }
 
@@ -259,6 +408,7 @@ export async function createSampleRepositories(baseDir: string): Promise<SampleR
   await makeRebase(runner, rebase)
   await makeCherryPick(runner, cherryPick)
   await makeStash(runner, stash)
+  await makeShowcase(runner, showcase)
 
-  return { clean, mixed, conflicts, rebase, cherryPick, stash }
+  return { clean, mixed, conflicts, rebase, cherryPick, stash, showcase }
 }

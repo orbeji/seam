@@ -14,6 +14,16 @@ import { createSampleRepositories, type SampleRepositories } from '../fixtures/s
  * double click still offers to check the commit out.
  */
 
+/**
+ * The globals the page patches, spelled out because the node TypeScript project
+ * has no DOM library: the callback body still typechecks without it.
+ */
+interface PageGlobals {
+  readonly Element: { prototype: Record<string, unknown> }
+  readonly DOMException: new (message: string) => Error
+  seamPointerCapture?: unknown
+}
+
 const temporaries: string[] = []
 let application: ElectronApplication
 let page: Page
@@ -58,6 +68,14 @@ describe('the persistent commit history', () => {
     expect(text).toContain('Second commit')
     expect(text).toContain('First commit')
     expect(text).toContain('v1.0.0')
+
+    // Branch names and tags are pills beside the graph node, not after the
+    // commit message.
+    const firstGraph = rows.first().locator('.history__graph')
+    expect(await firstGraph.innerText()).toContain('main')
+    expect(await firstGraph.innerText()).toContain('v1.0.0')
+    expect(await firstGraph.locator('.history__ref').count()).toBe(2)
+    expect(await rows.first().locator('.history__message .history__ref').count()).toBe(0)
 
     // The sidebar keeps the date and the message; the author and the hash
     // belong to the full view.
@@ -203,12 +221,47 @@ describe('the persistent commit history', () => {
     expect(Math.abs(kept - (before + 120))).toBeLessThan(2)
   })
 
+  it('resizes the panel even when the session refuses pointer capture', async () => {
+    const panel = page.locator('.history-panel')
+    const handle = page.locator('[data-testid=history-resizer]')
+    const before = (await panel.boundingBox())?.width ?? 0
+
+    // WSLg raises from setPointerCapture and some Wayland compositors ignore
+    // it. The press must not be lost with it: the drag follows the pointer on
+    // the window instead of dying as soon as it leaves the six-pixel strip.
+    await page.evaluate(() => {
+      const page = globalThis as unknown as PageGlobals
+      page.seamPointerCapture = page.Element.prototype['setPointerCapture']
+      page.Element.prototype['setPointerCapture'] = () => {
+        throw new page.DOMException('this session has no pointer capture')
+      }
+    })
+
+    const box = await handle.boundingBox()
+    if (box === null) throw new Error('the history panel has no resize handle')
+    const startX = box.x + box.width / 2
+    const startY = box.y + box.height / 2
+    await page.mouse.move(startX, startY)
+    await page.mouse.down()
+    await page.mouse.move(startX + 90, startY, { steps: 6 })
+    await page.mouse.up()
+
+    await expect
+      .poll(async () => (await panel.boundingBox())?.width ?? 0)
+      .toBeGreaterThan(before + 70)
+
+    await page.evaluate(() => {
+      const page = globalThis as unknown as PageGlobals
+      page.Element.prototype['setPointerCapture'] = page.seamPointerCapture
+    })
+  })
+
   it('resizes the graph column without redrawing the graph and resets it on a double click', async () => {
     const graph = page.locator('.history__graph').first()
     const handle = page.locator('[data-testid=history-graph-resizer]')
     const columnWidth = async (): Promise<number> => (await graph.boundingBox())?.width ?? 0
     const graphWidth = async (): Promise<number> =>
-      graph.locator('svg').evaluate((svg) => Number(svg.getAttribute('width')))
+      graph.locator(':scope > svg').evaluate((svg) => Number(svg.getAttribute('width')))
 
     const before = await columnWidth()
     // The graph is drawn once at its own width; the column only frames it.
