@@ -4,6 +4,24 @@ All notable changes to Seam are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-11-17
+
+### Added
+
+- Branches and tags appear as pills beside their commit node in the history
+  graph. Local branches, remote branches and tags all use the same pill, the
+  graph column widens to fit them, and the full names stay in the tooltip when
+  the column is too narrow.
+- The README screenshots are regenerated with the current interface, including
+  a full-width commit history that shows the branch and tag pills.
+
+### Fixed
+
+- Resizing the history panel or its graph column keeps working on Linux
+  sessions and WSLg, where the handle can lose the pointer capture as soon as
+  the cursor leaves it, and a drag ends when the window loses focus instead of
+  following the pointer.
+
 ## [0.3.1] - 2026-11-15
 
 ### Fixed
