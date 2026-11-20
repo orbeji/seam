@@ -16,7 +16,9 @@
     },
     "pull": {
       "label": "Pull",
-      "title": "Actualizar desde el upstream"
+      "title": "Actualizar desde el upstream",
+      "commits_one": "{{count}} commit por traer",
+      "commits_other": "{{count}} commits por traer"
     },
     "merge": {
       "label": "Fusionar",

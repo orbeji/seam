@@ -14,6 +14,13 @@ aparte, después de Push:
 - **Merge** fusiona una rama local o remota en la rama actual. Estrategias:
   commit de fusión (`--no-ff`), solo avance rápido (`--ff-only`) o squash, que
   deja los cambios preparados para el siguiente commit.
+- **Fetch** descarga las referencias de todos los remotos y **Pull** integra el
+  upstream de la rama actual. El botón Pull lleva un contador con los commits
+  que el upstream tiene y la rama no, como el contador de Push. Para que ese
+  número no dependa de pulsar Fetch, Seam hace un fetch silencioso al abrir el
+  repositorio y al recuperar el foco la ventana, como mucho una vez cada cinco
+  minutos; si falla (por red o credenciales) no interrumpe, y el botón Fetch
+  sigue siendo el que muestra el error.
 - **GitFlow** es un único diálogo dinámico.
 
 ## Diálogo GitFlow

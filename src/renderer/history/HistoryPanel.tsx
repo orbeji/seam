@@ -24,7 +24,7 @@ import type {
 import { splitPath } from '../paths'
 import { followResizeDrag } from '../resize-drag'
 import { checkoutTarget, type CheckoutTarget } from './checkout'
-import { layoutGraph, type GraphEdge, type GraphRow } from './graph'
+import { layoutGraph, type GraphColor, type GraphEdge, type GraphRow } from './graph'
 
 /** What the history panel is doing: reading, showing, or explaining a failure. */
 export type HistoryView =
@@ -115,8 +115,10 @@ const STATUS_LETTER: Record<CommitFileStatus, string> = {
   unknown: '?'
 }
 
-function colorOf(index: number): string {
-  return GRAPH_COLORS[index % GRAPH_COLORS.length] ?? 'var(--accent)'
+function colorOf(color: GraphColor): string {
+  if (color === 'main') return 'var(--graph-main)'
+  if (color === 'develop') return 'var(--graph-develop)'
+  return GRAPH_COLORS[color % GRAPH_COLORS.length] ?? 'var(--accent)'
 }
 
 /** How wide the graph is when every lane is drawn at its fixed spacing. */
@@ -141,7 +143,7 @@ function refsPillWidth(refs: readonly HistoryRef[]): number {
   return pills + (refs.length - 1) * REF_PILL_GAP
 }
 
-/** The path of one edge, curved when it moves sideways between rows. */
+/** The path of one edge, curving smoothly when it moves sideways between rows. */
 function edgePath(edge: GraphEdge, height: number, center: number): string {
   const x1 = laneX(edge.from)
   const x2 = laneX(edge.to)
@@ -151,13 +153,23 @@ function edgePath(edge: GraphEdge, height: number, center: number): string {
     return `M ${x1} ${y1} L ${x2} ${y2}`
   }
 
+  const dx = x2 - x1
   if (edge.side === 'through') {
-    return `M ${x1} 0 C ${x1} ${height / 3} ${x2} ${(height * 2) / 3} ${x2} ${height}`
+    return `M ${x1} 0 C ${x1} ${height * 0.35} ${x2} ${height * 0.65} ${x2} ${height}`
   }
   if (edge.side === 'top') {
-    return `M ${x1} 0 C ${x1} ${center - 12} ${x2} ${center - 4} ${x2} ${center}`
+    // Coming from a lane above, the line starts straight down and reaches the
+    // node at an angle, so a branch is seen joining the node instead of bending
+    // into a vertical stub right above it.
+    const middle = center / 2
+    return `M ${x1} 0 C ${x1} ${middle} ${x2 - dx * 0.4} ${middle} ${x2} ${center}`
   }
-  return `M ${x1} ${center} C ${x1} ${center + 4} ${x2} ${center + 12} ${x2} ${height}`
+  // Leaving a node, the line takes its angle straight away and settles vertical
+  // at the lane below.
+  const dy = height - center
+  return `M ${x1} ${center} C ${x1 + dx * 0.4} ${center + dy * 0.5} ${
+    x2
+  } ${height - dy * 0.2} ${x2} ${height}`
 }
 
 /**

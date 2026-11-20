@@ -7,6 +7,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   detectOperation,
   GitRunner,
+  readRepositoryHistory,
   readStatus,
   summarizeChanges,
   type OrdinaryEntry,
@@ -14,6 +15,7 @@ import {
   type RepoStatus,
   type UnmergedEntry
 } from '../src/core/git'
+import { layoutGraph } from '../src/renderer/history/graph'
 import { createSampleRepositories, type SampleRepositories } from './fixtures/sample-repositories'
 
 const runner = new GitRunner()
@@ -158,6 +160,35 @@ describe('createSampleRepositories', () => {
     expect(status.branch.head).toBe('develop')
     expect(status.entries).toEqual([])
     expect(await detectOperation(runner, samples.showcase)).toBeNull()
+  })
+
+  it('keeps the master and develop trunks on the left of the graph', async () => {
+    const history = await readRepositoryHistory(runner, samples.showcase)
+    const layout = layoutGraph(history.commits)
+
+    const indexOf = (refName: string): number => {
+      const index = history.commits.findIndex((commit) =>
+        commit.refs.some((ref) => ref.name === refName)
+      )
+      if (index === -1) throw new Error(`no commit for ${refName}`)
+      return index
+    }
+
+    // The trunk keeps the left column and develop sits beside it, even though
+    // develop's newest commit is the first row and master's is much older. Their
+    // fixed colours survive every merge in the history.
+    const master = indexOf('master')
+    const develop = indexOf('develop')
+    expect(layout.rows[master]?.lane).toBe(0)
+    expect(layout.rows[master]?.color).toBe('main')
+    expect(layout.rows[develop]?.lane).toBe(1)
+    expect(layout.rows[develop]?.color).toBe('develop')
+    for (const [index, commit] of history.commits.entries()) {
+      const isSideBranch = commit.refs.some((ref) =>
+        /^(feature|fix|hotfix|release)\//.test(ref.name)
+      )
+      if (isSideBranch) expect(layout.rows[index]!.lane).toBeGreaterThan(1)
+    }
   })
 
   it('prints the four lists of each repository', async () => {

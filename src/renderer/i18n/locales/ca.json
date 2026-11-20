@@ -16,7 +16,9 @@
     },
     "pull": {
       "label": "Pull",
-      "title": "Actualitza des de l'upstream"
+      "title": "Actualitza des de l'upstream",
+      "commits_one": "{{count}} commit per portar",
+      "commits_other": "{{count}} commits per portar"
     },
     "merge": {
       "label": "Fusiona",

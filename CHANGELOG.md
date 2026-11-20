@@ -4,6 +4,16 @@ All notable changes to Seam are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- The Pull button shows how many commits the upstream has that the current
+  branch lacks, the same way the Push button counts the commits it would send.
+  Seam fetches on its own when a repository opens and when the window regains
+  focus, at most once every five minutes, so the count is current without
+  pressing Fetch first.
+
 ## [0.4.0] - 2026-11-17
 
 ### Added

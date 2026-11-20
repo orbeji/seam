@@ -67,6 +67,7 @@ import MergeEditor from './merge/MergeEditor'
 import { splitPath } from './paths'
 import PushDialog, { type PushChoice } from './push/PushDialog'
 import { followResizeDrag } from './resize-drag'
+import { autoFetchDue, type LastFetch } from './shell/auto-fetch'
 import BranchDialog from './shell/BranchDialog'
 import CloneDialog from './shell/CloneDialog'
 import GitRequired from './shell/GitRequired'
@@ -423,6 +424,10 @@ export default function App() {
   const pushAfterCommit = useRef(false)
   // Whether a fetch or a pull is running, so their buttons wait too.
   const [syncBusy, setSyncBusy] = useState(false)
+  // The last fetch Seam ran or saw, so focusing the window does not fetch the
+  // same repository again before the interval has passed.
+  const lastFetch = useRef<LastFetch | null>(null)
+  const autoFetching = useRef(false)
   // The popup that follows a running fetch, pull, commit or push: a spinner
   // while Git works, a brief success, or a failure that stays until dismissed.
   const [syncNotice, setSyncNotice] = useState<{
@@ -625,6 +630,9 @@ export default function App() {
   )
 
   const currentRepo = activeRepo
+  // The repository whose snapshot is showing, which is when a silent fetch is
+  // worth running; a path that failed to open never gets one.
+  const readyRepo = view.state === 'ready' ? view.snapshot.repo : null
   const staged = view.state === 'ready' ? view.snapshot.summary.staged.length : 0
   const unstaged = view.state === 'ready' ? view.snapshot.summary.unstaged.length : 0
   const untracked = view.state === 'ready' ? view.snapshot.summary.untracked.length : 0
@@ -633,6 +641,10 @@ export default function App() {
   const canAmend = view.state === 'ready' && view.snapshot.status.branch.oid !== null
   const branchStatus = view.state === 'ready' ? view.snapshot.status.branch : null
   const pushCount = view.state === 'ready' ? view.snapshot.pushCount : null
+  // The Pull badge counts what the upstream holds and HEAD lacks. It comes from
+  // the branch status, which a fetch keeps up to date; without an upstream
+  // there is no number to show.
+  const pullCount = branchStatus !== null ? (branchStatus.behind ?? null) : null
   const branchLabel =
     branchStatus === null ? null : (branchStatus.head ?? branchStatus.oid?.slice(0, 7) ?? null)
   const fileCount = staged + unstaged + untracked + conflicts
@@ -730,6 +742,28 @@ export default function App() {
       setView({ state: 'ready', snapshot: result.value })
     }
   }, [])
+
+  /**
+   * Fetches without being asked, so the Pull badge knows what the upstream has.
+   * The count of commits behind it is only as fresh as the last fetch, while
+   * the Push count reads local commits and needs no network. It runs when a
+   * repository opens and when the window regains focus, at most once per
+   * interval; a failure stays silent because the Fetch button reports it.
+   */
+  const autoFetch = useCallback(async () => {
+    const repo = repoRef.current
+    if (repo === null || autoFetching.current) return
+    const now = Date.now()
+    if (!autoFetchDue(lastFetch.current, repo, now)) return
+    autoFetching.current = true
+    lastFetch.current = { repo, at: now }
+    try {
+      const result = await window.seam.fetchRemotes(repo)
+      if (result.ok && repoRef.current === repo) await refresh()
+    } finally {
+      autoFetching.current = false
+    }
+  }, [refresh])
 
   /** Loads the branch list for the current repository. */
   const loadBranches = useCallback(async () => {
@@ -1573,6 +1607,7 @@ export default function App() {
   const fetchRemotes = useCallback(async () => {
     const repo = repoRef.current
     if (repo === null) return
+    lastFetch.current = { repo, at: Date.now() }
     setSyncBusy(true)
     showSyncNotice('busy', t('topbar.sync.fetching'))
     try {
@@ -1593,6 +1628,7 @@ export default function App() {
   const pullFromUpstream = useCallback(async () => {
     const repo = repoRef.current
     if (repo === null) return
+    lastFetch.current = { repo, at: Date.now() }
     setSyncBusy(true)
     showSyncNotice('busy', t('topbar.sync.pulling'))
     try {
@@ -2020,15 +2056,28 @@ export default function App() {
   useEffect(() => {
     // The watcher refreshes a change to the working tree or the git folder as
     // it happens; regaining focus is the fallback for when a watch could not be
-    // set up.
-    const handleFocus = () => void refresh()
+    // set up. A focus also renews the Pull badge, whose count only a fetch can
+    // bring up to date.
+    const handleFocus = () => {
+      void autoFetch()
+      void refresh()
+    }
     window.addEventListener('focus', handleFocus)
     const stopWatching = window.seam.onRepositoryChanged(() => void refresh())
     return () => {
       window.removeEventListener('focus', handleFocus)
       stopWatching()
     }
-  }, [refresh])
+  }, [refresh, autoFetch])
+
+  useEffect(() => {
+    // Opening a repository fetches its remotes once, so the Pull button can say
+    // how far behind the upstream the branch is without being asked. The fetch
+    // is silent and throttled; only a repository that is ready triggers it, so
+    // a path that failed to open never reaches Git again.
+    if (readyRepo === null) return
+    void autoFetch()
+  }, [readyRepo, autoFetch])
 
   useEffect(() => {
     // While an operation is in progress a terminal can finish it. The watcher
@@ -2437,6 +2486,7 @@ export default function App() {
         canHistory={currentRepo !== null}
         canPush={currentRepo !== null && operation === null && pushCount !== null && pushCount > 0}
         pushCount={pushCount}
+        pullCount={pullCount}
         syncing={syncBusy}
         canFetch={currentRepo !== null && operation === null}
         canPull={currentRepo !== null && operation === null && branchStatus?.upstream != null}

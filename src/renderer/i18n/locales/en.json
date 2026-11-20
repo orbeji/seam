@@ -16,7 +16,9 @@
     },
     "pull": {
       "label": "Pull",
-      "title": "Pull from upstream"
+      "title": "Pull from upstream",
+      "commits_one": "{{count}} commit to pull",
+      "commits_other": "{{count}} commits to pull"
     },
     "merge": {
       "label": "Merge",

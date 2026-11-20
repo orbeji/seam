@@ -20,6 +20,8 @@ interface TopBarProps {
   readonly canPush: boolean
   /** How many commits the push would send, shown next to the label. */
   readonly pushCount: number | null
+  /** How many commits the pull would bring, shown next to the label. */
+  readonly pullCount: number | null
   /** Whether a fetch or a pull is running, so both buttons wait. */
   readonly syncing: boolean
   /** Whether the remotes can be fetched right now. */
@@ -101,6 +103,14 @@ function displayPath(item: BranchListItem): string {
   return item.name.slice(item.remote.length + 1)
 }
 
+/**
+ * A folder's fold key. Local and remote trees can hold a folder with the same
+ * path, so the scope keeps folding one from folding the other.
+ */
+function foldKey(scope: 'local' | 'remote', path: string): string {
+  return `${scope}:${path}`
+}
+
 /** The last segment of a folder path, which names a worktree's row. */
 function folderName(path: string): string {
   const parts = path.split(/[\\/]/).filter((part) => part !== '')
@@ -109,6 +119,7 @@ function folderName(path: string): string {
 
 function BranchRows({
   nodes,
+  scope,
   folded,
   onFold,
   onSelect,
@@ -116,8 +127,10 @@ function BranchRows({
   showRemote
 }: {
   readonly nodes: readonly BranchNode<BranchListItem>[]
+  /** Which list the tree belongs to, so local and remote folders fold apart. */
+  readonly scope: 'local' | 'remote'
   readonly folded: ReadonlySet<string>
-  readonly onFold: (path: string) => void
+  readonly onFold: (key: string) => void
   readonly onSelect: (name: string) => void
   readonly onContextMenu: (event: ReactMouseEvent, name: string) => void
   readonly showRemote: boolean
@@ -127,18 +140,19 @@ function BranchRows({
     <>
       {nodes.map((node) => {
         if (node.kind === 'group') {
+          const key = foldKey(scope, node.path)
           return (
             <div className="topbar__branch-group" key={node.path}>
               <div className="topbar__branch-folder">
                 <button
                   type="button"
                   className={
-                    folded.has(node.path)
+                    folded.has(key)
                       ? 'topbar__folder-toggle topbar__folder-toggle--folded'
                       : 'topbar__folder-toggle'
                   }
-                  aria-expanded={!folded.has(node.path)}
-                  onClick={() => onFold(node.path)}
+                  aria-expanded={!folded.has(key)}
+                  onClick={() => onFold(key)}
                 >
                   <svg
                     width="10"
@@ -167,10 +181,11 @@ function BranchRows({
                 </svg>
                 <span className="topbar__menu-name">{node.name}</span>
               </div>
-              {folded.has(node.path) ? null : (
+              {folded.has(key) ? null : (
                 <div className="topbar__branch-folder-children">
                   <BranchRows
                     nodes={node.children}
+                    scope={scope}
                     folded={folded}
                     onFold={onFold}
                     onSelect={onSelect}
@@ -225,6 +240,7 @@ export default function TopBar({
   historyVisible,
   canPush,
   pushCount,
+  pullCount,
   syncing,
   canFetch,
   canPull,
@@ -264,9 +280,15 @@ export default function TopBar({
   const pushLabel = pushed
     ? `${t('push.button')} · ${t('push.commits', { count: pushCount })}`
     : t('push.button')
+  // The pull badge mirrors the push one: it appears only when the upstream has
+  // commits the branch lacks, and says how many the next pull would bring.
+  const pulled = pullCount !== null && pullCount > 0
+  const pullLabel = pulled
+    ? `${t('topbar.pull.label')} · ${t('topbar.pull.commits', { count: pullCount })}`
+    : t('topbar.pull.label')
   const [branchMenuOpen, setBranchMenuOpen] = useState(false)
   const branchMenuRef = useRef<HTMLDivElement | null>(null)
-  // Folders the user folded by path, e.g. "feature" or "feature/fix".
+  // Folders the user folded by key, e.g. "local:feature" or "remote:feature/fix".
   const [folded, setFolded] = useState<ReadonlySet<string>>(new Set())
   // The right-click menu of a local branch, with the value its rename form
   // starts from and whether a delete should throw unmerged commits away.
@@ -348,11 +370,11 @@ export default function TopBar({
     onOpenWorktree(path)
   }
 
-  const handleFold = (path: string) => {
+  const handleFold = (key: string) => {
     setFolded((prev) => {
       const next = new Set(prev)
-      if (next.has(path)) next.delete(path)
-      else next.add(path)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
       return next
     })
   }
@@ -475,6 +497,7 @@ export default function TopBar({
                           displayPath,
                           branchOrder
                         )}
+                        scope="local"
                         folded={folded}
                         onFold={handleFold}
                         onSelect={handleBranchSelect}
@@ -496,6 +519,7 @@ export default function TopBar({
                           displayPath,
                           branchOrder
                         )}
+                        scope="remote"
                         folded={folded}
                         onFold={handleFold}
                         onSelect={handleBranchSelect}
@@ -790,6 +814,7 @@ export default function TopBar({
         className="button topbar__pull"
         data-testid="pull"
         title={t('topbar.pull.title')}
+        aria-label={pullLabel}
         disabled={!canPull || syncing}
         onClick={onPull}
       >
@@ -808,6 +833,11 @@ export default function TopBar({
           <path d="M2.5 10.5v3h11v-3" />
         </svg>
         {t('topbar.pull.label')}
+        {pulled && (
+          <span className="topbar__count" data-testid="pull-count">
+            {pullCount}
+          </span>
+        )}
       </button>
 
       <button

@@ -64,6 +64,10 @@
   --graph-5: #47b8c4;
   --graph-6: #d17fb4;
   --graph-7: #9aa56a;
+  /* The trunk and integration branches keep these two colours in every graph
+     palette, so `main`/`master` stay reddish and `develop`/`dev` bluish. */
+  --graph-main: #f0674f;
+  --graph-develop: #5b9cf0;
   font-family:
     'IBM Plex Sans',
     system-ui,
@@ -119,6 +123,8 @@
     --graph-5: #0f7c86;
     --graph-6: #a13e7c;
     --graph-7: #6d763a;
+    --graph-main: #c0392b;
+    --graph-develop: #1a73e8;
     --selection: #e8eef7;
   }
 }
@@ -204,6 +210,8 @@
   --graph-5: #0f7c86;
   --graph-6: #a13e7c;
   --graph-7: #6d763a;
+  --graph-main: #c0392b;
+  --graph-develop: #1a73e8;
   --selection: #e8eef7;
 }
 
@@ -1338,13 +1346,11 @@ body.resize-drag * {
   outline: none;
 }
 
+/* The history rows are not separated by lines: the graph is easier to follow
+   when only the lanes draw verticals, and the row under the pointer is lit
+   instead. */
 .history__sidebar-list .history__row {
   border-bottom: 0;
-  box-shadow: inset 0 -1px 0 var(--border);
-}
-
-.history__sidebar-list li:last-child .history__row {
-  box-shadow: none;
 }
 
 .history__row.history__row--selected {
@@ -4718,7 +4724,7 @@ body.resize-drag * {
 }
 
 .history__row:hover {
-  background: var(--panel);
+  background: color-mix(in srgb, var(--text) 10%, transparent);
 }
 
 .history__row:focus-visible {
