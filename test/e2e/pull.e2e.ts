@@ -51,6 +51,9 @@ async function clone(remote: string): Promise<SampleRepository> {
   await runner.runOrThrow(['clone', '-q', remote, path], { cwd: tmpdir() })
   await repo.git(['config', 'user.name', 'Seam Test'])
   await repo.git(['config', 'user.email', 'seam@example.com'])
+  // The merged file is checked out by Git, so pin the line endings: a global
+  // `core.autocrlf=true` on Windows would otherwise write it with CRLF.
+  await repo.git(['config', 'core.autocrlf', 'false'])
   return repo
 }
 

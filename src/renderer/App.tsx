@@ -512,6 +512,9 @@ export default function App() {
   // Identifies the status read in flight, so switching tabs quickly discards
   // the answer for the repository that was left behind.
   const statusRequest = useRef(0)
+  // Identifies the newest refresh, so a read that started earlier cannot apply
+  // a stale snapshot after a newer one has already shown the change.
+  const refreshRequest = useRef(0)
   // Identifies the conflict read in flight, so a list that arrives after the
   // dialog closed or was reopened cannot put it back on screen.
   const conflictsRequest = useRef(0)
@@ -734,9 +737,11 @@ export default function App() {
   const refresh = useCallback(async () => {
     const repo = repoRef.current
     if (repo === null) return
-    const request = statusRequest.current
+    const request = refreshRequest.current + 1
+    refreshRequest.current = request
+    const status = statusRequest.current
     const result = await window.seam.readRepositoryStatus(repo)
-    if (request !== statusRequest.current) return
+    if (request !== refreshRequest.current || status !== statusRequest.current) return
     if (result.ok) {
       operationRef.current = result.value.operation
       setView({ state: 'ready', snapshot: result.value })
