@@ -4,7 +4,7 @@ All notable changes to Seam are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.5.0] - 2026-11-20
 
 ### Added
 
@@ -13,6 +13,20 @@ All notable changes to Seam are documented here. The format follows
   Seam fetches on its own when a repository opens and when the window regains
   focus, at most once every five minutes, so the count is current without
   pressing Fetch first.
+- The history graph keeps `main`/`master` in the leftmost column and
+  `develop`/`dev` beside it, each with a fixed colour in every palette. Lanes no
+  longer move sideways, so a branch is seen leaving the trunk and joining it
+  again, and the edges curve smoothly between rows.
+
+### Changed
+
+- The history list no longer draws a separator between rows; the row under the
+  pointer is highlighted instead.
+
+### Fixed
+
+- Local and remote branch folders that share a path fold independently instead
+  of folding together.
 
 ## [0.4.0] - 2026-11-17
 

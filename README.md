@@ -27,7 +27,7 @@ expose the regions the merge editor needs.
 
 ### Windows
 
-Download `Seam-0.4.0-windows-setup.exe` from the
+Download `Seam-0.5.0-windows-setup.exe` from the
 [latest release](https://github.com/orbeji/seam/releases/latest) and run it. The
 installer is per-user and does not need administrator rights.
 
@@ -42,11 +42,11 @@ Download the `.deb` or the `.AppImage` from the
 
 ```bash
 # Debian, Ubuntu and derivatives. Git is installed as a dependency.
-sudo apt install ./Seam-0.4.0-linux-amd64.deb
+sudo apt install ./Seam-0.5.0-linux-amd64.deb
 
 # AppImage: make it executable and run it. It may need FUSE 2.
-chmod +x Seam-0.4.0-linux-x86_64.AppImage
-./Seam-0.4.0-linux-x86_64.AppImage
+chmod +x Seam-0.5.0-linux-x86_64.AppImage
+./Seam-0.5.0-linux-x86_64.AppImage
 ```
 
 If the AppImage refuses to start because FUSE is missing, install `libfuse2`
