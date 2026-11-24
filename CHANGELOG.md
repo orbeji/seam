@@ -4,6 +4,23 @@ All notable changes to Seam are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.1] - 2026-11-24
+
+### Changed
+
+- Lanes sit 16 px apart instead of 20, so more parallel branches fit in the
+  same graph width.
+
+### Fixed
+
+- A connection between distant lanes in the history graph no longer thins into
+  a hairline as it moves sideways. A line that crosses four or more lanes runs
+  horizontally on a whole pixel between two short curves, so it keeps the same
+  weight as a vertical lane.
+- The history graph can use every pixel the list has to spare, so a repository
+  with many parallel branches, such as Symfony, shows all of its lanes instead
+  of clipping the rightmost ones.
+
 ## [0.5.0] - 2026-11-20
 
 ### Added
