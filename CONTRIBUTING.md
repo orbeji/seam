@@ -40,8 +40,10 @@ npm run test:e2e
 - `test:e2e` builds the application and drives it with Playwright. Name a test
   file `*.e2e.ts`. On a headless Linux machine run it under `xvfb-run -a`.
 
-CI runs the unit, integration and end-to-end suites on Windows and Ubuntu, and
-the integration suite once more against Git 2.30.
+CI runs the unit and integration suites on Windows and Ubuntu, and the
+integration suite once more against Git 2.30. The end-to-end suite is not part
+of CI because it takes long and is sensitive to runner timing: run it locally
+before a release.
 
 ## Code style
 
@@ -86,8 +88,8 @@ for Windows install folders.
 1. Update `CHANGELOG.md` and the version in `package.json` (they must match).
 2. Commit and tag: `git tag -a v0.2.0 -m "Seam 0.2.0"`.
 3. Push the tag: `git push origin v0.2.0`.
-4. The release workflow builds both installers, runs the package smoke test,
-   computes the SHA-256 checksums, and creates a **draft** GitHub Release.
+4. The release workflow builds both installers, computes the SHA-256 checksums,
+   and creates a **draft** GitHub Release.
 5. Review the draft and publish it by hand.
 
 The workflow refuses a tag that does not match `package.json`.

@@ -177,9 +177,10 @@ The import rules between `core`, `main` and `renderer` are enforced by ESLint.
 
 CI runs on every pull request and every push to `main`. Pushing a tag that
 matches the version in `package.json` (for example `v0.2.0`) builds the three
-installers, runs the end-to-end and packaged smoke tests, computes the SHA-256
-checksums and creates a **draft** GitHub Release. A person reviews and
-publishes it. The notes come from [CHANGELOG.md](CHANGELOG.md).
+installers, computes the SHA-256 checksums and creates a **draft** GitHub
+Release. A person reviews and publishes it. The notes come from
+[CHANGELOG.md](CHANGELOG.md). The end-to-end suite runs locally, not in CI,
+because it takes long and is sensitive to runner timing.
 
 ## Contributing
 

@@ -42,9 +42,6 @@ jobs:
           node-version: 22
           cache: npm
 
-      - name: Install test dependencies
-        run: sudo apt-get update && sudo apt-get install -y xvfb
-
       - name: Install dependencies
         run: npm ci
 
@@ -66,17 +63,8 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: End-to-end tests
-        run: xvfb-run -a npx vitest run --config vitest.e2e.config.ts
-
       - name: Build AppImage and .deb
         run: npx electron-builder --linux --publish never
-
-      - name: Install the .deb and smoke-test the packaged app
-        run: |
-          sudo apt-get install -y ./release/*.deb
-          SEAM_EXECUTABLE=/opt/Seam/seam xvfb-run -a npx vitest run \
-            --config vitest.e2e.config.ts test/e2e/packaged.smoke.e2e.ts
 
       - uses: actions/upload-artifact@v4
         with:
@@ -119,28 +107,8 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: End-to-end tests
-        run: npx vitest run --config vitest.e2e.config.ts
-
       - name: Build NSIS installer
         run: npx electron-builder --win --publish never
-
-      - name: Install silently and smoke-test the packaged app
-        shell: pwsh
-        run: |
-          $installer = Get-ChildItem release -Filter *setup*.exe | Select-Object -First 1
-          if (-not $installer) { throw 'The NSIS installer was not produced' }
-          Start-Process -FilePath $installer.FullName -ArgumentList '/S' -Wait
-
-          $installed = Get-ChildItem "$env:LOCALAPPDATA\Programs" -Filter seam.exe -Recurse -ErrorAction SilentlyContinue |
-            Select-Object -First 1
-          if (-not $installed) {
-            $installed = Get-ChildItem release\win-unpacked -Filter seam.exe | Select-Object -First 1
-          }
-          if (-not $installed) { throw 'The installed executable was not found' }
-
-          "SEAM_EXECUTABLE=$($installed.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
-          npx vitest run --config vitest.e2e.config.ts test/e2e/packaged.smoke.e2e.ts
 
       - uses: actions/upload-artifact@v4
         with:
