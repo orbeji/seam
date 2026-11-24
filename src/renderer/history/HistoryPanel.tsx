@@ -74,12 +74,13 @@ interface CheckoutPrompt {
 const GUTTER_PADDING = 8
 const ROW_HEIGHT = 28
 /** The distance between lanes. Resizing the column only reveals or hides them. */
-const LANE_WIDTH = 20
+const LANE_WIDTH = 16
 /** How many lanes the sidebar shows before the user drags the graph wider. */
 const DEFAULT_VISIBLE_LANES = 3
-/** The narrowest and widest the graph column can be dragged. */
+/** The narrowest the graph column can be dragged. */
 const MIN_GRAPH_WIDTH = 16
-const MAX_GRAPH_WIDTH = 720
+/** The width the graph assumes before the list has been measured. */
+const INITIAL_GRAPH_WIDTH = 720
 /** Room the commit's own columns keep beside the graph. */
 const MIN_TEXT_WIDTH = 140
 
@@ -143,6 +144,33 @@ function refsPillWidth(refs: readonly HistoryRef[]): number {
   return pills + (refs.length - 1) * REF_PILL_GAP
 }
 
+/** How far a line runs sideways before it turns, in pixels. */
+const EDGE_BEND = 10
+/** From how many lanes apart a line is routed with a horizontal run. */
+const EDGE_SHELF_LANES = 4
+
+/**
+ * A line that crosses many lanes has almost no vertical room to fall in, so a
+ * smooth diagonal ends up nearly flat. A flat two-pixel stroke covers a single
+ * row at full strength with faint rows beside it, which reads as a thinner line
+ * than the vertical lanes. Such a line is routed as a short bend, a horizontal
+ * run and a second bend instead, and the run sits on a whole pixel so it keeps
+ * the same weight as a vertical lane all the way across.
+ */
+function longEdgePath(x1: number, x2: number, y1: number, y2: number): string {
+  const direction = Math.sign(x2 - x1)
+  const shelf = Math.round((y1 + y2) / 2)
+  const bend = Math.min(EDGE_BEND, Math.abs(x2 - x1) / 2)
+  return (
+    `M ${x1} ${y1} C ${x1} ${y1 + (shelf - y1) * 0.55} ${
+      x1 + direction * bend * 0.5
+    } ${shelf} ${x1 + direction * bend} ${shelf} ` +
+    `L ${x2 - direction * bend} ${shelf} C ${x2 - direction * bend * 0.5} ${shelf} ${x2} ${
+      y2 - (y2 - shelf) * 0.55
+    } ${x2} ${y2}`
+  )
+}
+
 /** The path of one edge, curving smoothly when it moves sideways between rows. */
 function edgePath(edge: GraphEdge, height: number, center: number): string {
   const x1 = laneX(edge.from)
@@ -154,22 +182,35 @@ function edgePath(edge: GraphEdge, height: number, center: number): string {
   }
 
   const dx = x2 - x1
+  const far = Math.abs(dx) >= LANE_WIDTH * EDGE_SHELF_LANES
+  if (far) {
+    if (edge.side === 'through') return longEdgePath(x1, x2, 0, height)
+    if (edge.side === 'top') return longEdgePath(x1, x2, 0, center)
+    return longEdgePath(x1, x2, center, height)
+  }
+
   if (edge.side === 'through') {
     return `M ${x1} 0 C ${x1} ${height * 0.35} ${x2} ${height * 0.65} ${x2} ${height}`
   }
   if (edge.side === 'top') {
     // Coming from a lane above, the line starts straight down and reaches the
     // node at an angle, so a branch is seen joining the node instead of bending
-    // into a vertical stub right above it.
-    const middle = center / 2
-    return `M ${x1} 0 C ${x1} ${middle} ${x2 - dx * 0.4} ${middle} ${x2} ${center}`
+    // into a vertical stub right above it. The handle that sets the angle is
+    // capped by the row height, so a nearby lane still draws a short, even
+    // diagonal instead of a flat shelf.
+    const reach = Math.min(Math.abs(dx) * 0.25, center * 0.2)
+    return `M ${x1} 0 C ${x1} ${center * 0.3} ${x2 - Math.sign(dx) * reach} ${
+      center * 0.8
+    } ${x2} ${center}`
   }
   // Leaving a node, the line takes its angle straight away and settles vertical
-  // at the lane below.
+  // at the lane below. As above, the sideways handle stays proportional to the
+  // row height so a nearby lane does not flatten the line against the node.
   const dy = height - center
-  return `M ${x1} ${center} C ${x1 + dx * 0.4} ${center + dy * 0.5} ${
+  const reach = Math.min(Math.abs(dx) * 0.25, dy * 0.2)
+  return `M ${x1} ${center} C ${x1 + Math.sign(dx) * reach} ${center + dy * 0.2} ${
     x2
-  } ${height - dy * 0.2} ${x2} ${height}`
+  } ${center + dy * 0.7} ${x2} ${height}`
 }
 
 /**
@@ -532,8 +573,10 @@ export function HistoryPanel({
   }, [layout])
 
   const maxGraphColumnWidth = useMemo(() => {
-    if (commitsWidth <= 0) return MAX_GRAPH_WIDTH
-    return Math.max(MIN_GRAPH_WIDTH, Math.min(MAX_GRAPH_WIDTH, commitsWidth - MIN_TEXT_WIDTH))
+    if (commitsWidth <= 0) return INITIAL_GRAPH_WIDTH
+    // The graph may use every pixel the list has to spare, so a wide history
+    // with many lanes shows them all instead of clipping the rightmost ones.
+    return Math.max(MIN_GRAPH_WIDTH, commitsWidth - MIN_TEXT_WIDTH)
   }, [commitsWidth])
 
   // The graph may be dragged narrow enough to clip its lanes: the user can
