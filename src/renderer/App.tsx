@@ -7,7 +7,7 @@ import {
   useState,
   type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
-  type PointerEvent as ReactPointerEvent
+  type MouseEvent as ReactMouseEvent
 } from 'react'
 import { useTranslation } from 'react-i18next'
 import type {
@@ -39,6 +39,7 @@ import {
   MAX_HISTORY_WIDTH,
   MIN_HISTORY_WIDTH,
   type AddWorktreeRequest,
+  type ChangesLayout,
   type CloneRequest,
   type CrlfChoice,
   type FileVersionSource,
@@ -296,6 +297,9 @@ export default function App() {
   // arrow beside the plus.
   const [closedRepos, setClosedRepos] = useState<string[]>([])
   const [selected, setSelected] = useState<Selection | null>(null)
+  // How the working tree's file lists group their rows: a flat list by default,
+  // or the folder tree the heading's toggle asks for.
+  const [changesLayout, setChangesLayout] = useState<ChangesLayout>('flat')
   // The open file's language and hunk counts, reported by the viewer for the
   // status bar. It is null whenever no file is open.
   const [fileInfo, setFileInfo] = useState<DiffInfo | null>(null)
@@ -1424,6 +1428,13 @@ export default function App() {
     setHistoryExpanded((expanded) => !expanded)
   }, [])
 
+  /** Switches the changes list between a flat list and a folder tree. */
+  const toggleChangesLayout = useCallback(() => {
+    const next: ChangesLayout = changesLayout === 'flat' ? 'tree' : 'flat'
+    setChangesLayout(next)
+    void window.seam.writeSettings({ changesLayout: next })
+  }, [changesLayout])
+
   /** Applies a panel width, keeping it inside what the current window can show. */
   const applyHistoryWidth = useCallback((width: number) => {
     const next = clampHistoryWidth(width, window.innerWidth)
@@ -1438,7 +1449,7 @@ export default function App() {
 
   /** Starts a drag from wherever the panel's right edge is now. */
   const startHistoryResize = useCallback(
-    (event: ReactPointerEvent<HTMLDivElement>) => {
+    (event: ReactMouseEvent<HTMLDivElement>) => {
       // A drag whose release was lost would fight this one over the same edge.
       historyResizeStop.current?.()
       const start = { x: event.clientX, width: historyWidthRef.current }
@@ -2043,6 +2054,7 @@ export default function App() {
           document.documentElement.setAttribute('data-theme', settings.value.theme)
         }
         document.documentElement.setAttribute('data-graph-palette', settings.value.graphPalette)
+        setChangesLayout(settings.value.changesLayout)
         if (settings.value.language) {
           i18n.changeLanguage(settings.value.language)
         }
@@ -2567,7 +2579,7 @@ export default function App() {
             title={t('history.resize')}
             tabIndex={0}
             data-testid="history-resizer"
-            onPointerDown={startHistoryResize}
+            onMouseDown={startHistoryResize}
             onDoubleClick={resetHistoryWidth}
             onKeyDown={resizeHistoryWithKeyboard}
           />
@@ -2580,6 +2592,35 @@ export default function App() {
           <div className="sidebar__heading">
             <span>{selectedCommit === null ? t('changes.title') : t('history.commitChanges')}</span>
             <div className="sidebar__heading-actions">
+              {selectedCommit === null && (
+                <button
+                  type="button"
+                  className="icon-button sidebar__view-toggle"
+                  data-testid="changes-tree-toggle"
+                  aria-pressed={changesLayout === 'tree'}
+                  aria-label={t(
+                    changesLayout === 'tree' ? 'changes.tree.flat' : 'changes.tree.show'
+                  )}
+                  title={t(changesLayout === 'tree' ? 'changes.tree.flat' : 'changes.tree.show')}
+                  onClick={toggleChangesLayout}
+                >
+                  <svg
+                    width="13"
+                    height="13"
+                    viewBox="0 0 14 14"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.4"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M2.5 2.5v9M2.5 5.5h2.5M2.5 9.5h2.5" />
+                    <rect x="6" y="3.5" width="5.5" height="4" rx="1" />
+                    <rect x="6" y="8.5" width="5.5" height="4" rx="1" />
+                  </svg>
+                </button>
+              )}
               <span className="sidebar__count" data-testid="changes-count">
                 {selectedCommit === null
                   ? t('changes.files', { count: fileCount })
@@ -2910,6 +2951,7 @@ export default function App() {
               onDiscard={(paths) => void discardFiles(paths)}
               onResolve={() => void openConflicts()}
               onAbort={() => void openConflicts('abort')}
+              layout={changesLayout}
             />
           </>
         )

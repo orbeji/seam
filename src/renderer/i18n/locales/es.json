@@ -218,6 +218,12 @@
       "label": "Acciones del archivo",
       "discardAll": "Descartar todos los cambios"
     },
+    "tree": {
+      "show": "Mostrar árbol de carpetas",
+      "flat": "Mostrar lista plana",
+      "expand": "Expandir carpeta",
+      "collapse": "Contraer carpeta"
+    },
     "operation": {
       "merge": "Merge en curso",
       "cherry-pick": "Cherry-pick en curso",
@@ -545,7 +551,7 @@
     "columns": {
       "head": "HEAD (solo lectura)",
       "index": "Índice (solo lectura)",
-      "worktree": "Copia de trabajo (editable)",
+      "worktree": "Copia de trabajo (solo lectura)",
       "stage1": "Base (solo lectura)",
       "stage2": "Tu versión (solo lectura)",
       "stage3": "Su versión (solo lectura)",

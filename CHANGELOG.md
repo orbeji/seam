@@ -4,6 +4,32 @@ All notable changes to Seam are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- The changes list can group its files into a folder tree, so a deep working
+  tree folds away instead of pushing the files around it out of reach. The
+  toggle beside the list's count switches between the tree and the flat list,
+  and Seam remembers the choice.
+
+### Changed
+
+- The diff viewer is read-only in both layouts. It still shows the working copy
+  and stages hunks from its margin, but it no longer accepts typing, so a file
+  changes only from outside the viewer or through the staging actions.
+
+### Fixed
+
+- Resizing the history panel or its graph column follows the cursor on Windows
+  through WSLg again. The drag now listens to plain mouse moves as well as
+  pointer moves, so a session that delivers the press but loses the
+  `pointermove` events no longer leaves both handles stuck.
+- The right-click menus of a changed file, a local branch and a conflict region
+  open from the right-button press as well as from the `contextmenu` event,
+  which WSLg and some Wayland sessions drop. A secondary press no longer closes
+  the menu it is opening.
+
 ## [0.5.1] - 2026-11-24
 
 ### Changed

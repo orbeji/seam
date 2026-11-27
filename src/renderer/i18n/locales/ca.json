@@ -182,6 +182,12 @@
       "label": "Accions del fitxer",
       "discardAll": "Descartar tots els canvis"
     },
+    "tree": {
+      "show": "Mostra l'arbre de carpetes",
+      "flat": "Mostra la llista plana",
+      "expand": "Desplega la carpeta",
+      "collapse": "Plega la carpeta"
+    },
     "operation": {
       "merge": "Merge en curs",
       "cherry-pick": "Cherry-pick en curs",
@@ -509,7 +515,7 @@
     "columns": {
       "head": "HEAD (només lectura)",
       "index": "Índex (només lectura)",
-      "worktree": "Còpia de treball (editable)",
+      "worktree": "Còpia de treball (només lectura)",
       "stage1": "Base (només lectura)",
       "stage2": "La teva versió (només lectura)",
       "stage3": "La seva versió (només lectura)",

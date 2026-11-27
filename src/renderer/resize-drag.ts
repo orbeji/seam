@@ -1,6 +1,11 @@
 // SPDX-License-Identifier: MIT
 
-import type { PointerEvent as ReactPointerEvent } from 'react'
+/** The part of a press a resize handle needs, from a mouse or a pointer event. */
+export interface ResizeDragStart {
+  readonly button: number
+  readonly clientX: number
+  preventDefault: () => void
+}
 
 /** What a drag from a resize handle does while the pointer moves, and when it ends. */
 export interface ResizeDragHandlers {
@@ -16,61 +21,50 @@ export interface ResizeDragHandlers {
  * the drag early, or null when the press was not the primary button and the
  * handle must ignore it.
  *
- * Pointer capture alone is not enough. Some Linux sessions, WSLg and a few
- * Wayland compositors among them, either raise on `setPointerCapture` or do not
- * keep the capture, and then the handle stops hearing `pointermove` as soon as
- * the cursor leaves its six pixels: the panel cannot be dragged. The window
- * follows every move and release instead, with the capture kept only as a hint
- * for the default cursor.
+ * The drag listens to plain mouse events, not only to pointer events. WSLg and
+ * a few Wayland sessions deliver the press but not the `pointermove` that
+ * follows it, or retarget it to a different pointer id, so a drag built on
+ * pointer events alone never leaves the six-pixel handle. Mouse moves reach the
+ * window on those sessions, and both kinds are followed here: the window sees
+ * every move and release, and the drag ends on whichever release arrives first.
+ * The window keeps its own mouse capture while the button is down, so the split
+ * still follows a cursor that leaves the window.
  */
 export function followResizeDrag(
-  event: ReactPointerEvent<HTMLElement>,
+  event: ResizeDragStart,
   handlers: ResizeDragHandlers
 ): (() => void) | null {
   if (event.button !== 0) return null
   event.preventDefault()
-
-  const handle = event.currentTarget
-  const pointerId = event.pointerId
-  try {
-    handle.setPointerCapture(pointerId)
-  } catch {
-    // The window listeners below carry the drag on their own.
-  }
 
   let ended = false
 
   const stop = (): void => {
     if (ended) return
     ended = true
-    window.removeEventListener('pointermove', move)
-    window.removeEventListener('pointerup', end)
-    window.removeEventListener('pointercancel', end)
+    window.removeEventListener('pointermove', move, true)
+    window.removeEventListener('mousemove', move, true)
+    window.removeEventListener('pointerup', end, true)
+    window.removeEventListener('mouseup', end, true)
+    window.removeEventListener('pointercancel', end, true)
     window.removeEventListener('blur', stop)
     document.body.classList.remove('resize-drag')
-    if (handle.hasPointerCapture?.(pointerId) === true) {
-      try {
-        handle.releasePointerCapture(pointerId)
-      } catch {
-        // The capture was already gone, which is what this drag assumes anyway.
-      }
-    }
     handlers.onEnd()
   }
 
-  const move = (moveEvent: PointerEvent): void => {
-    if (moveEvent.pointerId !== pointerId) return
+  const move = (moveEvent: MouseEvent | PointerEvent): void => {
     handlers.onMove(moveEvent.clientX)
   }
 
-  const end = (endEvent: PointerEvent): void => {
-    if (endEvent.pointerId !== pointerId) return
+  const end = (): void => {
     stop()
   }
 
-  window.addEventListener('pointermove', move)
-  window.addEventListener('pointerup', end)
-  window.addEventListener('pointercancel', end)
+  window.addEventListener('pointermove', move, true)
+  window.addEventListener('mousemove', move, true)
+  window.addEventListener('pointerup', end, true)
+  window.addEventListener('mouseup', end, true)
+  window.addEventListener('pointercancel', end, true)
   // A window that loses focus never sees the release, so the drag ends here.
   window.addEventListener('blur', stop)
   document.body.classList.add('resize-drag')

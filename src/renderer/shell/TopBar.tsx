@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { WorktreeStatus } from '../../shared/git'
+import { isSecondaryPress } from '../secondary-click'
 import { sameFolder } from '../worktree/paths'
 import { useBranchOrder } from './branch-order'
 import { buildBranchTree, type BranchNode } from './branch-tree'
@@ -214,6 +215,9 @@ function BranchRows({
             onContextMenu={
               item.kind === 'local' ? (event) => onContextMenu(event, item.name) : undefined
             }
+            onMouseDown={
+              item.kind === 'local' ? (event) => onContextMenu(event, item.name) : undefined
+            }
           >
             <span className="topbar__menu-name">{node.label}</span>
             {item.kind === 'local' && item.current ? (
@@ -328,6 +332,8 @@ export default function TopBar({
   useEffect(() => {
     if (context === null) return
     const close = (event: MouseEvent): void => {
+      // A secondary press belongs to the row's own menu, not to this close.
+      if (event.button !== 0) return
       if (contextRef.current !== null && !contextRef.current.contains(event.target as Node)) {
         setContext(null)
       }
@@ -380,6 +386,7 @@ export default function TopBar({
   }
 
   const handleBranchContext = (event: ReactMouseEvent, name: string) => {
+    if (!isSecondaryPress(event)) return
     event.preventDefault()
     event.stopPropagation()
     setContext({ name, x: event.clientX, y: event.clientY, mode: 'menu' })
@@ -575,6 +582,7 @@ export default function TopBar({
               className="topbar__branch-context"
               role="menu"
               data-testid="branch-context-menu"
+              onContextMenu={(event) => event.preventDefault()}
               style={{
                 top: Math.min(context.y, window.innerHeight - 220),
                 left: Math.min(context.x, window.innerWidth - 280)

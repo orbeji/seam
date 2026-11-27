@@ -218,6 +218,12 @@
       "label": "File actions",
       "discardAll": "Discard all changes"
     },
+    "tree": {
+      "show": "Show folder tree",
+      "flat": "Show flat list",
+      "expand": "Expand folder",
+      "collapse": "Collapse folder"
+    },
     "operation": {
       "merge": "Merge in progress",
       "cherry-pick": "Cherry-pick in progress",
@@ -545,7 +551,7 @@
     "columns": {
       "head": "HEAD (read-only)",
       "index": "Index (read-only)",
-      "worktree": "Working copy (editable)",
+      "worktree": "Working copy (read-only)",
       "stage1": "Base (read-only)",
       "stage2": "Yours (read-only)",
       "stage3": "Theirs (read-only)",

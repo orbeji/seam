@@ -8,7 +8,7 @@ import {
   useState,
   type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
-  type PointerEvent as ReactPointerEvent,
+  type MouseEvent as ReactMouseEvent,
   type UIEvent as ReactUIEvent
 } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -612,7 +612,7 @@ export function HistoryPanel({
     })
   }
 
-  const beginGraphResize = (event: ReactPointerEvent<HTMLDivElement>): void => {
+  const beginGraphResize = (event: ReactMouseEvent<HTMLDivElement>): void => {
     event.stopPropagation()
     // A drag whose release was lost would fight this one over the same edge.
     graphResizeStop.current?.()
@@ -915,7 +915,7 @@ export function HistoryPanel({
                   aria-valuenow={graphColumn}
                   title={t('history.resizeGraph')}
                   tabIndex={0}
-                  onPointerDown={beginGraphResize}
+                  onMouseDown={beginGraphResize}
                   onKeyDown={resizeGraphWithKeyboard}
                   onDoubleClick={() => setDraggedGraphWidth(null)}
                 />

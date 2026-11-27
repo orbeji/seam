@@ -29,6 +29,14 @@ describe('parseSettingsPatch', () => {
   it('rejects a branch order it does not know', () => {
     expect(parseSettingsPatch({ branchOrder: 'sideways' })).toBeNull()
   })
+
+  it('keeps the changes layout a renderer asks for', () => {
+    expect(parseSettingsPatch({ changesLayout: 'tree' })).toEqual({ changesLayout: 'tree' })
+  })
+
+  it('rejects a changes layout it does not know', () => {
+    expect(parseSettingsPatch({ changesLayout: 'columns' })).toBeNull()
+  })
 })
 
 describe('Settings', () => {
@@ -150,6 +158,21 @@ describe('Settings', () => {
 
     writeFileSync(file, JSON.stringify({ branchOrder: 'sideways' }))
     expect(new Settings(file).read().branchOrder).toBe('ascending')
+  })
+
+  it('lists the changes flat on a fresh install', () => {
+    expect(new Settings(tempFile()).read().changesLayout).toBe('flat')
+  })
+
+  it('remembers the folder tree and falls back on a layout it does not know', () => {
+    const file = tempFile()
+    const settings = new Settings(file)
+    settings.update({ changesLayout: 'tree' })
+
+    expect(new Settings(file).read().changesLayout).toBe('tree')
+
+    writeFileSync(file, JSON.stringify({ changesLayout: 'columns' }))
+    expect(new Settings(file).read().changesLayout).toBe('flat')
   })
 
   it('opens the history panel at its default width and remembers a dragged one', () => {

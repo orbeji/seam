@@ -383,6 +383,9 @@ export type GraphPalettePreference = 'classic' | 'contrast' | 'pastel'
 /** The direction the branch menu lists folders and branches in. */
 export type BranchOrderPreference = 'ascending' | 'descending'
 
+/** How the changes list groups its files: as a flat list, or by folder. */
+export type ChangesLayout = 'flat' | 'tree'
+
 /** Every graph palette, in the order they are meant to be offered. */
 export const GRAPH_PALETTES: readonly GraphPalettePreference[] = ['classic', 'contrast', 'pastel']
 
@@ -415,6 +418,8 @@ export interface SettingsData {
   readonly branchOrder: BranchOrderPreference
   /** Whether unchanged lines are folded in the viewer by default. */
   readonly collapse: boolean
+  /** Whether the changes list is flat or grouped into a folder tree. */
+  readonly changesLayout: ChangesLayout
   /** Whether commits include the `Signed-off-by` trailer by default. */
   readonly signoff: boolean
   /** The width of the history panel, in pixels. */
@@ -441,6 +446,8 @@ export interface SettingsPatch {
   branchOrder?: BranchOrderPreference
   /** Whether unchanged lines are folded in the viewer by default. */
   collapse?: boolean
+  /** Whether the changes list is flat or grouped into a folder tree. */
+  changesLayout?: ChangesLayout
   /** Whether commits include the `Signed-off-by` trailer by default. */
   signoff?: boolean
   /** The width of the history panel, in pixels. */

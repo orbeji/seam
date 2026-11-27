@@ -8,6 +8,7 @@ import {
   MAX_HISTORY_WIDTH,
   MIN_HISTORY_WIDTH,
   type BranchOrderPreference,
+  type ChangesLayout,
   type GraphPalettePreference,
   type HighlightPreference,
   type SettingsData,
@@ -37,6 +38,8 @@ interface StoredSettings {
   branchOrder: BranchOrderPreference
   /** Whether unchanged lines are folded in the viewer by default. */
   collapse: boolean
+  /** Whether the changes list is flat or grouped into a folder tree. */
+  changesLayout: ChangesLayout
   /** Whether commits include the `Signed-off-by` trailer by default. */
   signoff: boolean
   /** The width of the history panel, in pixels. */
@@ -56,6 +59,7 @@ const DEFAULT_HIGHLIGHT: HighlightPreference = 'words'
 const DEFAULT_SYNTAX_THEME: SyntaxThemePreference = 'seam'
 const DEFAULT_GRAPH_PALETTE: GraphPalettePreference = 'classic'
 const DEFAULT_BRANCH_ORDER: BranchOrderPreference = 'ascending'
+const DEFAULT_CHANGES_LAYOUT: ChangesLayout = 'flat'
 
 const DEFAULTS: StoredSettings = {
   runHooks: true,
@@ -67,6 +71,7 @@ const DEFAULTS: StoredSettings = {
   graphPalette: DEFAULT_GRAPH_PALETTE,
   branchOrder: DEFAULT_BRANCH_ORDER,
   collapse: false,
+  changesLayout: DEFAULT_CHANGES_LAYOUT,
   signoff: false,
   crlfWarning: true,
   crlfWarningRepos: {},
@@ -115,6 +120,10 @@ function parseGraphPalette(value: unknown): GraphPalettePreference {
 
 function parseBranchOrder(value: unknown): BranchOrderPreference {
   return value === 'ascending' || value === 'descending' ? value : DEFAULT_BRANCH_ORDER
+}
+
+function parseChangesLayout(value: unknown): ChangesLayout {
+  return value === 'flat' || value === 'tree' ? value : DEFAULT_CHANGES_LAYOUT
 }
 
 /**
@@ -182,6 +191,11 @@ export function parseSettingsPatch(value: unknown): SettingsPatch | null {
     if (typeof raw['collapse'] !== 'boolean') return null
     patch.collapse = raw['collapse']
   }
+  if ('changesLayout' in raw) {
+    const changesLayout = raw['changesLayout']
+    if (changesLayout !== 'flat' && changesLayout !== 'tree') return null
+    patch.changesLayout = changesLayout
+  }
   if ('signoff' in raw) {
     if (typeof raw['signoff'] !== 'boolean') return null
     patch.signoff = raw['signoff']
@@ -224,6 +238,7 @@ export class Settings {
       graphPalette: this.value.graphPalette,
       branchOrder: this.value.branchOrder,
       collapse: this.value.collapse,
+      changesLayout: this.value.changesLayout,
       signoff: this.value.signoff,
       historyWidth: this.value.historyWidth
     }
@@ -241,6 +256,8 @@ export class Settings {
     if (patch.branchOrder !== undefined)
       this.value.branchOrder = parseBranchOrder(patch.branchOrder)
     if (patch.collapse !== undefined) this.value.collapse = patch.collapse
+    if (patch.changesLayout !== undefined)
+      this.value.changesLayout = parseChangesLayout(patch.changesLayout)
     if (patch.signoff !== undefined) this.value.signoff = patch.signoff
     if (patch.historyWidth !== undefined)
       this.value.historyWidth = parseHistoryWidth(patch.historyWidth)
@@ -291,6 +308,7 @@ export class Settings {
         graphPalette: parseGraphPalette(stored['graphPalette']),
         branchOrder: parseBranchOrder(stored['branchOrder']),
         collapse: typeof stored['collapse'] === 'boolean' ? stored['collapse'] : DEFAULTS.collapse,
+        changesLayout: parseChangesLayout(stored['changesLayout']),
         signoff: typeof stored['signoff'] === 'boolean' ? stored['signoff'] : DEFAULTS.signoff,
         historyWidth: parseHistoryWidth(stored['historyWidth']),
         crlfWarning:

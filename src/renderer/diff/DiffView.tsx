@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-import { history, defaultKeymap, historyKeymap } from '@codemirror/commands'
+import { defaultKeymap } from '@codemirror/commands'
 import { bracketMatching } from '@codemirror/language'
 import { Change, MergeView, getChunks, unifiedMergeView } from '@codemirror/merge'
 import {
@@ -204,7 +204,7 @@ export default function DiffView({
       : `${repo}\u0000${path}\u0000${from}\u0000${to}\u0000${commit}\u0000${previousPath ?? ''}`
   // The comparison and the staging model are read by two effects. Splitting them
   // lets a revert read only the model again: the comparison keeps its identity,
-  // so the editors are not rebuilt and their undo history survives.
+  // so the editors are not rebuilt.
   const [fileState, setFileState] = useState<{
     key: string
     comparison: FileComparison | null
@@ -271,26 +271,25 @@ export default function DiffView({
   const containerRef = useRef<HTMLDivElement | null>(null)
   const viewRef = useRef<EditorView | null>(null)
   // The staging gutter sits in its own compartment, so its markers can be
-  // replaced after a revert without rebuilding the editor and dropping the undo
-  // history that makes the revert undoable.
+  // replaced after a revert without rebuilding the editor.
   const gutter = useMemo(() => new Compartment(), [])
   const chunkIndexRef = useRef(-1)
   const editableTextRef = useRef('')
   const editKeyRef = useRef('')
   // The comparison the editors currently show, so a reread that found the same
-  // two sides leaves the editor - and any typing in it - alone.
+  // two sides leaves the editor alone.
   const displayedRef = useRef<{ key: string; comparison: FileComparison | null } | null>(null)
   // The parent re-renders for reasons of its own - a status refresh after a
   // write, for instance - which would reach the editor through `navigate` and
-  // rebuild it, dropping the undo history. Keeping the edge callback in a ref
-  // keeps `navigate` still, so only the content and the options rebuild.
+  // rebuild it. Keeping the edge callback in a ref keeps `navigate` still, so
+  // only the content and the options rebuild.
   const onEdgeRef = useRef(onEdge)
   useEffect(() => {
     onEdgeRef.current = onEdge
   }, [onEdge])
-  // The working-copy lines selected in the editable pane. It is kept in a ref
-  // so the menu can still read it when the click that opens the menu moves the
-  // editor's selection.
+  // The working-copy lines selected in the viewer. It is kept in a ref so the
+  // menu can still read it when the click that opens the menu moves the editor's
+  // selection.
   const selectionRef = useRef<number[]>([])
   // The text the selection was made on. A refresh that reads the same content
   // rebuilds the editor but does not throw the selection away.
@@ -332,8 +331,7 @@ export default function DiffView({
   }, [model])
   // The text Seam itself wrote when it reverted hunks. The watcher reports that
   // write back like any other working-tree change, and this lets the viewer
-  // ignore its own change so the editor keeps the undo history that can bring
-  // the reverted lines back.
+  // ignore its own change so the reverted lines are not read back over it.
   const revertedRef = useRef<{ key: string; text: string } | null>(null)
   const languageId = useMemo(
     () => detectLanguageId(path, firstLine(comparison?.to ?? comparison?.from ?? null)),
@@ -402,7 +400,7 @@ export default function DiffView({
         sideText(result.value.to) === reverted.text
       ) {
         // The working copy already shows what was just read; a rebuild would
-        // throw away the undo entry the revert added.
+        // throw away the text the revert applied.
         return
       }
       revertedRef.current = null
@@ -423,13 +421,13 @@ export default function DiffView({
       ) {
         // The two sides read back unchanged - a refresh caused by a change Seam
         // already applied, for instance. Keeping the previous state leaves the
-        // editor, and the undo history that makes a revert undoable, untouched.
+        // editor untouched.
         return
       }
       displayedRef.current = { key: requestKey, comparison: result.value }
       // The working copy changed under the viewer - an external save or a file
-      // discarded from the list. The editable pane adopts the new text so the
-      // diff, its chunk buttons and the difference count follow it.
+      // discarded from the list. The viewer adopts the new text so the diff, its
+      // chunk buttons and the difference count follow it.
       editableTextRef.current = sideText(result.value.to)
       setFileState({ key: requestKey, comparison: result.value, error: null })
       // A freshly read comparison is the working-copy text again, so the count a
@@ -568,10 +566,9 @@ export default function DiffView({
   }, [writeHunk])
 
   // Throw a pending change away: the working copy's lines inside the hunks go
-  // back to the index's. It is destructive, but the editor's undo can bring the
-  // lines back while the viewer is open, so the viewer reverts straight away
-  // and only the markers are read again. The new text is applied to the
-  // editable pane as one change.
+  // back to the index's. The viewer applies the new text straight away and only
+  // the markers are read again. The new text is applied to the working-copy
+  // pane as one change.
   const revert = useCallback(
     async (hunks: readonly HunkRange[]) => {
       if (hunks.length === 0) return
@@ -712,7 +709,7 @@ export default function DiffView({
     if (comparison.binary) return
 
     // A new file starts from the version read from Git; a rebuild after an
-    // option change keeps whatever the user has typed in an editable pane.
+    // option change keeps the text a revert applied.
     if (editKeyRef.current !== requestKey) {
       editableTextRef.current = toText
       editKeyRef.current = requestKey
@@ -740,7 +737,6 @@ export default function DiffView({
       drawSelection(),
       keymap.of([
         ...defaultKeymap,
-        ...historyKeymap,
         {
           key: 'F7',
           run: () => {
@@ -765,11 +761,17 @@ export default function DiffView({
       flashField
     ]
 
-    const editableExtensions: Extension[] = [
+    const readOnlyExtensions: Extension[] = [
       ...common,
-      history(),
-      EditorState.readOnly.of(false),
-      EditorView.editable.of(true),
+      EditorState.readOnly.of(true),
+      EditorView.editable.of(false)
+    ]
+
+    // The viewer never lets the user type into a file. The working-copy pane is
+    // read-only too; it only tracks the selection, so a hunk or a single line
+    // can still be staged from the margin menu.
+    const worktreeExtensions: Extension[] = [
+      ...readOnlyExtensions,
       gutter.of(worktreeView && markers.length > 0 ? stagingGutter(markers, handleMarker) : []),
       EditorView.updateListener.of((update) => {
         if (update.docChanged) editableTextRef.current = update.state.doc.toString()
@@ -777,12 +779,6 @@ export default function DiffView({
           selectionRef.current = selectedLines(update.state)
         }
       })
-    ]
-
-    const readOnlyExtensions: Extension[] = [
-      ...common,
-      EditorState.readOnly.of(true),
-      EditorView.editable.of(false)
     ]
 
     // The staged view is read-only, but its index side still carries a hollow
@@ -795,7 +791,7 @@ export default function DiffView({
     ]
 
     if (language) {
-      editableExtensions.push(language)
+      worktreeExtensions.push(language)
       readOnlyExtensions.push(language)
       stagedExtensions.push(language)
     }
@@ -862,7 +858,7 @@ export default function DiffView({
         state: EditorState.create({
           doc: editable ? editableTextRef.current : toText,
           extensions: [
-            ...(editable ? editableExtensions : stagedView ? stagedExtensions : readOnlyExtensions),
+            ...(editable ? worktreeExtensions : stagedView ? stagedExtensions : readOnlyExtensions),
             unifiedMergeView({
               original: fromText,
               highlightChanges: effectiveGranularity !== 'none',
@@ -890,14 +886,13 @@ export default function DiffView({
       b: {
         doc: editable ? editableTextRef.current : toText,
         extensions: editable
-          ? editableExtensions
+          ? worktreeExtensions
           : stagedView
             ? stagedExtensions
             : readOnlyExtensions
       },
       parent: container,
       orientation: 'a-b',
-      ...(editable ? { revertControls: 'a-to-b' as const } : {}),
       highlightChanges: effectiveGranularity !== 'none',
       gutter: true,
       collapseUnchanged: collapseOption,
@@ -909,7 +904,7 @@ export default function DiffView({
       viewRef.current = null
     }
     // The markers are refreshed in place by the effect below; a change to them
-    // must not rebuild the editor, or the undo history would be thrown away.
+    // must not rebuild the editor.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     comparison,
@@ -934,8 +929,8 @@ export default function DiffView({
   ])
 
   // Refresh the margin markers in place. A revert changes the staging model but
-  // not the comparison, so the editor is left alone and its undo history, which
-  // holds the revert, survives.
+  // not the comparison, so the editor is left alone and the text the revert
+  // applied survives.
   useEffect(() => {
     const view = viewRef.current
     if (view === null) return

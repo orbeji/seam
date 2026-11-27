@@ -17,6 +17,7 @@ import {
 } from 'react'
 import { useTranslation } from 'react-i18next'
 import { diffInline } from '../../core/diff'
+import { isSecondaryPress } from '../secondary-click'
 import {
   createMerge,
   isRegionResolved,
@@ -416,8 +417,9 @@ export default function MergeEditor({ repo, path, onExit }: MergeEditorProps) {
   }
 
   const openContext = (event: ReactMouseEvent<HTMLElement>, regionId: number | null): void => {
-    if (regionId === null) return
+    if (!isSecondaryPress(event)) return
     event.preventDefault()
+    if (regionId === null) return
     const left = Math.max(12, Math.min(event.clientX, window.innerWidth - 240))
     const top = Math.max(12, Math.min(event.clientY, window.innerHeight - 120))
     setContextMenu({ regionId, left, top })
@@ -426,6 +428,8 @@ export default function MergeEditor({ repo, path, onExit }: MergeEditorProps) {
   useEffect(() => {
     if (contextMenu === null && !compareMenu && compare === null && !confirmDiscard) return
     const onMouseDown = (event: MouseEvent): void => {
+      // The row that opens its own menu takes this press; a left click closes.
+      if (event.button !== 0) return
       if (menu.current !== null && menu.current.contains(event.target as Node)) return
       setContextMenu(null)
       setCompareMenu(false)
@@ -756,6 +760,7 @@ export default function MergeEditor({ repo, path, onExit }: MergeEditorProps) {
                 data-region={row.regionId ?? ''}
                 key={row.key}
                 onContextMenu={(event) => openContext(event, row.regionId)}
+                onMouseDown={(event) => openContext(event, row.regionId)}
               >
                 <div
                   className={`merge__cell${toneOf(row.kind, row.leftText, row.baseText)}${
@@ -923,6 +928,7 @@ export default function MergeEditor({ repo, path, onExit }: MergeEditorProps) {
           aria-label={t('merge.contextMenu')}
           data-testid="merge-context-menu"
           style={{ left: contextMenu.left, top: contextMenu.top }}
+          onContextMenu={(event) => event.preventDefault()}
         >
           <button
             type="button"

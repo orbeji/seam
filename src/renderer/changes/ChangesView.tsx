@@ -1,11 +1,19 @@
 // SPDX-License-Identifier: MIT
 
-import { useEffect, useState } from 'react'
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+  type ReactNode
+} from 'react'
 import { useTranslation } from 'react-i18next'
 import type { ChangeSummary, GitOperation, StatusEntry, UnmergedEntry } from '../../shared/git'
-import type { FileVersionSource } from '../../shared/ipc'
+import type { ChangesLayout, FileVersionSource } from '../../shared/ipc'
 import { splitPath } from '../paths'
+import { isSecondaryPress } from '../secondary-click'
 import { entryView, fileBadge } from './entry-view'
+import { buildFileTree, type FileTreeNode } from './file-tree'
 
 /** Opens a file in the diff viewer, comparing two of its versions. */
 export type OpenDiff = (path: string, from: FileVersionSource, to: FileVersionSource) => void
@@ -32,6 +40,8 @@ interface SectionProps {
   selectedTo: FileVersionSource | null
   /** Throws away a row's working-tree changes. Only the unstaged list sets it. */
   onDiscard?: StageAction
+  /** Whether the rows are a flat list or a folder tree. */
+  layout: ChangesLayout
 }
 
 /**
@@ -90,6 +100,91 @@ function ActionIcon({ action }: { action: Exclude<SectionAction, null> }) {
   )
 }
 
+/** One level of the changes tree, and the folders it opens in turn. */
+function TreeNodes({
+  nodes,
+  collapsed,
+  onToggle,
+  renderFile
+}: {
+  nodes: readonly FileTreeNode[]
+  collapsed: ReadonlySet<string>
+  onToggle: (path: string) => void
+  renderFile: (entry: StatusEntry) => ReactNode
+}) {
+  const { t } = useTranslation()
+
+  return (
+    <>
+      {nodes.map((node) => {
+        if (node.kind === 'file') return renderFile(node.entry)
+        const closed = collapsed.has(node.path)
+        return (
+          <li className="changes__tree-folder" key={`folder:${node.path}`}>
+            <div className="changes__item changes__item--folder">
+              <button
+                type="button"
+                className="changes__entry changes__entry--folder"
+                data-testid="tree-folder"
+                aria-expanded={!closed}
+                title={node.path}
+                onClick={() => onToggle(node.path)}
+              >
+                <Chevron open={!closed} />
+                <span className="changes__folder-name">{node.name}</span>
+                <span className="sr-only">
+                  {t(closed ? 'changes.tree.expand' : 'changes.tree.collapse')}
+                </span>
+              </button>
+            </div>
+            {!closed && (
+              <ul className="changes__list changes__tree-children">
+                <TreeNodes
+                  nodes={node.children}
+                  collapsed={collapsed}
+                  onToggle={onToggle}
+                  renderFile={renderFile}
+                />
+              </ul>
+            )}
+          </li>
+        )
+      })}
+    </>
+  )
+}
+
+/**
+ * The folder hierarchy of a changes list. Folders carry their path from the
+ * repository root, so the same name in two places stays distinct, and each one
+ * can be folded away so a deep tree does not hide the files around it.
+ */
+function ChangeTree({
+  entries,
+  renderFile
+}: {
+  entries: readonly StatusEntry[]
+  renderFile: (entry: StatusEntry) => ReactNode
+}) {
+  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set())
+  const nodes = useMemo(() => buildFileTree(entries), [entries])
+
+  const toggle = (path: string): void => {
+    setCollapsed((current) => {
+      const next = new Set(current)
+      if (next.has(path)) next.delete(path)
+      else next.add(path)
+      return next
+    })
+  }
+
+  return (
+    <ul className="changes__list changes__tree">
+      <TreeNodes nodes={nodes} collapsed={collapsed} onToggle={toggle} renderFile={renderFile} />
+    </ul>
+  )
+}
+
 function Section({
   testId,
   titleKey,
@@ -102,7 +197,8 @@ function Section({
   selectedPath,
   selectedFrom,
   selectedTo,
-  onDiscard
+  onDiscard,
+  layout
 }: SectionProps) {
   const { t } = useTranslation()
   const [collapsed, setCollapsed] = useState(false)
@@ -118,6 +214,8 @@ function Section({
   useEffect(() => {
     if (menu === null) return
     const close = (event: MouseEvent): void => {
+      // The row that opens its own menu takes this press; a left click closes.
+      if (event.button !== 0) return
       const target = event.target
       if (target instanceof Element && target.closest('.changes__context-menu')) return
       setMenu(null)
@@ -146,6 +244,65 @@ function Section({
       x: Math.max(margin, Math.min(x, window.innerWidth - width - margin)),
       y: Math.max(margin, Math.min(y, window.innerHeight - height - margin))
     })
+  }
+
+  const openRowMenu = (event: ReactMouseEvent<HTMLElement>, entry: StatusEntry): void => {
+    if (!isSecondaryPress(event)) return
+    event.preventDefault()
+    openMenu(entry, event.clientX, event.clientY)
+  }
+
+  /** A file row, shared by the flat list and every level of the tree. */
+  const renderFile = (entry: StatusEntry): ReactNode => {
+    const view = entryView(entry)
+    const badge = fileBadge(entry)
+    const { name } = rowPath(entry)
+    const isSelected = selectedPath === entry.path && selectedFrom === from && selectedTo === to
+    return (
+      <li
+        className={`changes__item${isSelected ? ' changes__item--selected' : ''}`}
+        key={view.key}
+        onContextMenu={onDiscard === undefined ? undefined : (event) => openRowMenu(event, entry)}
+        onMouseDown={onDiscard === undefined ? undefined : (event) => openRowMenu(event, entry)}
+      >
+        <button
+          type="button"
+          className="changes__entry"
+          data-testid="entry"
+          title={view.label}
+          aria-current={isSelected ? 'true' : undefined}
+          onClick={() => onOpen(entry.path, from, to)}
+          onKeyDown={(event) => {
+            if (
+              onDiscard === undefined ||
+              (event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10'))
+            ) {
+              return
+            }
+            event.preventDefault()
+            const rect = event.currentTarget.getBoundingClientRect()
+            openMenu(entry, rect.left + 16, rect.top + rect.height)
+          }}
+        >
+          <span className={`changes__badge changes__badge--${badge.tone}`} aria-hidden="true">
+            {badge.letter}
+          </span>
+          <span className="changes__name">{name}</span>
+        </button>
+        {action !== null && (
+          <button
+            type="button"
+            className={`icon-button changes__entry-action changes__entry-action--${action}`}
+            data-testid="entry-action"
+            aria-label={`${t(labelKey)}: ${view.label}`}
+            title={`${t(labelKey)}: ${view.label}`}
+            onClick={() => onAction(pathsFor(entry))}
+          >
+            <ActionIcon action={action} />
+          </button>
+        )}
+      </li>
+    )
   }
 
   return (
@@ -179,72 +336,13 @@ function Section({
         )}
       </h2>
 
-      {!collapsed && entries.length > 0 && (
-        <ul className="changes__list">
-          {entries.map((entry) => {
-            const view = entryView(entry)
-            const badge = fileBadge(entry)
-            const { name, dir } = rowPath(entry)
-            const isSelected =
-              selectedPath === entry.path && selectedFrom === from && selectedTo === to
-            return (
-              <li
-                className={`changes__item${isSelected ? ' changes__item--selected' : ''}`}
-                key={view.key}
-                onContextMenu={
-                  onDiscard === undefined
-                    ? undefined
-                    : (event) => {
-                        event.preventDefault()
-                        openMenu(entry, event.clientX, event.clientY)
-                      }
-                }
-              >
-                <button
-                  type="button"
-                  className="changes__entry"
-                  data-testid="entry"
-                  title={view.label}
-                  aria-current={isSelected ? 'true' : undefined}
-                  onClick={() => onOpen(entry.path, from, to)}
-                  onKeyDown={(event) => {
-                    if (
-                      onDiscard === undefined ||
-                      (event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10'))
-                    ) {
-                      return
-                    }
-                    event.preventDefault()
-                    const rect = event.currentTarget.getBoundingClientRect()
-                    openMenu(entry, rect.left + 16, rect.top + rect.height)
-                  }}
-                >
-                  <span
-                    className={`changes__badge changes__badge--${badge.tone}`}
-                    aria-hidden="true"
-                  >
-                    {badge.letter}
-                  </span>
-                  <span className="changes__name">{name}</span>
-                  <span className="changes__dir">{dir}</span>
-                </button>
-                {action !== null && (
-                  <button
-                    type="button"
-                    className={`icon-button changes__entry-action changes__entry-action--${action}`}
-                    data-testid="entry-action"
-                    aria-label={`${t(labelKey)}: ${view.label}`}
-                    title={`${t(labelKey)}: ${view.label}`}
-                    onClick={() => onAction(pathsFor(entry))}
-                  >
-                    <ActionIcon action={action} />
-                  </button>
-                )}
-              </li>
-            )
-          })}
-        </ul>
-      )}
+      {!collapsed &&
+        entries.length > 0 &&
+        (layout === 'tree' ? (
+          <ChangeTree entries={entries} renderFile={renderFile} />
+        ) : (
+          <ul className="changes__list">{entries.map(renderFile)}</ul>
+        ))}
 
       {menu !== null && onDiscard !== undefined && (
         <div
@@ -253,6 +351,7 @@ function Section({
           aria-label={t('changes.menu.label')}
           data-testid="file-menu"
           style={{ left: menu.x, top: menu.y }}
+          onContextMenu={(event) => event.preventDefault()}
         >
           <button
             type="button"
@@ -285,7 +384,8 @@ function ConflictsSection({
   onOpen,
   onResolve,
   onAbort,
-  selectedPath
+  selectedPath,
+  layout
 }: {
   entries: UnmergedEntry[]
   operation: GitOperation | null
@@ -293,9 +393,34 @@ function ConflictsSection({
   onResolve: () => void
   onAbort: () => void
   selectedPath: string | null
+  layout: ChangesLayout
 }) {
   const { t } = useTranslation()
   const [collapsed, setCollapsed] = useState(false)
+
+  const renderFile = (entry: StatusEntry): ReactNode => {
+    const view = entryView(entry)
+    const badge = fileBadge(entry)
+    const { name } = rowPath(entry)
+    const isSelected = selectedPath === entry.path
+    return (
+      <li className={`changes__item${isSelected ? ' changes__item--selected' : ''}`} key={view.key}>
+        <button
+          type="button"
+          className="changes__entry"
+          data-testid="entry"
+          title={view.label}
+          aria-current={isSelected ? 'true' : undefined}
+          onClick={() => onOpen(entry.path, 'stage2', 'stage3')}
+        >
+          <span className={`changes__badge changes__badge--${badge.tone}`} aria-hidden="true">
+            {badge.letter}
+          </span>
+          <span className="changes__name">{name}</span>
+        </button>
+      </li>
+    )
+  }
 
   return (
     <section
@@ -327,40 +452,13 @@ function ConflictsSection({
         </button>
       </h2>
 
-      {!collapsed && entries.length > 0 && (
-        <ul className="changes__list">
-          {entries.map((entry) => {
-            const view = entryView(entry)
-            const badge = fileBadge(entry)
-            const { name, dir } = rowPath(entry)
-            const isSelected = selectedPath === entry.path
-            return (
-              <li
-                className={`changes__item${isSelected ? ' changes__item--selected' : ''}`}
-                key={view.key}
-              >
-                <button
-                  type="button"
-                  className="changes__entry"
-                  data-testid="entry"
-                  title={view.label}
-                  aria-current={isSelected ? 'true' : undefined}
-                  onClick={() => onOpen(entry.path, 'stage2', 'stage3')}
-                >
-                  <span
-                    className={`changes__badge changes__badge--${badge.tone}`}
-                    aria-hidden="true"
-                  >
-                    {badge.letter}
-                  </span>
-                  <span className="changes__name">{name}</span>
-                  <span className="changes__dir">{dir}</span>
-                </button>
-              </li>
-            )
-          })}
-        </ul>
-      )}
+      {!collapsed &&
+        entries.length > 0 &&
+        (layout === 'tree' ? (
+          <ChangeTree entries={entries} renderFile={renderFile} />
+        ) : (
+          <ul className="changes__list">{entries.map(renderFile)}</ul>
+        ))}
 
       {!collapsed && entries.length === 0 && (
         <p className="changes__none">{t('conflicts.noUnresolved')}</p>
@@ -399,7 +497,8 @@ export default function ChangesView({
   onUnstage,
   onDiscard,
   onResolve,
-  onAbort
+  onAbort,
+  layout
 }: {
   summary: ChangeSummary
   operation: GitOperation | null
@@ -412,6 +511,8 @@ export default function ChangesView({
   onDiscard: StageAction
   onResolve: () => void
   onAbort: () => void
+  /** Whether the rows are flat or grouped by folder. */
+  layout: ChangesLayout
 }) {
   return (
     <div className="changes">
@@ -427,6 +528,7 @@ export default function ChangesView({
         selectedPath={selectedPath}
         selectedFrom={selectedFrom}
         selectedTo={selectedTo}
+        layout={layout}
       />
       <Section
         testId="unstaged"
@@ -441,6 +543,7 @@ export default function ChangesView({
         selectedPath={selectedPath}
         selectedFrom={selectedFrom}
         selectedTo={selectedTo}
+        layout={layout}
       />
       <Section
         testId="untracked"
@@ -454,6 +557,7 @@ export default function ChangesView({
         selectedPath={selectedPath}
         selectedFrom={selectedFrom}
         selectedTo={selectedTo}
+        layout={layout}
       />
       {(operation !== null || summary.conflicts.length > 0) && (
         <ConflictsSection
@@ -463,6 +567,7 @@ export default function ChangesView({
           onResolve={onResolve}
           onAbort={onAbort}
           selectedPath={selectedPath}
+          layout={layout}
         />
       )}
     </div>

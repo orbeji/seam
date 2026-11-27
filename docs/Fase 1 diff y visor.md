@@ -54,7 +54,7 @@ Se leen con `git cat-file blob HEAD:<ruta>`, `:0:<ruta>` para el índice y `:1:`
 
 Se construye sobre CodeMirror 6 con tres piezas:
 
-- **Vista lado a lado:** dos editores, el de la derecha editable solo cuando es la copia de trabajo. El paquete de merge de CodeMirror da dos paneles y modo unificado; el primer día se comprueba si acepta un diff calculado por el motor propio. Si no, el visor usa los mismos elementos de base (decoraciones de línea y de rango, y widgets de relleno).
+- **Vista lado a lado:** dos editores, ambos de solo lectura. El paquete de merge de CodeMirror da dos paneles y modo unificado; el primer día se comprueba si acepta un diff calculado por el motor propio. Si no, el visor usa los mismos elementos de base (decoraciones de línea y de rango, y widgets de relleno).
 - **Alineación:** los bloques que solo existen en un lado se compensan con widgets de relleno en el otro, para que las líneas correspondientes queden a la misma altura. Con alineación desactivada se quitan los rellenos.
 - **Modo unificado:** un editor con las líneas borradas como widgets de solo lectura sobre las añadidas.
 

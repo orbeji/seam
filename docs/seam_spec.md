@@ -75,7 +75,7 @@ The viewer compares any two of HEAD, index and working copy, or two commits. The
 
 | Feature | Behaviour |
 | --- | --- |
-| Modes | Side-by-side (two panes) and unified (one pane). Only the working-copy side is editable: the right pane, or the lower line in unified mode. Read-only sides stay read-only. |
+| Modes | Side-by-side (two panes) and unified (one pane). The viewer is read-only in both layouts: it shows the working copy but never lets the user type into it. |
 | Colours | Green added, blue modified, gray deleted. |
 | Highlight granularity | Words, lines, split changes (large changes broken into smaller ones), characters, none. None exists for heavily rewritten files where highlighting hurts. |
 | Ignore whitespace | None (default), trim leading and trailing, ignore all whitespace, ignore whitespace and empty lines. "Ignore imports and formatting" is language-aware and is not in the MVP. |
